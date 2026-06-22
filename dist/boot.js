@@ -28296,14 +28296,17 @@ function required(name) {
   }
   return value ?? "";
 }
+function optional(name) {
+  return process.env[name] ?? "";
+}
 var env = {
   appId: required("APP_ID"),
   appSecret: required("APP_SECRET"),
   isProduction: process.env.NODE_ENV === "production",
-  databaseUrl: required("DATABASE_URL"),
-  kimiAuthUrl: required("KIMI_AUTH_URL"),
-  kimiOpenUrl: required("KIMI_OPEN_URL"),
-  ownerUnionId: process.env.OWNER_UNION_ID ?? ""
+  databaseUrl: optional("DATABASE_URL"),
+  kimiAuthUrl: optional("KIMI_AUTH_URL"),
+  kimiOpenUrl: optional("KIMI_OPEN_URL"),
+  ownerUnionId: optional("OWNER_UNION_ID")
 };
 
 // api/kimi/session.ts
@@ -35535,7 +35538,7 @@ __export(external_exports, {
   nullish: () => nullish2,
   number: () => number2,
   object: () => object,
-  optional: () => optional,
+  optional: () => optional2,
   overwrite: () => _overwrite,
   parse: () => parse3,
   parseAsync: () => parseAsync2,
@@ -47352,7 +47355,7 @@ __export(schemas_exports2, {
   nullish: () => nullish2,
   number: () => number2,
   object: () => object,
-  optional: () => optional,
+  optional: () => optional2,
   partialRecord: () => partialRecord,
   pipe: () => pipe,
   prefault: () => prefault,
@@ -47563,10 +47566,10 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
   inst.refine = (check2, params) => inst.check(refine(check2, params));
   inst.superRefine = (refinement) => inst.check(superRefine(refinement));
   inst.overwrite = (fn) => inst.check(_overwrite(fn));
-  inst.optional = () => optional(inst);
+  inst.optional = () => optional2(inst);
   inst.exactOptional = () => exactOptional(inst);
   inst.nullable = () => nullable(inst);
-  inst.nullish = () => optional(nullable(inst));
+  inst.nullish = () => optional2(nullable(inst));
   inst.nonoptional = (params) => nonoptional(inst, params);
   inst.array = () => array(inst);
   inst.or = (arg) => union2([inst, arg]);
@@ -48336,7 +48339,7 @@ var ZodOptional = /* @__PURE__ */ $constructor("ZodOptional", (inst, def) => {
   inst._zod.processJSONSchema = (ctx, json3, params) => optionalProcessor(inst, ctx, json3, params);
   inst.unwrap = () => inst._zod.def.innerType;
 });
-function optional(innerType) {
+function optional2(innerType) {
   return new ZodOptional({
     type: "optional",
     innerType
@@ -48367,7 +48370,7 @@ function nullable(innerType) {
   });
 }
 function nullish2(innerType) {
-  return optional(nullable(innerType));
+  return optional2(nullable(innerType));
 }
 var ZodDefault = /* @__PURE__ */ $constructor("ZodDefault", (inst, def) => {
   $ZodDefault.init(inst, def);
