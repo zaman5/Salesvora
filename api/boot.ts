@@ -24,13 +24,13 @@ app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 
 export default app;
 
-if (env.isProduction) {
-  const { serve } = await import("@hono/node-server");
-  const { serveStaticFiles } = await import("./lib/vite");
-  serveStaticFiles(app);
+// Always start the HTTP server when this file is run directly.
+// (In dev, Vite runs its own dev server — boot.ts is only executed in prod.)
+const { serve } = await import("@hono/node-server");
+const { serveStaticFiles } = await import("./lib/vite");
+serveStaticFiles(app);
 
-  const port = parseInt(process.env.PORT || "3000");
-  serve({ fetch: app.fetch, port }, () => {
-    console.log(`Server running on http://localhost:${port}/`);
-  });
-}
+const port = parseInt(process.env.PORT || "3000");
+serve({ fetch: app.fetch, port }, () => {
+  console.log(`Salesvora server running on http://localhost:${port}/`);
+});

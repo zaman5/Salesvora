@@ -19694,8 +19694,8 @@ var require_server = __commonJS({
         const connection = new Connection({ config: connectionConfig });
         this.emit("connection", connection);
       }
-      listen(port) {
-        this._port = port;
+      listen(port2) {
+        this._port = port2;
         this._server.listen.apply(this._server, arguments);
         return this;
       }
@@ -52789,15 +52789,13 @@ app.use("/api/trpc/*", async (c) => {
 });
 app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 var boot_default = app;
-if (env.isProduction) {
-  const { serve: serve2 } = await Promise.resolve().then(() => (init_dist(), dist_exports));
-  const { serveStaticFiles: serveStaticFiles2 } = await Promise.resolve().then(() => (init_vite(), vite_exports));
-  serveStaticFiles2(app);
-  const port = parseInt(process.env.PORT || "3000");
-  serve2({ fetch: app.fetch, port }, () => {
-    console.log(`Server running on http://localhost:${port}/`);
-  });
-}
+var { serve: serve2 } = await Promise.resolve().then(() => (init_dist(), dist_exports));
+var { serveStaticFiles: serveStaticFiles2 } = await Promise.resolve().then(() => (init_vite(), vite_exports));
+serveStaticFiles2(app);
+var port = parseInt(process.env.PORT || "3000");
+serve2({ fetch: app.fetch, port }, () => {
+  console.log(`Salesvora server running on http://localhost:${port}/`);
+});
 export {
   boot_default as default
 };
