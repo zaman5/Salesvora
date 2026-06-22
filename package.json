@@ -7,10 +7,10 @@
   "scripts": {
     "dev": "vite",
     "build": "echo 'App is pre-built. Skipping build step.'",
-    "build:local": "vite build && esbuild api/boot.ts --platform=node --bundle --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
+    "build:local": "vite build && esbuild api/boot.ts --platform=node --bundle --format=cjs --outfile=dist/boot.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "NODE_ENV=production node dist/boot.js",
+    "start": "node dist/boot.cjs",
     "check": "tsc -b",
     "format": "prettier --write .",
     "test": "vitest run",
