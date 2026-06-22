@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+dist
 dist-ssr
 *.local
 
@@ -33,6 +34,7 @@ db/migrations/*.sql
 # TypeScript cache
 *.tsbuildinfo
 # Build outputs
+dist/
 build/
 # Test coverage
 coverage/
