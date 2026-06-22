@@ -28015,8 +28015,8 @@ function getKtyFromAlg(alg) {
       throw new JOSENotSupported('Unsupported "alg" value for a JSON Web Key Set');
   }
 }
-function isJWKSLike(jwks2) {
-  return jwks2 && typeof jwks2 === "object" && Array.isArray(jwks2.keys) && jwks2.keys.every(isJWKLike);
+function isJWKSLike(jwks) {
+  return jwks && typeof jwks === "object" && Array.isArray(jwks.keys) && jwks.keys.every(isJWKLike);
 }
 function isJWKLike(key) {
   return isObject2(key);
@@ -28024,11 +28024,11 @@ function isJWKLike(key) {
 var LocalJWKSet = class {
   #jwks;
   #cached = /* @__PURE__ */ new WeakMap();
-  constructor(jwks2) {
-    if (!isJWKSLike(jwks2)) {
+  constructor(jwks) {
+    if (!isJWKSLike(jwks)) {
       throw new JWKSInvalid("JSON Web Key Set malformed");
     }
-    this.#jwks = structuredClone(jwks2);
+    this.#jwks = structuredClone(jwks);
   }
   jwks() {
     return this.#jwks;
@@ -28100,8 +28100,8 @@ async function importWithAlgCache(cache2, jwk, alg) {
   }
   return cached2[alg];
 }
-function createLocalJWKSet(jwks2) {
-  const set2 = new LocalJWKSet(jwks2);
+function createLocalJWKSet(jwks) {
+  const set2 = new LocalJWKSet(jwks);
   const localJWKSet = async (protectedHeader, token) => set2.getKey(protectedHeader, token);
   Object.defineProperties(localJWKSet, {
     jwks: {
@@ -52640,11 +52640,18 @@ async function exchangeAuthCode(code, redirectUri) {
   }
   return resp.json();
 }
-var jwks = createRemoteJWKSet(
-  new URL(`${env.kimiAuthUrl}/api/.well-known/jwks.json`)
-);
+var _jwks = null;
+function getJwks() {
+  if (!_jwks) {
+    if (!env.kimiAuthUrl) throw new Error("KIMI_AUTH_URL is not configured.");
+    _jwks = createRemoteJWKSet(
+      new URL(`${env.kimiAuthUrl}/api/.well-known/jwks.json`)
+    );
+  }
+  return _jwks;
+}
 async function verifyAccessToken(accessToken) {
-  const { payload } = await jwtVerify(accessToken, jwks);
+  const { payload } = await jwtVerify(accessToken, getJwks());
   const userId = payload.user_id;
   const clientId = payload.client_id;
   if (!userId) {
