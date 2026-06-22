@@ -2799,28 +2799,18 @@ var init_config = __esm({
 });
 
 // api/lib/env.ts
-function required(name) {
-  const value = process.env[name];
-  if (!value && process.env.NODE_ENV === "production") {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return value ?? "";
-}
-function optional(name) {
-  return process.env[name] ?? "";
-}
 var env;
 var init_env = __esm({
   "api/lib/env.ts"() {
     init_config();
     env = {
-      appId: required("APP_ID"),
-      appSecret: required("APP_SECRET"),
+      appId: process.env.APP_ID || "salesvora",
+      appSecret: process.env.APP_SECRET || "salesvora-default-secret-change-me",
       isProduction: process.env.NODE_ENV === "production",
-      databaseUrl: optional("DATABASE_URL"),
-      kimiAuthUrl: optional("KIMI_AUTH_URL"),
-      kimiOpenUrl: optional("KIMI_OPEN_URL"),
-      ownerUnionId: optional("OWNER_UNION_ID")
+      databaseUrl: process.env.DATABASE_URL || "",
+      kimiAuthUrl: process.env.KIMI_AUTH_URL || "",
+      kimiOpenUrl: process.env.KIMI_OPEN_URL || "",
+      ownerUnionId: process.env.OWNER_UNION_ID || ""
     };
   }
 });
@@ -37090,7 +37080,7 @@ __export(external_exports, {
   nullish: () => nullish2,
   number: () => number2,
   object: () => object,
-  optional: () => optional2,
+  optional: () => optional,
   overwrite: () => _overwrite,
   parse: () => parse3,
   parseAsync: () => parseAsync2,
@@ -37561,7 +37551,7 @@ __export(util_exports, {
   promiseAllObject: () => promiseAllObject,
   propertyKeyTypes: () => propertyKeyTypes,
   randomString: () => randomString,
-  required: () => required2,
+  required: () => required,
   safeExtend: () => safeExtend,
   shallowClone: () => shallowClone,
   slugify: () => slugify,
@@ -38023,7 +38013,7 @@ function partial(Class2, schema, mask) {
   });
   return clone(schema, def);
 }
-function required2(Class2, schema, mask) {
+function required(Class2, schema, mask) {
   const def = mergeDefs(schema._zod.def, {
     get shape() {
       const oldShape = schema._zod.def.shape;
@@ -48907,7 +48897,7 @@ __export(schemas_exports2, {
   nullish: () => nullish2,
   number: () => number2,
   object: () => object,
-  optional: () => optional2,
+  optional: () => optional,
   partialRecord: () => partialRecord,
   pipe: () => pipe,
   prefault: () => prefault,
@@ -49118,10 +49108,10 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
   inst.refine = (check2, params) => inst.check(refine(check2, params));
   inst.superRefine = (refinement) => inst.check(superRefine(refinement));
   inst.overwrite = (fn) => inst.check(_overwrite(fn));
-  inst.optional = () => optional2(inst);
+  inst.optional = () => optional(inst);
   inst.exactOptional = () => exactOptional(inst);
   inst.nullable = () => nullable(inst);
-  inst.nullish = () => optional2(nullable(inst));
+  inst.nullish = () => optional(nullable(inst));
   inst.nonoptional = (params) => nonoptional(inst, params);
   inst.array = () => array(inst);
   inst.or = (arg) => union2([inst, arg]);
@@ -49891,7 +49881,7 @@ var ZodOptional = /* @__PURE__ */ $constructor("ZodOptional", (inst, def) => {
   inst._zod.processJSONSchema = (ctx, json3, params) => optionalProcessor(inst, ctx, json3, params);
   inst.unwrap = () => inst._zod.def.innerType;
 });
-function optional2(innerType) {
+function optional(innerType) {
   return new ZodOptional({
     type: "optional",
     innerType
@@ -49922,7 +49912,7 @@ function nullable(innerType) {
   });
 }
 function nullish2(innerType) {
-  return optional2(nullable(innerType));
+  return optional(nullable(innerType));
 }
 var ZodDefault = /* @__PURE__ */ $constructor("ZodDefault", (inst, def) => {
   $ZodDefault.init(inst, def);
