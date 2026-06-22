@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "dist/boot.js",
   "scripts": {
     "dev": "vite",
     "build": "echo 'App is pre-built. Skipping build step.'",
