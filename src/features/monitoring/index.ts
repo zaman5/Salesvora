@@ -1,0 +1,1 @@
+export { default as MonitoringPage } from "./pages/Monitoring";

@@ -1,0 +1,1 @@
+export { default as AIAgentsPage } from "./pages/AIAgents";

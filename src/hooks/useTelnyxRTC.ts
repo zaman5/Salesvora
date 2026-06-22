@@ -1,0 +1,272 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+
+export type RtcStatus = "off" | "connecting" | "registered" | "error";
+export type RtcCallState = "idle" | "ringing" | "active" | "ended";
+
+type Options = { enabled: boolean; login: string; password: string };
+
+// Lazily loaded Telnyx WebRTC client. We use `any` for the SDK objects because
+// the SDK is dynamically imported (browser-only) and not part of our types.
+type AnyClient = {
+  on: (ev: string, cb: (p: unknown) => void) => void;
+  connect: () => void;
+  disconnect: () => void;
+  newCall: (opts: Record<string, unknown>) => AnyCall;
+};
+type AnyCall = {
+  hangup: () => void;
+  answer: () => void;
+  dtmf?: (digit: string) => void;
+  muteAudio: () => void;
+  unmuteAudio: () => void;
+  state?: string;
+  direction?: "inbound" | "outbound";
+  cause?: string;
+  causeCode?: number;
+  sipReason?: string;
+  sipCode?: number;
+  remoteCallerNumber?: string;
+  remoteCallerName?: string;
+  remoteStream?: MediaStream;
+  localStream?: MediaStream;
+};
+
+const REMOTE_AUDIO_ID = "telnyx-remote-audio";
+
+// Telnyx sends errors as objects, strings, or Errors. Pull out something useful.
+function describeError(e: unknown): string {
+  if (!e) return "Unknown WebRTC error.";
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message;
+  const o = e as Record<string, unknown>;
+  const nested = (o.error ?? {}) as Record<string, unknown>;
+  const parts = [
+    o.message,
+    nested.message,
+    nested.cause,
+    o.cause,
+    o.reason,
+    o.code != null ? `code ${o.code}` : undefined,
+    nested.code != null ? `code ${nested.code}` : undefined,
+  ].filter(Boolean);
+  if (parts.length) return String(parts.join(" — "));
+  try {
+    return JSON.stringify(o);
+  } catch {
+    return "WebRTC error.";
+  }
+}
+
+export function useTelnyxRTC({ enabled, login, password }: Options) {
+  const [status, setStatus] = useState<RtcStatus>("off");
+  const [callState, setCallState] = useState<RtcCallState>("idle");
+  const [callDirection, setCallDirection] = useState<"inbound" | "outbound" | null>(null);
+  const [incomingCallerNumber, setIncomingCallerNumber] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const clientRef = useRef<AnyClient | null>(null);
+  const callRef = useRef<AnyCall | null>(null);
+
+  // Connect / disconnect when credentials become available.
+  useEffect(() => {
+    let cancelled = false;
+    // Hoisted so the cleanup function can always clear it, even if the async
+    // IIFE hasn't set it yet (e.g. the effect is torn down before the dynamic
+    // import resolves).
+    let regTimeout: ReturnType<typeof setTimeout> | undefined;
+
+    if (!enabled || !login || !password) {
+      setStatus("off");
+      return;
+    }
+    setStatus("connecting");
+    setError(null);
+
+    (async () => {
+      try {
+        const mod = await import("@telnyx/webrtc");
+        if (cancelled) return;
+        const TelnyxRTC = (mod as { TelnyxRTC: new (o: Record<string, unknown>) => AnyClient }).TelnyxRTC;
+        const client = new TelnyxRTC({
+          login,
+          password,
+          // Relay media through Telnyx TURN to traverse firewalls/NAT.
+          forceRelayCandidate: true,
+          prefetchIceCandidates: true,
+        });
+
+        let reconnects = 0;
+        let registered = false;
+
+        // If telnyx.ready doesn't fire within 30 s, credentials are wrong.
+        regTimeout = setTimeout(() => {
+          if (!cancelled && !registered) {
+            setStatus("error");
+            setError(
+              "SIP registration timed out. Check your SIP username and password in Settings — they must match your Telnyx Credential Connection exactly.",
+            );
+          }
+        }, 30_000);
+
+        client.on("telnyx.ready", () => {
+          if (cancelled) return;
+          registered = true;
+          clearTimeout(regTimeout);
+          setStatus("registered");
+        });
+        client.on("telnyx.error", (e: unknown) => {
+          if (cancelled) return;
+          console.error("[Telnyx] error:", e);
+          setStatus("error");
+          setError(describeError(e));
+        });
+        client.on("telnyx.socket.error", (e: unknown) => {
+          if (cancelled) return;
+          console.error("[Telnyx] socket error:", e);
+          setStatus("error");
+          setError(describeError(e) || "Could not reach Telnyx (socket error).");
+        });
+        client.on("telnyx.socket.close", () => {
+          if (cancelled) return;
+          reconnects += 1;
+          setStatus((s) => (s === "registered" ? "connecting" : s));
+          // Repeated drops = unhealthy signaling path (often a VPN/proxy or
+          // restrictive network). Tell the user something actionable.
+          if (reconnects >= 2) {
+            setError(
+              "Connection to Telnyx keeps dropping (signaling timed out). This is a network issue — disable any VPN/proxy, avoid restrictive Wi-Fi, and try again.",
+            );
+          }
+        });
+        client.on("telnyx.notification", (n: unknown) => {
+          if (cancelled) return;
+          const note = n as { type?: string; call?: AnyCall; error?: unknown };
+          if (note?.type === "userMediaError") {
+            setError("Microphone access failed. Allow mic permission and use http://localhost or https.");
+            return;
+          }
+          if (note?.type === "callUpdate" && note.call) {
+            callRef.current = note.call;
+            const s = String(note.call.state || "");
+            if (["new", "requesting", "trying", "ringing", "early"].includes(s)) {
+              const dir = note.call.direction === "inbound" ? "inbound" : "outbound";
+              setCallDirection(dir);
+              if (dir === "inbound") {
+                setIncomingCallerNumber(note.call.remoteCallerNumber || note.call.remoteCallerName || "Unknown");
+              }
+              setCallState("ringing");
+            } else if (s === "active") {
+              setCallState("active");
+            } else if (["hangup", "destroy", "purge"].includes(s)) {
+              const c = note.call;
+              const failed = c.sipCode && c.sipCode >= 400;
+              if (failed || (c.cause && c.cause !== "NORMAL_CLEARING" && c.cause !== "USER_HANGUP")) {
+                setError(`Call ended: ${c.sipReason || c.cause || "failed"}${c.sipCode ? ` (SIP ${c.sipCode})` : ""}`);
+              }
+              setCallState("ended");
+              setCallDirection(null);
+              setIncomingCallerNumber(null);
+              callRef.current = null;
+            }
+          }
+        });
+
+        client.connect();
+        clientRef.current = client;
+      } catch (e) {
+        if (!cancelled) {
+          setStatus("error");
+          setError(e instanceof Error ? e.message : "Failed to load the WebRTC client.");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      try { clearTimeout(regTimeout); } catch { /* noop */ }
+      try {
+        callRef.current?.hangup();
+      } catch { /* noop */ }
+      try {
+        clientRef.current?.disconnect();
+      } catch { /* noop */ }
+      clientRef.current = null;
+      callRef.current = null;
+    };
+  }, [enabled, login, password]);
+
+  const makeCall = useCallback((destinationNumber: string, callerNumber: string) => {
+    setError(null);
+    if (!clientRef.current || status !== "registered") {
+      setError("Browser calling isn't connected yet. Check your SIP credentials in Settings.");
+      return false;
+    }
+    try {
+      callRef.current = clientRef.current.newCall({
+        destinationNumber,
+        callerNumber,
+        audio: true,
+        video: false,
+        remoteElement: REMOTE_AUDIO_ID,
+      });
+      setCallState("ringing");
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start the call.");
+      return false;
+    }
+  }, [status]);
+
+  const sendDTMF = useCallback((digit: string) => {
+    try { callRef.current?.dtmf?.(digit); } catch { /* noop */ }
+  }, []);
+
+  const answerCall = useCallback(() => {
+    try {
+      callRef.current?.answer();
+    } catch { /* noop */ }
+    setCallState("active");
+  }, []);
+
+  const hangup = useCallback(() => {
+    try {
+      callRef.current?.hangup();
+    } catch { /* noop */ }
+    callRef.current = null;
+    setCallDirection(null);
+    setIncomingCallerNumber(null);
+    setCallState("idle");
+  }, []);
+
+  const setMuted = useCallback((muted: boolean) => {
+    try {
+      if (muted) callRef.current?.muteAudio();
+      else callRef.current?.unmuteAudio();
+    } catch { /* noop */ }
+  }, []);
+
+  // The client's audio. Prefer the live call's remoteStream; fall back to the
+  // remote <audio> element's srcObject. Used by the recorder to mix both sides.
+  const getRemoteStream = useCallback((): MediaStream | null => {
+    const fromCall = callRef.current?.remoteStream;
+    if (fromCall instanceof MediaStream && fromCall.getAudioTracks().length) return fromCall;
+    if (typeof document === "undefined") return null;
+    const el = document.getElementById(REMOTE_AUDIO_ID) as HTMLAudioElement | null;
+    const src = el?.srcObject;
+    return src instanceof MediaStream ? src : null;
+  }, []);
+
+  return {
+    status,
+    callState,
+    callDirection,
+    incomingCallerNumber,
+    error,
+    makeCall,
+    answerCall,
+    sendDTMF,
+    hangup,
+    setMuted,
+    getRemoteStream,
+    remoteAudioId: REMOTE_AUDIO_ID,
+  };
+}

@@ -1,0 +1,12 @@
+/* Global styles */
+html,
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  min-height: 100%;
+  background: #f5f7fb;
+}
+
+app-root {
+  display: block;
+}

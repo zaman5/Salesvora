@@ -1,0 +1,1 @@
+export { useTelnyxRTC } from "@/hooks/useTelnyxRTC";
