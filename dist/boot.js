@@ -20916,14 +20916,20 @@ __export(vite_exports, {
 import fs10 from "fs";
 import path10 from "path";
 function serveStaticFiles(app2) {
-  const distPath = path10.resolve(import.meta.dirname, "../dist/public");
-  app2.use("*", serveStatic({ root: "./dist/public" }));
+  const distPath = path10.resolve(
+    import.meta.dirname ? path10.dirname(import.meta.dirname) : process.cwd(),
+    "dist/public"
+  );
+  app2.use("*", serveStatic({ root: distPath }));
   app2.notFound((c) => {
     const accept = c.req.header("accept") ?? "";
     if (!accept.includes("text/html")) {
       return c.json({ error: "Not Found" }, 404);
     }
-    const indexPath = path10.resolve(distPath, "index.html");
+    const indexPath = path10.join(distPath, "index.html");
+    if (!fs10.existsSync(indexPath)) {
+      return c.text("index.html not found", 404);
+    }
     const content = fs10.readFileSync(indexPath, "utf-8");
     return c.html(content);
   });
