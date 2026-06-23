@@ -21,7 +21,8 @@ async function kimiRequest<T>(
     );
     return null;
   }
-  return resp.json() as Promise<T>;
+  const text = await resp.text();
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 export const users = {

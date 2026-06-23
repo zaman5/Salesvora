@@ -2,10 +2,17 @@ import path from "path"
 const __dirname = import.meta.dirname
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
+import devServer from "@hono/vite-dev-server"
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    devServer({
+      entry: "api/app.ts",
+      exclude: [/^(?!\/api\/).*/],
+    }),
+    react(),
+  ],
   server: {
     port: 3000,
   },

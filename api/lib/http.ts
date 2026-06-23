@@ -54,7 +54,8 @@ export class HttpClient {
         throw new Error(errorData.message || `HTTP Error: ${response.status}`);
       }
 
-      return (await response.json()) as T;
+      const text = await response.text();
+      return (text ? JSON.parse(text) : null) as T;
     } catch (error: any) {
       if (error.name === "AbortError") {
         throw new Error("Request timeout");
