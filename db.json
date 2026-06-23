@@ -2,23 +2,18 @@
   "users": [
     {
       "id": 1,
-      "unionId": "dev-owner-id-admin",
-      "name": "Developer Admin",
-      "email": "admin@example.com",
+      "unionId": "admin-zamantech5",
+      "name": "Admin",
+      "email": "zamantech5@gmail.com",
       "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=admin",
       "role": "admin",
       "status": "active",
       "companyId": 1,
       "dailyCallLimit": 200,
       "createdAt": "2026-06-07T00:29:21.715Z",
-      "updatedAt": "2026-06-21T20:45:46.731Z",
-      "lastLoginAt": "2026-06-21T20:45:46.731Z",
-      "password": "Gateway@12345",
-      "sipCredentials": {
-        "username": "zamantech5@gmail.com",
-        "password": "Gateway@12345",
-        "domain": "local"
-      }
+      "updatedAt": "2026-06-23T00:00:00.000Z",
+      "lastLoginAt": "2026-06-23T00:00:00.000Z",
+      "password": "Gateway@12345"
     },
     {
       "id": 2,

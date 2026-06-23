@@ -39,17 +39,17 @@ const htaccess = `# Salesvora - React SPA + Node.js API
 Options -MultiViews
 RewriteEngine On
 
-# Serve existing files directly
+# Serve existing static files directly
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Proxy API calls to Node.js server
-RewriteCond %{REQUEST_URI} ^/api/ [OR]
-RewriteCond %{REQUEST_URI} ^/trpc/
-RewriteRule ^(.*)$ http://localhost:3000/$1 [P,L]
+# Proxy API and tRPC calls to Node.js server on port 3000
+RewriteCond %{REQUEST_URI} ^/api [NC,OR]
+RewriteCond %{REQUEST_URI} ^/health [NC]
+RewriteRule ^(.*)$ http://127.0.0.1:3000/$1 [P,L,QSA]
 
-# All other routes → React app
+# All other routes → React SPA
 RewriteRule ^ /index.html [L]
 `;
 
