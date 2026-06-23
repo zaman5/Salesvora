@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { useCallRecorder } from "@/hooks/useCallRecorder";
+import { useWebRTC } from "@/providers/WebRTCProvider";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   Radio,
@@ -36,7 +38,36 @@ import {
   Pencil,
   Check,
   X,
+  Hash,
 } from "lucide-react";
+
+function TogglePill({ on, onToggle, label, activeColor = "bg-green-500" }: {
+  on: boolean; onToggle: () => void; label: string; activeColor?: string;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+        on
+          ? "bg-white/5 border-white/10 text-white"
+          : "bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200"
+      }`}
+    >
+      <span>{label}</span>
+      <div className={`relative w-9 h-5 rounded-full transition-colors ${on ? activeColor : "bg-gray-600"}`}>
+        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? "translate-x-4" : "translate-x-0.5"}`} />
+      </div>
+    </button>
+  );
+}
+
+const STANDARD_FIELDS = [
+  { key: "firstName", label: "First Name" }, { key: "lastName", label: "Last Name" },
+  { key: "companyName", label: "Company" }, { key: "designation", label: "Designation" },
+  { key: "phone", label: "Phone" }, { key: "email", label: "Email" },
+  { key: "city", label: "City" }, { key: "state", label: "State" },
+  { key: "country", label: "Country" }, { key: "notes", label: "Notes" },
+];
 
 export default function AutoDialerPage() {
   const { user } = useAuth();
@@ -48,41 +79,74 @@ export default function AutoDialerPage() {
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "connected" | "disposition">("idle");
   const [duration, setDuration] = useState(0);
   const [callNotes, setCallNotes] = useState("");
-  const [, setSelectedDisposition] = useState<string | null>(null);
+  const [selectedDisposition, setSelectedDisposition] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Active call ID and Campaign Lead ID
   const [activeCallId, setActiveCallId] = useState<number | null>(null);
+  const [callError, setCallError] = useState<string | null>(null);
 
-  // ── Editable Client Details (live during call) ──
+  // ── Lead editing ──────────────────────────────────────────────────────────────
   const [isEditingLead, setIsEditingLead] = useState(false);
   const [leadEdit, setLeadEdit] = useState<Record<string, string>>({});
   const [leadSaveMsg, setLeadSaveMsg] = useState<string | null>(null);
 
-  // ── Call Recording ──
+  // ── Recording ─────────────────────────────────────────────────────────────────
   const recorder = useCallRecorder();
   const [isMuted, setIsMuted] = useState(false);
   const [savedRecordingDataUrl, setSavedRecordingDataUrl] = useState<string | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
 
-  // Queries
+  // ── Auto-record toggle (persisted) ───────────────────────────────────────────
+  const [autoRecord, setAutoRecord] = useState(() => {
+    try { return localStorage.getItem("autodialer.autoRecord") === "true"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("autodialer.autoRecord", String(autoRecord)); } catch { /* ignore */ }
+  }, [autoRecord]);
+
+  // ── Field display customization ───────────────────────────────────────────────
+  const [displayFields, setDisplayFields] = useState<string[]>(() => {
+    try { const s = localStorage.getItem("autodialer.displayFields"); if (s) return JSON.parse(s); } catch { /* ignore */ }
+    return ["companyName", "designation", "phone", "email", "city"];
+  });
+  useEffect(() => {
+    try { localStorage.setItem("autodialer.displayFields", JSON.stringify(displayFields)); } catch { /* ignore */ }
+  }, [displayFields]);
+  const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
+  const toggleField = (key: string) =>
+    setDisplayFields((p) => p.includes(key) ? p.filter((k) => k !== key) : [...p, key]);
+
+  // ── Dialer config + WebRTC ────────────────────────────────────────────────────
+  const { data: dialerConfig } = trpc.integration.getDialerConfig.useQuery();
+  const rtc = useWebRTC();
+  const webrtcOn = Boolean(dialerConfig?.webrtc?.enabled);
+
+  const callerNumbers = (dialerConfig?.fromNumbers ?? [])
+    .filter((n: string) => !!n)
+    .map((n: string) => ({ value: n }));
+
+  const [selectedNumber, setSelectedNumber] = useState("");
+  useEffect(() => {
+    const pref = dialerConfig?.defaultCallerId || callerNumbers[0]?.value || "";
+    if (pref && !selectedNumber) setSelectedNumber(pref);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialerConfig]);
+
+  // ── Queries ───────────────────────────────────────────────────────────────────
   const { data: campaigns = [], refetch: refetchCampaigns } = trpc.campaign.list.useQuery();
   const { data: dispositions = [] } = trpc.calls.dispositions.useQuery({ companyId });
 
-  // Get campaign progress metrics
   const campIdVal = parseInt(selectedCampaignId) || 0;
   const { data: campaignProgress, refetch: refetchProgress } = trpc.campaign.progress.useQuery(
     { id: campIdVal },
-    { enabled: !!selectedCampaignId }
+    { enabled: !!selectedCampaignId },
   );
-
-  // Get next lead in the campaign
   const { data: nextCampaignLead, refetch: refetchNextLead } = trpc.campaign.getNextLead.useQuery(
     { campaignId: campIdVal },
-    { enabled: isRunning && !isPaused && callStatus === "idle" }
+    { enabled: isRunning && !isPaused && callStatus === "idle" },
   );
 
-  // Mutations
+  // ── Mutations ─────────────────────────────────────────────────────────────────
   const startCampaignMutation = trpc.campaign.start.useMutation();
   const pauseCampaignMutation = trpc.campaign.pause.useMutation();
   const initiateCallMutation = trpc.calls.initiate.useMutation();
@@ -92,15 +156,31 @@ export default function AutoDialerPage() {
   const saveRecordingMutation = trpc.calls.saveRecording.useMutation();
   const updateLeadMutation = trpc.lead.update.useMutation();
 
+  const currentLead = nextCampaignLead?.lead || null;
+
+  // ── Custom fields from current lead ───────────────────────────────────────────
+  const customFieldKeys = useMemo(() => {
+    const cf = currentLead?.customFields;
+    if (!cf || typeof cf !== "object") return [];
+    return Object.keys(cf as object).filter((k) => !k.startsWith("_"));
+  }, [currentLead]);
+  const allDisplayFields = useMemo(
+    () => [...STANDARD_FIELDS, ...customFieldKeys.map((k) => ({ key: `cf:${k}`, label: k }))],
+    [customFieldKeys],
+  );
+
+  // ── Trigger auto-dial ─────────────────────────────────────────────────────────
   const triggerAutoDialCall = async () => {
     if (!nextCampaignLead?.lead) return;
     setCallStatus("calling");
+    setCallError(null);
     try {
       const activeCall = await initiateCallMutation.mutateAsync({
         leadId: nextCampaignLead.lead.id,
         campaignId: campIdVal,
         companyId,
         toNumber: nextCampaignLead.lead.phone,
+        fromNumber: selectedNumber || undefined,
         type: "auto",
       });
       setActiveCallId(activeCall.id);
@@ -111,30 +191,49 @@ export default function AutoDialerPage() {
         callerId: user?.id,
       });
 
-      // Simulate connection
-      setTimeout(async () => {
+      if (webrtcOn) {
+        // Real WebRTC call
+        if (rtc.status !== "registered") {
+          setCallError("Browser calling not connected. Check SIP credentials in Settings.");
+          setCallStatus("idle");
+          return;
+        }
+        const ok = rtc.makeCall(
+          nextCampaignLead.lead.phone,
+          selectedNumber || dialerConfig?.defaultCallerId || "",
+        );
+        if (!ok) {
+          setCallError(rtc.error || "Could not start browser call.");
+          setCallStatus("idle");
+          return;
+        }
         setCallStatus("connected");
         setDuration(0);
-        await updateStatusMutation.mutateAsync({
-          id: activeCall.id,
-          status: "connected",
-        });
-      }, 2000);
+        await updateStatusMutation.mutateAsync({ id: activeCall.id, status: "connected" });
+      } else {
+        // Simulated connection (no WebRTC)
+        setTimeout(async () => {
+          setCallStatus("connected");
+          setDuration(0);
+          await updateStatusMutation.mutateAsync({ id: activeCall.id, status: "connected" });
+        }, 2000);
+      }
     } catch (err) {
       console.error("Failed to execute autodial call:", err);
       setCallStatus("idle");
     }
   };
 
-  // Synchronize state when campaigns load
+  // ── Effects ───────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const autoCamps = campaigns.filter((c: any) => c.type === "auto");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const autoCamps = (campaigns as any[]).filter((c) => c.type === "auto");
     if (autoCamps.length > 0 && !selectedCampaignId) {
       setSelectedCampaignId(autoCamps[0].id.toString());
     }
   }, [campaigns, selectedCampaignId]);
 
-  // Call timer
+  // Timer
   useEffect(() => {
     if (callStatus === "connected" && !isPaused) {
       timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
@@ -144,19 +243,49 @@ export default function AutoDialerPage() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [callStatus, isPaused]);
 
-  // Automated dial cycle hook
+  // Auto-dial cycle
   useEffect(() => {
     if (isRunning && !isPaused && callStatus === "idle" && nextCampaignLead) {
-      // Initiate call to next lead
       triggerAutoDialCall();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRunning, isPaused, callStatus, nextCampaignLead]);
 
-  // Keep recorder mic in sync with the Mute button
+  // ── Fix: Auto-end on SIP error (487, 404, etc.) ───────────────────────────────
+  useEffect(() => {
+    if (!webrtcOn) return;
+    if (rtc.callState === "ended" && (callStatus === "connected" || callStatus === "calling")) {
+      if (rtc.error) setCallError(rtc.error);
+      setCallStatus("disposition");
+      if (timerRef.current) clearInterval(timerRef.current);
+      finalizeRecording().catch(() => {});
+      if (activeCallId) {
+        updateStatusMutation.mutate({ id: activeCallId, status: "completed" });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rtc.callState, webrtcOn]);
+
+  // Auto-record when connected
+  useEffect(() => {
+    if (!autoRecord) return;
+    if (callStatus === "connected" && recorder.status === "inactive") {
+      const t = setTimeout(() => {
+        recorder.startRecording(webrtcOn ? rtc.getRemoteStream : undefined);
+      }, 400);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callStatus, autoRecord, webrtcOn]);
+
+  // Mute sync
   useEffect(() => {
     recorder.setMicMuted(isMuted);
-  }, [isMuted, recorder]);
+    if (webrtcOn) rtc.setMuted(isMuted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMuted]);
 
+  // ── Lead editing ──────────────────────────────────────────────────────────────
   const startEditLead = () => {
     if (!currentLead) return;
     setLeadEdit({
@@ -173,10 +302,7 @@ export default function AutoDialerPage() {
     setLeadSaveMsg(null);
   };
 
-  const cancelEditLead = () => {
-    setIsEditingLead(false);
-    setLeadEdit({});
-  };
+  const cancelEditLead = () => { setIsEditingLead(false); setLeadEdit({}); };
 
   const saveEditLead = async () => {
     if (!currentLead) return;
@@ -204,15 +330,22 @@ export default function AutoDialerPage() {
     }
   };
 
+  // ── Recording helpers ─────────────────────────────────────────────────────────
   const handleToggleRecording = async () => {
     if (recorder.status === "recording" || recorder.status === "paused") {
       const result = await recorder.stopRecording();
-      if (result) {
-        setSavedRecordingDataUrl(result.dataUrl);
-        setRecordingDuration(result.duration);
-      }
+      if (result) { setSavedRecordingDataUrl(result.dataUrl); setRecordingDuration(result.duration); }
     } else {
-      await recorder.startRecording();
+      await recorder.startRecording(webrtcOn ? rtc.getRemoteStream : undefined);
+    }
+  };
+
+  const handleAutoRecordToggle = async () => {
+    const next = !autoRecord;
+    setAutoRecord(next);
+    if (!next && (recorder.status === "recording" || recorder.status === "paused")) {
+      const r = await recorder.stopRecording();
+      if (r) { setSavedRecordingDataUrl(r.dataUrl); setRecordingDuration(r.duration); }
     }
   };
 
@@ -226,10 +359,7 @@ export default function AutoDialerPage() {
       }
       return null;
     }
-    if (savedRecordingDataUrl) {
-      return { dataUrl: savedRecordingDataUrl, duration: recordingDuration };
-    }
-    return null;
+    return savedRecordingDataUrl ? { dataUrl: savedRecordingDataUrl, duration: recordingDuration } : null;
   };
 
   const formatDuration = (seconds: number) => {
@@ -238,11 +368,13 @@ export default function AutoDialerPage() {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  // ── Campaign controls ─────────────────────────────────────────────────────────
   const startDialer = async () => {
     if (!selectedCampaignId) return;
     setIsRunning(true);
     setIsPaused(false);
     setCallStatus("idle");
+    setCallError(null);
     try {
       await startCampaignMutation.mutateAsync({ id: campIdVal });
       refetchCampaigns();
@@ -255,6 +387,7 @@ export default function AutoDialerPage() {
 
   const pauseDialer = async () => {
     setIsPaused(true);
+    if (webrtcOn && (callStatus === "connected" || callStatus === "calling")) rtc.hangup();
     try {
       await pauseCampaignMutation.mutateAsync({ id: campIdVal });
       refetchCampaigns();
@@ -265,6 +398,7 @@ export default function AutoDialerPage() {
 
   const resumeDialer = async () => {
     setIsPaused(false);
+    setCallError(null);
     try {
       await startCampaignMutation.mutateAsync({ id: campIdVal });
       refetchCampaigns();
@@ -275,19 +409,13 @@ export default function AutoDialerPage() {
   };
 
   const handleEndCall = async () => {
+    if (webrtcOn) rtc.hangup();
     setCallStatus("disposition");
     if (timerRef.current) clearInterval(timerRef.current);
-    // Auto-stop and keep the recording when the call ends
     await finalizeRecording();
     if (activeCallId) {
-      try {
-        await updateStatusMutation.mutateAsync({
-          id: activeCallId,
-          status: "completed",
-        });
-      } catch (err) {
-        console.error("Failed to update status on end call:", err);
-      }
+      try { await updateStatusMutation.mutateAsync({ id: activeCallId, status: "completed" }); }
+      catch (err) { console.error("Failed to update status on end call:", err); }
     }
   };
 
@@ -295,8 +423,8 @@ export default function AutoDialerPage() {
     setSelectedDisposition(dispId);
     if (activeCallId && nextCampaignLead) {
       try {
-        // Map disposition category to lead status update
-        const selectedDispObj = dispositions.find((d: any) => d.id.toString() === dispId);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const selectedDispObj = (dispositions as any[]).find((d) => d.id.toString() === dispId);
         let leadStatus: "completed" | "failed" | "skipped" | "callback" = "completed";
         if (selectedDispObj) {
           if (selectedDispObj.category === "no_answer" || selectedDispObj.category === "wrong_number") {
@@ -307,7 +435,9 @@ export default function AutoDialerPage() {
         }
 
         const rec = await finalizeRecording();
-        await endCallMutation.mutateAsync({
+
+        // Fire mutations in background for instant advance
+        endCallMutation.mutate({
           id: activeCallId,
           dispositionId: parseInt(dispId),
           duration,
@@ -315,8 +445,9 @@ export default function AutoDialerPage() {
           callDescription: callNotes,
           recordingUrl: rec?.dataUrl || undefined,
         });
+
         if (rec?.dataUrl) {
-          await saveRecordingMutation.mutateAsync({
+          saveRecordingMutation.mutate({
             callId: activeCallId,
             recordingUrl: rec.dataUrl,
             duration: rec.duration,
@@ -335,12 +466,13 @@ export default function AutoDialerPage() {
       }
     }
 
-    // Reset and query next lead
+    // Reset state immediately
     setCallStatus("idle");
     setDuration(0);
     setCallNotes("");
     setSelectedDisposition(null);
     setActiveCallId(null);
+    setCallError(null);
     recorder.resetRecording();
     setSavedRecordingDataUrl(null);
     setRecordingDuration(0);
@@ -348,18 +480,17 @@ export default function AutoDialerPage() {
     setIsEditingLead(false);
     setLeadEdit({});
 
-    // Refresh campaign metrics and next lead
     refetchProgress();
-    setTimeout(() => {
-      refetchNextLead();
-    }, 500);
+    setTimeout(() => refetchNextLead(), 500);
   };
 
   const stopDialer = async () => {
+    if (webrtcOn && (callStatus === "connected" || callStatus === "calling")) rtc.hangup();
     setIsRunning(false);
     setIsPaused(false);
     setCallStatus("idle");
     setDuration(0);
+    setCallError(null);
     if (timerRef.current) clearInterval(timerRef.current);
     recorder.resetRecording();
     setSavedRecordingDataUrl(null);
@@ -373,73 +504,121 @@ export default function AutoDialerPage() {
     }
   };
 
-  // Render disposition icon helper
   const getDispIcon = (category: string) => {
     switch (category) {
-      case "connected":
-      case "converted":
-        return <CheckCircle2 className="w-4 h-4" />;
-      case "no_answer":
-        return <XCircle className="w-4 h-4" />;
-      case "machine":
-      case "voicemail":
-        return <Radio className="w-4 h-4" />;
-      default:
-        return <Ban className="w-4 h-4" />;
+      case "connected": case "converted": return <CheckCircle2 className="w-4 h-4" />;
+      case "no_answer": return <XCircle className="w-4 h-4" />;
+      case "machine": case "voicemail": return <Radio className="w-4 h-4" />;
+      case "wrong_number": return <Hash className="w-4 h-4" />;
+      default: return <Ban className="w-4 h-4" />;
     }
   };
 
   const progressTotal = campaignProgress?.total || 0;
   const progressCompleted = campaignProgress?.completed || 0;
   const progressPercentage = progressTotal > 0 ? Math.round((progressCompleted / progressTotal) * 100) : 0;
-  const currentLead = nextCampaignLead?.lead || null;
+
+  // ── Helper: get field value from current lead ─────────────────────────────────
+  const getLeadFieldValue = (key: string): string => {
+    if (!currentLead) return "";
+    if (key.startsWith("cf:")) {
+      const v = (currentLead.customFields as Record<string, unknown> | undefined)?.[key.slice(3)];
+      return v == null ? "" : String(v);
+    }
+    const v = (currentLead as Record<string, unknown>)[key];
+    return v == null ? "" : String(v);
+  };
+
+  const fieldIcon = (key: string) => {
+    if (key === "companyName" || key === "cf:company") return <Building className="w-4 h-4 text-gray-500" />;
+    if (key === "designation") return <Briefcase className="w-4 h-4 text-gray-500" />;
+    if (key === "phone" || key === "phone2") return <Phone className="w-4 h-4 text-gray-500" />;
+    if (key === "email") return <Mail className="w-4 h-4 text-gray-500" />;
+    if (key === "city" || key === "state" || key === "country") return <MapPin className="w-4 h-4 text-gray-500" />;
+    return null;
+  };
 
   return (
     <div className="space-y-6">
+      {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Auto Dialer</h1>
           <p className="text-gray-400 mt-1">Automated calling with sequential lead processing</p>
+          {webrtcOn && (
+            <p className="text-xs mt-0.5">
+              <span className={
+                rtc.status === "registered" ? "text-green-400" :
+                rtc.status === "connecting" ? "text-yellow-400" : "text-red-400"
+              }>
+                ● {rtc.status === "registered" ? "Browser calling ready" :
+                   rtc.status === "connecting" ? "Connecting…" : "Not connected"}
+              </span>
+              {rtc.error && <span className="text-red-400"> — {rtc.error}</span>}
+            </p>
+          )}
         </div>
-        {!isRunning ? (
-          <div className="flex gap-2">
-            <select
-              value={selectedCampaignId}
-              onChange={(e) => setSelectedCampaignId(e.target.value)}
-              className="bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-white text-sm"
-            >
-              <option value="">Select campaign...</option>
-              {campaigns.filter((c: any) => c.type === "auto").map((c: any) => (
-                <option key={c.id} value={c.id.toString()}>{c.name}</option>
-              ))}
-            </select>
-            <Button 
-              className="bg-green-600 hover:bg-green-700" 
-              onClick={startDialer}
-              disabled={!selectedCampaignId}
-            >
-              <Play className="w-4 h-4 mr-2" /> Start
-            </Button>
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            {isPaused ? (
-              <Button className="bg-green-600 hover:bg-green-700" onClick={resumeDialer}>
-                <Play className="w-4 h-4 mr-2" /> Resume
+
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* Caller ID */}
+          {!isRunning && (
+            <Select value={selectedNumber} onValueChange={setSelectedNumber}>
+              <SelectTrigger className="h-9 w-40 bg-gray-800 border-gray-600 text-white text-sm overflow-hidden [&>span]:truncate">
+                <SelectValue placeholder="Caller ID" />
+              </SelectTrigger>
+              <SelectContent className="bg-gray-800 border-gray-600 text-white">
+                {callerNumbers.length ? (
+                  callerNumbers.map((n) => (
+                    <SelectItem key={n.value} value={n.value} className="font-mono">{n.value}</SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="none" disabled>Configure in Settings</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          )}
+
+          {!isRunning ? (
+            <>
+              <select
+                value={selectedCampaignId}
+                onChange={(e) => setSelectedCampaignId(e.target.value)}
+                className="bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-white text-sm h-9"
+              >
+                <option value="">Select campaign...</option>
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {(campaigns as any[]).filter((c) => c.type === "auto").map((c: any) => (
+                  <option key={c.id} value={c.id.toString()}>{c.name}</option>
+                ))}
+              </select>
+              <Button
+                className="bg-green-600 hover:bg-green-700 h-9"
+                onClick={startDialer}
+                disabled={!selectedCampaignId}
+              >
+                <Play className="w-4 h-4 mr-2" /> Start
               </Button>
-            ) : (
-              <Button variant="outline" className="border-amber-600/30 text-amber-400 hover:bg-amber-600/20" onClick={pauseDialer}>
-                <Pause className="w-4 h-4 mr-2" /> Pause
+            </>
+          ) : (
+            <>
+              {isPaused ? (
+                <Button className="bg-green-600 hover:bg-green-700 h-9" onClick={resumeDialer}>
+                  <Play className="w-4 h-4 mr-2" /> Resume
+                </Button>
+              ) : (
+                <Button variant="outline" className="border-amber-600/30 text-amber-400 hover:bg-amber-600/20 h-9" onClick={pauseDialer}>
+                  <Pause className="w-4 h-4 mr-2" /> Pause
+                </Button>
+              )}
+              <Button variant="outline" className="border-red-600/30 text-red-400 hover:bg-red-600/20 h-9" onClick={stopDialer}>
+                <PhoneOff className="w-4 h-4 mr-2" /> Stop
               </Button>
-            )}
-            <Button variant="outline" className="border-red-600/30 text-red-400 hover:bg-red-600/20" onClick={stopDialer}>
-              <PhoneOff className="w-4 h-4 mr-2" /> Stop
-            </Button>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Progress */}
+      {/* ── Progress ── */}
       <Card className="bg-gray-900 border-gray-800">
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-2">
@@ -455,7 +634,8 @@ export default function AutoDialerPage() {
 
       {isRunning && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Lead Info */}
+
+          {/* ── Left: Lead Info ── */}
           <Card className="bg-gray-900 border-gray-800">
             <CardContent className="p-5 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-gray-800">
@@ -477,22 +657,52 @@ export default function AutoDialerPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {currentLead && !isEditingLead && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      title="Edit client details"
-                      className="border-gray-700 text-gray-300 h-7 px-2"
-                      onClick={startEditLead}
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
+                    <>
+                      {/* Field selector */}
+                      <div className="relative">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={`border-gray-700 text-gray-300 h-7 px-2 text-xs ${fieldMenuOpen ? "bg-blue-600 border-blue-500 text-white" : ""}`}
+                          onClick={() => setFieldMenuOpen((o) => !o)}
+                        >
+                          Fields ▾
+                        </Button>
+                        {fieldMenuOpen && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setFieldMenuOpen(false)} />
+                            <div className="absolute right-0 mt-1 z-20 w-56 max-h-64 overflow-auto bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl">
+                              <p className="text-xs font-semibold text-gray-100 px-2 py-1.5 sticky top-0 bg-gray-800 border-b border-gray-700 mb-1">Show fields</p>
+                              {allDisplayFields.map((f) => (
+                                <label key={f.key} className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-100 hover:bg-gray-700 rounded-lg cursor-pointer">
+                                  <input type="checkbox" className="accent-blue-500 w-4 h-4"
+                                    checked={displayFields.includes(f.key)} onChange={() => toggleField(f.key)} />
+                                  <span className="truncate">{f.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        title="Edit client details"
+                        className="border-gray-700 text-gray-300 h-7 px-2"
+                        onClick={startEditLead}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                    </>
                   )}
                   <Badge className="bg-blue-500/20 text-blue-400">Current</Badge>
                 </div>
               </div>
+
               {leadSaveMsg && (
                 <p className={`text-xs text-center rounded-md py-1 ${leadSaveMsg.includes("Failed") ? "text-red-400 bg-red-500/10" : "text-green-400 bg-green-500/10"}`}>{leadSaveMsg}</p>
               )}
+
               {currentLead && isEditingLead ? (
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
@@ -516,33 +726,29 @@ export default function AutoDialerPage() {
                 </div>
               ) : currentLead ? (
                 <div className="space-y-2 text-sm">
-                  {currentLead.companyName && (
+                  {displayFields.map((fk) => {
+                    const f = allDisplayFields.find((x) => x.key === fk);
+                    if (!f) return null;
+                    const val = getLeadFieldValue(fk);
+                    if (!val) return null;
+                    return (
+                      <div key={fk} className="flex items-center gap-2 text-gray-300">
+                        {fieldIcon(fk) || <span className="w-4 h-4 shrink-0" />}
+                        <span className="truncate">{val}</span>
+                      </div>
+                    );
+                  })}
+                  {/* Always show phone */}
+                  {!displayFields.includes("phone") && currentLead.phone && (
                     <div className="flex items-center gap-2 text-gray-300">
-                      <Building className="w-4 h-4 text-gray-500" /> {currentLead.companyName}
+                      <Phone className="w-4 h-4 text-gray-500" /> {currentLead.phone}
                     </div>
                   )}
-                  {currentLead.designation && (
-                    <div className="flex items-center gap-2 text-gray-300">
-                      <Briefcase className="w-4 h-4 text-gray-500" /> {currentLead.designation}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 text-gray-300">
-                    <Phone className="w-4 h-4 text-gray-500" /> {currentLead.phone}
-                  </div>
-                  {currentLead.email && (
-                    <div className="flex items-center gap-2 text-gray-300">
-                      <Mail className="w-4 h-4 text-gray-500" /> {currentLead.email}
-                    </div>
-                  )}
-                  {currentLead.city && (
-                    <div className="flex items-center gap-2 text-gray-300">
-                      <MapPin className="w-4 h-4 text-gray-500" /> {currentLead.city}
-                    </div>
-                  )}
-                  {currentLead.customFields && Object.keys(currentLead.customFields).length > 0 && (
+                  {currentLead.customFields && Object.keys(currentLead.customFields).filter(k => !k.startsWith("_")).length > 0 && displayFields.some(f => f.startsWith("cf:")) && (
                     <div className="pt-2 border-t border-gray-800 space-y-1">
-                      <p className="text-[10px] font-medium text-gray-500 uppercase">Custom Client Details</p>
-                      {Object.entries(currentLead.customFields).map(([k, v]: [string, any]) => (
+                      <p className="text-[10px] font-medium text-gray-500 uppercase">Custom Fields</p>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {Object.entries(currentLead.customFields as Record<string, any>).filter(([k]) => !k.startsWith("_") && displayFields.includes(`cf:${k}`)).map(([k, v]) => (
                         <div key={k} className="flex justify-between text-xs">
                           <span className="text-gray-500">{k}</span>
                           <span className="text-gray-300">{String(v)}</span>
@@ -550,9 +756,9 @@ export default function AutoDialerPage() {
                       ))}
                     </div>
                   )}
-                  {currentLead.notes && (
+                  {currentLead.notes && displayFields.includes("notes") && (
                     <div className="pt-2 border-t border-gray-800">
-                      <p className="text-[10px] font-medium text-gray-500 uppercase mb-0.5">Client Record Notes</p>
+                      <p className="text-[10px] font-medium text-gray-500 uppercase mb-0.5">Notes</p>
                       <p className="text-xs text-gray-400 italic">{currentLead.notes}</p>
                     </div>
                   )}
@@ -565,9 +771,10 @@ export default function AutoDialerPage() {
             </CardContent>
           </Card>
 
-          {/* Call Interface */}
+          {/* ── Center: Call Interface ── */}
           <Card className="bg-gray-900 border-gray-800">
             <CardContent className="p-5">
+
               {callStatus === "calling" && (
                 <div className="text-center py-8 space-y-4">
                   <div className="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center mx-auto animate-pulse">
@@ -575,7 +782,8 @@ export default function AutoDialerPage() {
                   </div>
                   <div>
                     <p className="text-lg font-semibold text-white">Auto-dialing...</p>
-                    <p className="text-gray-400">{currentLead?.phone}</p>
+                    <p className="text-gray-400 font-mono">{currentLead?.phone}</p>
+                    {selectedNumber && <p className="text-xs text-gray-500 mt-1">From: {selectedNumber}</p>}
                   </div>
                 </div>
               )}
@@ -588,7 +796,13 @@ export default function AutoDialerPage() {
                     </div>
                     <p className="text-2xl font-bold text-white font-mono mt-2">{formatDuration(duration)}</p>
                     <Badge className="bg-green-500/20 text-green-400 mt-1">Connected</Badge>
+                    {selectedNumber && <p className="text-xs text-gray-500 mt-1 font-mono">{selectedNumber}</p>}
                   </div>
+
+                  {/* Error display */}
+                  {callError && (
+                    <div className="text-xs rounded-lg px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20">{callError}</div>
+                  )}
 
                   {/* Recording indicator */}
                   {recorder.isRecording && (
@@ -597,7 +811,7 @@ export default function AutoDialerPage() {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
                         <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
                       </span>
-                      <span className="text-xs font-semibold text-red-400 tracking-wider">REC</span>
+                      <span className="text-xs font-semibold text-red-400 tracking-wider">{autoRecord ? "AUTO REC" : "REC"}</span>
                       <span className="text-xs font-mono text-red-300">{formatDuration(recorder.recordingTime)}</span>
                     </div>
                   )}
@@ -605,8 +819,8 @@ export default function AutoDialerPage() {
                     <p className="text-xs text-red-400 text-center bg-red-500/10 border border-red-500/30 rounded-md py-1.5 px-2">{recorder.error}</p>
                   )}
 
-                  {/* Call controls: Mute + Record */}
-                  <div className="flex justify-center gap-3">
+                  {/* Controls */}
+                  <div className="flex justify-center gap-2 flex-wrap">
                     <Button
                       variant="outline"
                       size="sm"
@@ -619,13 +833,24 @@ export default function AutoDialerPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      title={recorder.isRecording ? "Stop recording" : "Record call"}
-                      className={`border-gray-700 ${recorder.isRecording ? "text-red-400 bg-red-500/10 border-red-700 animate-pulse" : "text-gray-300"}`}
-                      onClick={handleToggleRecording}
+                      title="Toggle auto-record"
+                      className={`border-gray-700 text-xs gap-1 ${autoRecord ? "text-red-400 bg-red-500/10 border-red-700" : "text-gray-300"}`}
+                      onClick={handleAutoRecordToggle}
                     >
-                      {recorder.isRecording ? <Square className="w-4 h-4 fill-current" /> : <Disc className="w-4 h-4" />}
-                      <span className="ml-1.5 text-xs">{recorder.isRecording ? "Stop Rec" : "Record"}</span>
+                      <Radio className="w-3.5 h-3.5" /> Auto
                     </Button>
+                    {!autoRecord && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        title={recorder.isRecording ? "Stop recording" : "Record call"}
+                        className={`border-gray-700 ${recorder.isRecording ? "text-red-400 bg-red-500/10 border-red-700 animate-pulse" : "text-gray-300"}`}
+                        onClick={handleToggleRecording}
+                      >
+                        {recorder.isRecording ? <Square className="w-4 h-4 fill-current" /> : <Disc className="w-4 h-4" />}
+                        <span className="ml-1.5 text-xs">{recorder.isRecording ? "Stop" : "Record"}</span>
+                      </Button>
+                    )}
                   </div>
 
                   <Textarea
@@ -645,6 +870,9 @@ export default function AutoDialerPage() {
                   <div className="text-center py-2">
                     <p className="text-lg font-semibold text-white">Call Ended</p>
                     <p className="text-gray-400 font-mono">{formatDuration(duration)}</p>
+                    {callError && (
+                      <p className="text-xs text-red-400 mt-1">{callError}</p>
+                    )}
                   </div>
 
                   {/* Recording playback */}
@@ -652,7 +880,7 @@ export default function AutoDialerPage() {
                     <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-medium text-gray-300 flex items-center gap-1.5">
-                          <Disc className="w-3.5 h-3.5 text-red-400" /> Call Recording ({formatDuration(recordingDuration)})
+                          <Disc className="w-3.5 h-3.5 text-red-400" /> Recording ({formatDuration(recordingDuration)})
                         </p>
                         <a
                           href={recorder.audioUrl}
@@ -663,13 +891,13 @@ export default function AutoDialerPage() {
                         </a>
                       </div>
                       <audio controls src={recorder.audioUrl} className="w-full h-9" />
-                      <p className="text-[10px] text-gray-500">Recording is saved automatically when you select a result.</p>
                     </div>
                   )}
 
-                  <label className="text-sm font-medium text-gray-300">Select Result</label>
+                  <label className="text-sm font-medium text-gray-300 block">Select Result</label>
                   <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto pr-1">
-                    {dispositions.map((disp: any) => (
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    {(dispositions as any[]).map((disp) => (
                       <Button
                         key={disp.id}
                         size="sm"
@@ -696,7 +924,7 @@ export default function AutoDialerPage() {
             </CardContent>
           </Card>
 
-          {/* Session Stats */}
+          {/* ── Right: Stats + Automation ── */}
           <Card className="bg-gray-900 border-gray-800">
             <CardContent className="p-5 space-y-4">
               <div className="text-center pb-3 border-b border-gray-800">
@@ -704,23 +932,59 @@ export default function AutoDialerPage() {
                 <p className="text-2xl font-bold text-white font-mono">{formatDuration(duration)}</p>
                 <p className="text-xs text-gray-400">Current Call Duration</p>
               </div>
+
               <div>
-                <h4 className="text-sm font-medium text-gray-300 mb-2">Campaign Queue Metrics</h4>
+                <h4 className="text-sm font-medium text-gray-300 mb-2">Campaign Metrics</h4>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Total Leads</span>
                     <span className="text-white font-medium">{progressTotal}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Completed Calls</span>
+                    <span className="text-gray-400">Completed</span>
                     <span className="text-green-400 font-medium">{progressCompleted}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Pending Leads</span>
+                    <span className="text-gray-400">Pending</span>
                     <span className="text-amber-400 font-medium">{campaignProgress?.pending || 0}</span>
                   </div>
                 </div>
               </div>
+
+              {/* Automation */}
+              <div className="border-t border-gray-800 pt-3 space-y-2">
+                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Automation</p>
+                <TogglePill
+                  on={autoRecord}
+                  onToggle={handleAutoRecordToggle}
+                  label={autoRecord ? "🔴 Auto Record ON" : "Auto Record OFF"}
+                  activeColor="bg-red-500"
+                />
+                {autoRecord && recorder.isRecording && (
+                  <p className="text-xs text-red-400 px-1">● Recording in progress…</p>
+                )}
+              </div>
+
+              {/* Caller ID (when running) */}
+              {isRunning && (
+                <div className="border-t border-gray-800 pt-3 space-y-2">
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Caller ID</p>
+                  <Select value={selectedNumber} onValueChange={setSelectedNumber}>
+                    <SelectTrigger className="h-9 w-full bg-gray-800 border-gray-600 text-white text-sm overflow-hidden [&>span]:truncate">
+                      <SelectValue placeholder="Select number" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-800 border-gray-600 text-white">
+                      {callerNumbers.length ? (
+                        callerNumbers.map((n) => (
+                          <SelectItem key={n.value} value={n.value} className="font-mono">{n.value}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="none" disabled>Configure in Settings</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -734,10 +998,11 @@ export default function AutoDialerPage() {
             <p className="text-gray-400 mb-4 max-w-md mx-auto">
               Select a campaign and click Start to begin automated calling. The dialer will sequentially process leads and automatically move to the next after each call.
             </p>
-            <div className="flex gap-4 justify-center text-sm text-gray-500">
+            <div className="flex gap-4 justify-center text-sm text-gray-500 flex-wrap">
               <span className="flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> Auto-advance leads</span>
               <span className="flex items-center gap-1"><BarChart3 className="w-4 h-4" /> Track dispositions</span>
               <span className="flex items-center gap-1"><SkipForward className="w-4 h-4" /> Resume from last</span>
+              <span className="flex items-center gap-1"><Radio className="w-4 h-4" /> Auto-record calls</span>
             </div>
           </CardContent>
         </Card>

@@ -15,6 +15,7 @@ import {
   Phone, PhoneCall, PhoneOff, Mic, MicOff, Pause, Play,
   SkipForward, Clock, User, Save, CheckCircle2, XCircle,
   Radio, Hash, Ban, Disc, Square, Download, Plus, X,
+  PhoneMissed, PhoneIncoming,
 } from "lucide-react";
 
 type NewContact = {
@@ -25,7 +26,6 @@ const EMPTY_CONTACT: NewContact = {
   phone: "", firstName: "", lastName: "", company: "", email: "", notes: "",
 };
 
-// ── Small reusable toggle pill ────────────────────────────────────────────────
 function TogglePill({ on, onToggle, label, activeColor = "bg-green-500" }: {
   on: boolean; onToggle: () => void; label: string; activeColor?: string;
 }) {
@@ -47,13 +47,13 @@ function TogglePill({ on, onToggle, label, activeColor = "bg-green-500" }: {
 }
 
 const STANDARD_FIELDS = [
-  { key: "firstName", label: "First Name" }, { key: "lastName",  label: "Last Name" },
-  { key: "companyName", label: "Company" },  { key: "designation", label: "Designation" },
-  { key: "phone",  label: "Phone" },          { key: "phone2",   label: "Phone 2" },
-  { key: "email",  label: "Email" },          { key: "address",  label: "Address" },
-  { key: "city",   label: "City" },           { key: "state",    label: "State" },
-  { key: "country",label: "Country" },        { key: "zipCode",  label: "Zip Code" },
-  { key: "website",label: "Website" },        { key: "notes",    label: "Notes" },
+  { key: "firstName", label: "First Name" }, { key: "lastName", label: "Last Name" },
+  { key: "companyName", label: "Company" }, { key: "designation", label: "Designation" },
+  { key: "phone", label: "Phone" }, { key: "phone2", label: "Phone 2" },
+  { key: "email", label: "Email" }, { key: "address", label: "Address" },
+  { key: "city", label: "City" }, { key: "state", label: "State" },
+  { key: "country", label: "Country" }, { key: "zipCode", label: "Zip Code" },
+  { key: "website", label: "Website" }, { key: "notes", label: "Notes" },
 ];
 
 export default function DialerPage() {
@@ -86,7 +86,6 @@ export default function DialerPage() {
     try { return localStorage.getItem("dialer.autoCall") === "true"; } catch { return false; }
   });
 
-  // Ref used to queue the next auto-call action across state resets
   const pendingAutoCallRef = useRef<(() => void) | null>(null);
 
   // ── Recording ─────────────────────────────────────────────────────────────────
@@ -109,9 +108,17 @@ export default function DialerPage() {
     [leadsResponse],
   );
 
-  const currentLead  = leads[currentLeadIndex] || null;
-  const nextLeadIdx  = currentLeadIndex + 1 < leads.length ? currentLeadIndex + 1 : 0;
-  const nextLead     = leads.length > 1 ? leads[nextLeadIdx] : null;
+  const currentLead = leads[currentLeadIndex] || null;
+  const nextLeadIdx = currentLeadIndex + 1 < leads.length ? currentLeadIndex + 1 : 0;
+  const nextLead = leads.length > 1 ? leads[nextLeadIdx] : null;
+
+  // ── Last calls (recent history) ───────────────────────────────────────────────
+  const { data: recentCallsRaw, refetch: refetchRecentCalls } = trpc.calls.myCalls.useQuery({ limit: 8 });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recentCalls: any[] = useMemo(
+    () => Array.isArray(recentCallsRaw) ? recentCallsRaw : (recentCallsRaw as { items?: unknown[] })?.items ?? [],
+    [recentCallsRaw],
+  );
 
   // ── Editable lead fields ──────────────────────────────────────────────────────
   const customFieldKeys = useMemo(() => {
@@ -127,11 +134,11 @@ export default function DialerPage() {
     [customFieldKeys],
   );
   const [displayFields, setDisplayFields] = useState<string[]>(() => {
-    try { const s = localStorage.getItem("dialer.displayFields"); if (s) return JSON.parse(s); } catch { /* ignore localStorage errors */ }
+    try { const s = localStorage.getItem("dialer.displayFields"); if (s) return JSON.parse(s); } catch { /* ignore */ }
     return ["firstName", "lastName", "companyName", "phone", "email", "city", "state"];
   });
   useEffect(() => {
-    try { localStorage.setItem("dialer.displayFields", JSON.stringify(displayFields)); } catch { /* ignore localStorage errors */ }
+    try { localStorage.setItem("dialer.displayFields", JSON.stringify(displayFields)); } catch { /* ignore */ }
   }, [displayFields]);
 
   const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
@@ -170,11 +177,10 @@ export default function DialerPage() {
 
   // ── Dialer config + WebRTC ────────────────────────────────────────────────────
   const { data: dispositions = [] } = trpc.calls.dispositions.useQuery({ companyId });
-  const { data: dialerConfig }      = trpc.integration.getDialerConfig.useQuery();
-  const rtc      = useWebRTC();
+  const { data: dialerConfig } = trpc.integration.getDialerConfig.useQuery();
+  const rtc = useWebRTC();
   const webrtcOn = Boolean(dialerConfig?.webrtc?.enabled);
 
-  // Show only the phone number in the select — not the connection name
   const callerNumbers = (dialerConfig?.fromNumbers ?? [])
     .filter((n: string) => !!n)
     .map((n: string) => ({ value: n }));
@@ -183,7 +189,14 @@ export default function DialerPage() {
   useEffect(() => {
     const pref = dialerConfig?.defaultCallerId || callerNumbers[0]?.value || "";
     if (pref && !selectedNumber) setSelectedNumber(pref);
-  }, [dialerConfig, callerNumbers, selectedNumber]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialerConfig]);
+
+  // ── Mutations ─────────────────────────────────────────────────────────────────
+  const initiateCallMutation = trpc.calls.initiate.useMutation();
+  const updateStatusMutation = trpc.calls.updateStatus.useMutation();
+  const endCallMutation = trpc.calls.endCall.useMutation();
+  const saveRecordingMutation = trpc.calls.saveRecording.useMutation();
 
   // ── Effects ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -210,12 +223,11 @@ export default function DialerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMuted]);
 
-  // Persist automation prefs
   useEffect(() => {
-    try { localStorage.setItem("dialer.autoRecord", String(autoRecord)); } catch { /* ignore localStorage errors */ }
+    try { localStorage.setItem("dialer.autoRecord", String(autoRecord)); } catch { /* ignore */ }
   }, [autoRecord]);
   useEffect(() => {
-    try { localStorage.setItem("dialer.autoCall", String(autoCall)); } catch { /* ignore localStorage errors */ }
+    try { localStorage.setItem("dialer.autoCall", String(autoCall)); } catch { /* ignore */ }
   }, [autoCall]);
 
   // Auto-start recording (WebRTC)
@@ -236,7 +248,51 @@ export default function DialerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callStatus, autoRecord, webrtcOn, recorder.status]);
 
-  // ── Auto-call trigger: fires when callStatus resets to idle ──────────────────
+  // ── Fix: Auto-end call when SIP error occurs (487 Request Terminated, 404 Not Found, etc.) ──
+  useEffect(() => {
+    if (!webrtcOn) return;
+    if (rtc.callState === "ended" && (callStatus === "connected" || callStatus === "dialing")) {
+      // Show the SIP error in the UI
+      if (rtc.error) setCallError(rtc.error);
+      // Transition to ended state so the user can select a disposition
+      setCallStatus("ended");
+      if (timerRef.current) clearInterval(timerRef.current);
+      // Finalize recording in background
+      finalizeRecording().catch(() => {});
+      // Mark call completed on backend
+      if (activeCallId) {
+        updateStatusMutation.mutate({ id: activeCallId, status: "completed" });
+      }
+      // Refresh recent calls list
+      refetchRecentCalls();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rtc.callState, webrtcOn]);
+
+  // ── Fix: Handle answered incoming call — show connected state in Dialer ────────
+  useEffect(() => {
+    if (!webrtcOn) return;
+    if (rtc.callState === "active" && rtc.callDirection === "inbound" && callStatus === "idle") {
+      setCallStatus("connected");
+      setDuration(0);
+      setCallError(null);
+      // Create a call record for the inbound call
+      initiateCallMutation.mutateAsync({
+        companyId,
+        toNumber: rtc.incomingCallerNumber || "unknown",
+        fromNumber: selectedNumber || undefined,
+        type: "inbound",
+      }).then((call) => {
+        if (call?.id) {
+          setActiveCallId(call.id);
+          updateStatusMutation.mutate({ id: call.id, status: "connected" });
+        }
+      }).catch(console.error);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rtc.callState, rtc.callDirection, webrtcOn]);
+
+  // Auto-call trigger: fires when callStatus resets to idle
   useEffect(() => {
     if (callStatus === "idle" && pendingAutoCallRef.current) {
       const action = pendingAutoCallRef.current;
@@ -245,12 +301,6 @@ export default function DialerPage() {
       return () => clearTimeout(t);
     }
   }, [callStatus]);
-
-  // ── Mutations ─────────────────────────────────────────────────────────────────
-  const initiateCallMutation  = trpc.calls.initiate.useMutation();
-  const updateStatusMutation  = trpc.calls.updateStatus.useMutation();
-  const endCallMutation       = trpc.calls.endCall.useMutation();
-  const saveRecordingMutation = trpc.calls.saveRecording.useMutation();
 
   // ── Recording helpers ─────────────────────────────────────────────────────────
   const handleToggleRecording = async () => {
@@ -361,57 +411,76 @@ export default function DialerPage() {
     setRecordingDuration(0);
   };
 
+  // ── Fix: Instant Save & Next — reset UI immediately, fire DB mutations in background ──
   const handleSaveAndNext = async () => {
-    if (activeCallId) {
-      try {
-        const rec = await finalizeRecording();
-        await endCallMutation.mutateAsync({
-          id: activeCallId,
-          dispositionId: selectedDisposition ? parseInt(selectedDisposition) : undefined,
-          duration, notes: callNotes, callDescription: callNotes,
-          recordingUrl: rec?.dataUrl || undefined,
-        });
-        if (rec?.dataUrl) {
-          await saveRecordingMutation.mutateAsync({
-            callId: activeCallId, recordingUrl: rec.dataUrl,
-            duration: rec.duration, fileSize: recorder.audioBlob?.size, format: "webm",
-          });
-        }
-      } catch (err) { console.error("Failed to save call:", err); }
-    }
+    // 1. Finalize recording before state reset (must happen before recorder.resetRecording)
+    const rec = await finalizeRecording();
 
-    // Tag lead with last disposition (for Campaigns filter)
-    if (currentLead && selectedDisposition) {
-      const disp = (dispositions as Array<{ id: number; category: string; label: string }>).find((d) => d.id.toString() === selectedDisposition);
-      if (disp) {
-        try {
-          await updateLeadMutation.mutateAsync({
-            id: currentLead.id,
-            data: {
-              customFields: {
-                ...((currentLead.customFields as Record<string, unknown>) ?? {}),
-                _lastDisposition: disp.label,
-              },
-            },
-          });
-        } catch { /* non-critical */ }
-      }
-    }
+    // 2. Capture state before reset
+    const callId = activeCallId;
+    const dispId = selectedDisposition;
+    const dur = duration;
+    const notes = callNotes;
+    const lead = currentLead;
+    const blobSize = recorder.audioBlob?.size;
 
-    // Queue auto-call for next lead BEFORE resetCall changes state
+    // 3. Queue auto-call BEFORE resetCall changes callStatus
     if (autoCall && !addMode) {
       const nextIdx = currentLeadIndex < leads.length - 1 ? currentLeadIndex + 1 : 0;
-      const nextLd  = leads[nextIdx];
+      const nextLd = leads[nextIdx];
       if (nextLd) {
-        const phone  = nextLd.phone;
+        const phone = nextLd.phone;
         const leadId = nextLd.id;
         pendingAutoCallRef.current = () => doCallFlow(phone, leadId);
       }
     }
 
+    // 4. Advance lead index & reset UI immediately (instant response)
     if (currentLeadIndex < leads.length - 1) setCurrentLeadIndex((p) => p + 1);
     else setCurrentLeadIndex(0);
-    resetCall(); // sets callStatus → "idle" → triggers pendingAutoCallRef useEffect
+    resetCall();
+
+    // 5. Fire DB mutations in background without blocking the UI
+    if (callId) {
+      endCallMutation.mutate({
+        id: callId,
+        dispositionId: dispId ? parseInt(dispId) : undefined,
+        duration: dur,
+        notes,
+        callDescription: notes,
+        recordingUrl: rec?.dataUrl || undefined,
+      });
+
+      if (rec?.dataUrl) {
+        saveRecordingMutation.mutate({
+          callId,
+          recordingUrl: rec.dataUrl,
+          duration: rec.duration,
+          fileSize: blobSize,
+          format: "webm",
+        });
+      }
+    }
+
+    // 6. Tag lead with last disposition (for campaign filtering) — fire-and-forget
+    if (lead && dispId) {
+      const disp = (dispositions as Array<{ id: number; label: string; category: string }>)
+        .find((d) => d.id.toString() === dispId);
+      if (disp) {
+        updateLeadMutation.mutate({
+          id: lead.id,
+          data: {
+            customFields: {
+              ...((lead.customFields as Record<string, unknown>) ?? {}),
+              _lastDisposition: disp.label,
+            },
+          },
+        });
+      }
+    }
+
+    // Refresh recent calls list after a short delay
+    setTimeout(() => refetchRecentCalls(), 1000);
   };
 
   const dialPadDigits = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
@@ -420,11 +489,20 @@ export default function DialerPage() {
   const getDispIcon = (category: string) => {
     switch (category) {
       case "connected": case "converted": return <CheckCircle2 className="w-4 h-4" />;
-      case "no_answer":                   return <XCircle className="w-4 h-4" />;
-      case "machine": case "voicemail":   return <Radio className="w-4 h-4" />;
-      case "wrong_number":               return <Hash className="w-4 h-4" />;
-      default:                           return <Ban className="w-4 h-4" />;
+      case "no_answer": return <XCircle className="w-4 h-4" />;
+      case "machine": case "voicemail": return <Radio className="w-4 h-4" />;
+      case "wrong_number": return <Hash className="w-4 h-4" />;
+      default: return <Ban className="w-4 h-4" />;
     }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const getCallStatusIcon = (call: any) => {
+    const s = call?.status || "";
+    if (s === "connected" || s === "completed") return <Phone className="w-3 h-3 text-green-400" />;
+    if (s === "no_answer" || s === "failed") return <PhoneMissed className="w-3 h-3 text-red-400" />;
+    if (call?.type === "inbound") return <PhoneIncoming className="w-3 h-3 text-blue-400" />;
+    return <Phone className="w-3 h-3 text-gray-400" />;
   };
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -434,11 +512,15 @@ export default function DialerPage() {
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
           <div>
-            <h1 className="text-xl font-bold text-white">Manual Dialer</h1>
+            <h1 className="text-xl font-bold text-white">Dialer</h1>
             {webrtcOn && (
               <p className="text-xs mt-0.5">
-                <span className={rtc.status === "registered" ? "text-green-400" : rtc.status === "connecting" ? "text-yellow-400" : "text-red-400"}>
-                  ● {rtc.status === "registered" ? "Browser calling ready" : rtc.status === "connecting" ? "Connecting…" : "Not connected"}
+                <span className={
+                  rtc.status === "registered" ? "text-green-400" :
+                  rtc.status === "connecting" ? "text-yellow-400" : "text-red-400"
+                }>
+                  ● {rtc.status === "registered" ? "Browser calling ready" :
+                     rtc.status === "connecting" ? "Connecting…" : "Not connected"}
                 </span>
                 {rtc.error && <span className="text-red-400"> — {rtc.error}</span>}
               </p>
@@ -449,7 +531,7 @@ export default function DialerPage() {
         {/* Controls row — only visible when idle */}
         {callStatus === "idle" && (
           <div className="flex flex-wrap gap-2 items-center">
-            {/* Caller ID — shows only the number */}
+            {/* Caller ID */}
             <Select value={selectedNumber} onValueChange={setSelectedNumber}>
               <SelectTrigger className="h-9 w-40 bg-gray-800 border-gray-600 text-white text-sm overflow-hidden [&>span]:truncate">
                 <SelectValue placeholder="Caller ID" />
@@ -457,9 +539,7 @@ export default function DialerPage() {
               <SelectContent className="bg-gray-800 border-gray-600 text-white">
                 {callerNumbers.length ? (
                   callerNumbers.map((n) => (
-                    <SelectItem key={n.value} value={n.value} className="font-mono">
-                      {n.value}
-                    </SelectItem>
+                    <SelectItem key={n.value} value={n.value} className="font-mono">{n.value}</SelectItem>
                   ))
                 ) : (
                   <SelectItem value="none" disabled>Configure in Settings</SelectItem>
@@ -488,13 +568,10 @@ export default function DialerPage() {
               }`}
               onClick={() => {
                 if (addMode) {
-                  setAddMode(false);
-                  setNewContact(EMPTY_CONTACT);
+                  setAddMode(false); setNewContact(EMPTY_CONTACT);
                   if (currentLead) setPhoneNumber(currentLead.phone);
                 } else {
-                  setAddMode(true);
-                  setNewContact(EMPTY_CONTACT);
-                  setPhoneNumber("");
+                  setAddMode(true); setNewContact(EMPTY_CONTACT); setPhoneNumber("");
                 }
               }}
             >
@@ -505,131 +582,90 @@ export default function DialerPage() {
         )}
       </div>
 
-      {/* ── 3-column grid: Lead Info | Dialer | Stats ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* ── 3-column grid: Last Calls | Dial Pad | Lead Details ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-        {/* ── Left: Lead Info / New Contact ── */}
+        {/* ── Left: Last Calls + Queue Position ── */}
         <Card className="bg-gray-900 border-gray-800">
-          <CardContent className="p-4 space-y-3">
-            {addMode ? (
-              <>
-                <div className="flex items-center gap-3 pb-3 border-b border-gray-800">
-                  <div className="w-9 h-9 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0">
-                    <Plus className="w-4 h-4 text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">New Number</p>
-                    <p className="text-xs text-gray-500">Not linked to lead list</p>
-                  </div>
-                </div>
-                {([
-                  { key: "phone",     label: "Phone Number *", placeholder: "+15550001111" },
-                  { key: "firstName", label: "First Name",     placeholder: "First name" },
-                  { key: "lastName",  label: "Last Name",      placeholder: "Last name" },
-                  { key: "company",   label: "Company",        placeholder: "Company name" },
-                  { key: "email",     label: "Email",          placeholder: "email@company.com" },
-                ] as const).map(({ key, label, placeholder }) => (
-                  <div key={key}>
-                    <label className="block text-xs font-medium text-gray-300 mb-1">{label}</label>
-                    <Input
-                      value={newContact[key]}
-                      onChange={(e) => {
-                        setNewContact((p) => ({ ...p, [key]: e.target.value }));
-                        if (key === "phone") setPhoneNumber(e.target.value);
-                      }}
-                      placeholder={placeholder}
-                      autoFocus={key === "phone"}
-                      className="h-9 bg-gray-950 border-gray-700 text-gray-100 placeholder:text-gray-600 text-sm"
-                    />
+          <CardContent className="p-4">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Last Calls</p>
+
+            {recentCalls.length === 0 ? (
+              <p className="text-xs text-gray-600 text-center py-6">No recent calls</p>
+            ) : (
+              <div className="space-y-1">
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {recentCalls.map((call: any) => (
+                  <div
+                    key={call.id}
+                    className="flex items-center gap-2 px-2 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 cursor-pointer transition-colors"
+                    onClick={() => {
+                      if (callStatus === "idle" && call.toNumber) {
+                        setPhoneNumber(call.toNumber);
+                        setAddMode(true);
+                      }
+                    }}
+                    title={callStatus === "idle" ? "Click to redial" : ""}
+                  >
+                    <div className="shrink-0">{getCallStatusIcon(call)}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-white truncate">
+                        {call.lead?.firstName
+                          ? `${call.lead.firstName}${call.lead.lastName ? " " + call.lead.lastName : ""}`
+                          : call.lead?.companyName || call.toNumber || "Unknown"}
+                      </p>
+                      <p className="text-[11px] text-gray-500 font-mono truncate">{call.toNumber}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {call.duration != null && call.duration > 0 && (
+                        <p className="text-[10px] text-gray-500 font-mono">{formatDuration(call.duration)}</p>
+                      )}
+                      {call.disposition?.label && (
+                        <p className="text-[10px] text-gray-600 truncate max-w-[56px]">{call.disposition.label}</p>
+                      )}
+                    </div>
                   </div>
                 ))}
-                <div>
-                  <label className="block text-xs font-medium text-gray-300 mb-1">Notes</label>
-                  <Textarea
-                    value={newContact.notes}
-                    onChange={(e) => setNewContact((p) => ({ ...p, notes: e.target.value }))}
-                    placeholder="Optional notes…"
-                    className="bg-gray-950 border-gray-700 text-gray-100 placeholder:text-gray-600 text-sm min-h-[60px]"
-                  />
-                </div>
-              </>
-            ) : currentLead ? (
-              <>
-                <div className="flex items-center justify-between gap-2 pb-3 border-b border-gray-800">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0">
-                      <User className="w-4 h-4 text-blue-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">
-                        {getFieldValue("firstName")} {getFieldValue("lastName") || getFieldValue("companyName") || "Lead"}
-                      </p>
-                      <p className="text-xs text-gray-500">Lead #{currentLead.id}</p>
-                    </div>
+              </div>
+            )}
+
+            {/* Queue position */}
+            {leads.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-gray-800">
+                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Queue</p>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div className="bg-gray-800 rounded-lg p-2 text-center">
+                    <p className="text-base font-bold text-white">{leads.length}</p>
+                    <p className="text-[10px] text-gray-500">Total</p>
                   </div>
-                  <div className="relative shrink-0">
-                    <Button
-                      size="sm"
-                      className={`h-7 text-xs font-semibold px-2 ${fieldMenuOpen ? "bg-blue-600 text-white" : "bg-gray-700 text-white hover:bg-gray-600"}`}
-                      onClick={() => setFieldMenuOpen((o) => !o)}
+                  <div className="bg-gray-800 rounded-lg p-2 text-center">
+                    <p className="text-base font-bold text-blue-400">{currentLeadIndex + 1}</p>
+                    <p className="text-[10px] text-gray-500">Position</p>
+                  </div>
+                </div>
+                {nextLead && (
+                  <div className="p-2 rounded-lg bg-gray-800">
+                    <p className="text-[10px] text-gray-500 mb-0.5">Next in queue</p>
+                    <p className="text-xs text-white truncate">
+                      {nextLead.firstName || nextLead.companyName || `Lead #${nextLead.id}`}
+                      {nextLead.lastName ? ` ${nextLead.lastName}` : ""}
+                    </p>
+                    <p className="text-[11px] text-blue-400 font-mono truncate">{nextLead.phone}</p>
+                    <button
+                      disabled={callStatus !== "idle"}
+                      onClick={() => { setCurrentLeadIndex(nextLeadIdx); setPhoneNumber(nextLead.phone || ""); }}
+                      className="w-full mt-1 flex items-center justify-center gap-1 h-7 rounded-md bg-gray-700 text-white text-[11px] font-medium hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
-                      Fields ▾
-                    </Button>
-                    {fieldMenuOpen && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={() => setFieldMenuOpen(false)} />
-                        <div className="absolute right-0 mt-1 z-20 w-60 max-h-72 overflow-auto bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl">
-                          <p className="text-xs font-semibold text-gray-100 px-2 py-1.5 sticky top-0 bg-gray-800 border-b border-gray-700 mb-1">
-                            Show these fields
-                          </p>
-                          {allFields.map((f) => (
-                            <label key={f.key} className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-100 hover:bg-gray-700 rounded-lg cursor-pointer">
-                              <input type="checkbox" className="accent-blue-500 w-4 h-4"
-                                checked={displayFields.includes(f.key)} onChange={() => toggleField(f.key)} />
-                              <span className="truncate">{f.label}</span>
-                              {f.key.startsWith("cf:") && (
-                                <span className="text-[10px] bg-blue-600/20 text-blue-300 px-1.5 py-0.5 rounded ml-auto shrink-0">Excel</span>
-                              )}
-                            </label>
-                          ))}
-                        </div>
-                      </>
-                    )}
+                      <SkipForward className="w-3 h-3" /> Skip to Next
+                    </button>
                   </div>
-                </div>
-                <div className="space-y-2 overflow-y-auto max-h-[calc(100vh-380px)]">
-                  {displayFields.length === 0 && (
-                    <p className="text-xs text-gray-500">No fields selected. Click "Fields".</p>
-                  )}
-                  {displayFields.map((fk) => {
-                    const f = allFields.find((x) => x.key === fk);
-                    if (!f) return null;
-                    return (
-                      <div key={fk}>
-                        <label className="text-xs font-medium text-gray-300">{f.label}</label>
-                        {fk === "notes" ? (
-                          <Textarea value={getFieldValue(fk)} onChange={(e) => setFieldValue(fk, e.target.value)}
-                            onBlur={() => saveField(fk)} className="bg-gray-800 border-gray-600 text-gray-100 placeholder:text-gray-500 mt-0.5 text-sm min-h-[55px]" />
-                        ) : (
-                          <Input value={getFieldValue(fk)} onChange={(e) => setFieldValue(fk, e.target.value)}
-                            onBlur={() => saveField(fk)} className="bg-gray-800 border-gray-600 text-gray-100 placeholder:text-gray-500 mt-0.5 text-sm h-8" />
-                        )}
-                      </div>
-                    );
-                  })}
-                  {updateLeadMutation.isPending && <p className="text-xs text-gray-500">Saving…</p>}
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-10 text-gray-500">
-                <p className="text-sm">Select a lead list above.</p>
-                <p className="text-xs mt-1">Or click <strong>Add Number</strong> to dial any number.</p>
+                )}
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* ── Center: Call Interface ── */}
+        {/* ── Center: Dial Interface ── */}
         <Card className="bg-gray-900 border-gray-800">
           <CardContent className="p-4">
 
@@ -671,8 +707,11 @@ export default function DialerPage() {
                   <div className="text-sm rounded-lg px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20">{callError}</div>
                 )}
 
-                <Button className="w-full h-12 bg-green-600 hover:bg-green-700 text-white text-base font-semibold"
-                  onClick={startCall} disabled={!phoneNumber}>
+                <Button
+                  className="w-full h-12 bg-green-600 hover:bg-green-700 text-white text-base font-semibold"
+                  onClick={startCall}
+                  disabled={!phoneNumber}
+                >
                   <PhoneCall className="w-5 h-5 mr-2" />
                   {addMode ? `Call ${phoneNumber || "…"}` : "Call"}
                 </Button>
@@ -704,14 +743,28 @@ export default function DialerPage() {
                   <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-1 ${
                     callStatus === "connected" ? "bg-green-500/20 animate-pulse" : "bg-gray-700"
                   }`}>
-                    <Phone className={`w-7 h-7 ${callStatus === "connected" ? "text-green-400" : "text-gray-400"}`} />
+                    {rtc.callDirection === "inbound" && callStatus === "connected"
+                      ? <PhoneIncoming className="w-7 h-7 text-green-400" />
+                      : <Phone className={`w-7 h-7 ${callStatus === "connected" ? "text-green-400" : "text-gray-400"}`} />
+                    }
                   </div>
                   <p className="text-2xl font-bold text-white font-mono">{formatDuration(duration)}</p>
                   <Badge className={callStatus === "connected" ? "bg-green-500/20 text-green-400 mt-1" : "bg-gray-500/20 text-gray-400 mt-1"}>
-                    {callStatus === "connected" ? "On Call" : "Call Ended"}
+                    {callStatus === "connected"
+                      ? (rtc.callDirection === "inbound" ? "Incoming Call" : "On Call")
+                      : "Call Ended"}
                   </Badge>
-                  <p className="text-xs text-gray-500 mt-1 font-mono">{selectedNumber}</p>
+                  {callStatus === "connected" && (
+                    <p className="text-xs text-gray-500 mt-1 font-mono">{phoneNumber}</p>
+                  )}
                 </div>
+
+                {/* Error from SIP (487, 404, etc.) */}
+                {callError && callStatus === "ended" && (
+                  <div className="text-xs rounded-lg px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20">
+                    {callError}
+                  </div>
+                )}
 
                 {/* REC indicator */}
                 {recorder.isRecording && (
@@ -728,7 +781,7 @@ export default function DialerPage() {
                   <p className="text-xs text-red-400 text-center bg-red-500/10 border border-red-500/20 rounded-lg py-1.5 px-3">{recorder.error}</p>
                 )}
 
-                {/* Call controls */}
+                {/* Call controls (connected only) */}
                 {callStatus === "connected" && (
                   <div className="flex justify-center flex-wrap gap-2">
                     <Button size="sm" className={isMuted ? "bg-red-600 hover:bg-red-700 text-white" : "bg-gray-700 hover:bg-gray-600 text-white"} onClick={() => setIsMuted(!isMuted)} title={isMuted ? "Unmute" : "Mute"}>
@@ -751,10 +804,10 @@ export default function DialerPage() {
                   </div>
                 )}
 
-                {/* DTMF keypad (during call) */}
+                {/* DTMF keypad */}
                 {callStatus === "connected" && (
                   <div className="rounded-xl p-3 bg-gray-800 border border-gray-700">
-                    <p className="text-xs text-gray-300 font-medium text-center mb-2">Keypad — IVR navigation</p>
+                    <p className="text-xs text-gray-300 font-medium text-center mb-2">Keypad</p>
                     <div className="grid grid-cols-3 gap-1.5">
                       {dialPadDigits.map((d) => (
                         <button key={d} onClick={() => handleDTMF(d)}
@@ -766,7 +819,7 @@ export default function DialerPage() {
                   </div>
                 )}
 
-                {/* Recording playback */}
+                {/* Recording playback (ended) */}
                 {callStatus === "ended" && recorder.audioUrl && (
                   <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 space-y-2">
                     <div className="flex items-center justify-between">
@@ -783,17 +836,17 @@ export default function DialerPage() {
 
                 {/* Notes */}
                 <div>
-                  <label className="text-sm font-semibold text-gray-100 mb-1 block">Call Description</label>
+                  <label className="text-sm font-semibold text-gray-100 mb-1 block">Call Notes</label>
                   <Textarea value={callNotes} onChange={(e) => setCallNotes(e.target.value)}
                     placeholder="Enter call notes…" className="bg-gray-800 border-gray-600 text-gray-100 placeholder:text-gray-500 min-h-[65px]" />
                 </div>
 
-                {/* Dispositions */}
+                {/* Dispositions + Save (ended only) */}
                 {callStatus === "ended" && (
                   <div>
                     <label className="text-sm font-semibold text-gray-100 mb-2 block">Call Result</label>
                     <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto pr-1">
-                      {(dispositions as Array<{ id: number; name?: string; label?: string; category: string }>).map((disp) => (
+                      {(dispositions as Array<{ id: number; label?: string; category: string }>).map((disp) => (
                         <Button key={disp.id} size="sm"
                           onClick={() => { setSelectedDisposition(disp.id.toString()); if (disp.id.toString() === "10") setShowCustomField(true); }}
                           className={`justify-start text-white text-xs ${selectedDisposition === disp.id.toString() ? "bg-blue-600 hover:bg-blue-700 ring-2 ring-blue-400" : "bg-gray-700 hover:bg-gray-600"}`}>
@@ -829,61 +882,128 @@ export default function DialerPage() {
           </CardContent>
         </Card>
 
-        {/* ── Right: Stats + Next Lead + Automation ── */}
+        {/* ── Right: Lead Details + Field Selection + Recording + Automation ── */}
         <Card className="bg-gray-900 border-gray-800">
           <CardContent className="p-4 space-y-4">
 
-            {/* Duration */}
-            <div className="text-center py-2 border-b border-gray-800">
-              <Clock className="w-6 h-6 text-gray-500 mx-auto mb-1" />
-              <p className="text-3xl font-bold text-white font-mono">{formatDuration(duration)}</p>
-              <p className="text-xs text-gray-400 mt-1">Call Duration</p>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-gray-800 rounded-xl p-3 text-center">
-                <p className="text-xl font-bold text-white">{leads.length}</p>
-                <p className="text-xs text-gray-500">Total</p>
+            {/* Lead info / New contact */}
+            {addMode ? (
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">New Contact</p>
+                <div className="flex items-center gap-2 pb-2 border-b border-gray-800">
+                  <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0">
+                    <Plus className="w-4 h-4 text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">New Number</p>
+                    <p className="text-xs text-gray-500">Not linked to lead list</p>
+                  </div>
+                </div>
+                {([
+                  { key: "firstName", label: "First Name", placeholder: "First name" },
+                  { key: "lastName", label: "Last Name", placeholder: "Last name" },
+                  { key: "company", label: "Company", placeholder: "Company name" },
+                  { key: "email", label: "Email", placeholder: "email@company.com" },
+                ] as const).map(({ key, label, placeholder }) => (
+                  <div key={key}>
+                    <label className="block text-xs font-medium text-gray-300 mb-0.5">{label}</label>
+                    <Input
+                      value={newContact[key]}
+                      onChange={(e) => setNewContact((p) => ({ ...p, [key]: e.target.value }))}
+                      placeholder={placeholder}
+                      className="h-8 bg-gray-800 border-gray-700 text-gray-100 placeholder:text-gray-600 text-sm"
+                    />
+                  </div>
+                ))}
+                <div>
+                  <label className="block text-xs font-medium text-gray-300 mb-0.5">Notes</label>
+                  <Textarea
+                    value={newContact.notes}
+                    onChange={(e) => setNewContact((p) => ({ ...p, notes: e.target.value }))}
+                    placeholder="Optional notes…"
+                    className="bg-gray-800 border-gray-700 text-gray-100 placeholder:text-gray-600 text-sm min-h-[60px]"
+                  />
+                </div>
               </div>
-              <div className="bg-gray-800 rounded-xl p-3 text-center">
-                <p className="text-xl font-bold text-blue-400">{currentLeadIndex + 1}</p>
-                <p className="text-xs text-gray-500">Position</p>
-              </div>
-            </div>
-
-            {/* Next in queue */}
-            {!addMode && leads.length > 0 && (
-              <div className="border border-gray-800 rounded-xl p-3 space-y-2">
-                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Next in Queue</p>
-                {nextLead ? (
-                  <>
+            ) : currentLead ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-gray-800">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0">
+                      <User className="w-4 h-4 text-blue-400" />
+                    </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-white truncate">
-                        {nextLead.firstName || nextLead.companyName || `Lead #${nextLead.id}`}
-                        {nextLead.lastName ? ` ${nextLead.lastName}` : ""}
+                        {getFieldValue("firstName")} {getFieldValue("lastName") || getFieldValue("companyName") || "Lead"}
                       </p>
-                      <p className="text-xs text-blue-400 font-mono mt-0.5 truncate">{nextLead.phone}</p>
+                      <p className="text-xs text-gray-500">Lead #{currentLead.id}</p>
                     </div>
-                    <button
-                      disabled={callStatus !== "idle"}
-                      onClick={() => { setCurrentLeadIndex(nextLeadIdx); setPhoneNumber(nextLead.phone || ""); }}
-                      className="w-full flex items-center justify-center gap-1.5 h-8 rounded-lg bg-gray-700 text-white text-xs font-semibold hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  </div>
+                  {/* Field selector */}
+                  <div className="relative shrink-0">
+                    <Button
+                      size="sm"
+                      className={`h-7 text-xs font-semibold px-2 ${fieldMenuOpen ? "bg-blue-600 text-white" : "bg-gray-700 text-white hover:bg-gray-600"}`}
+                      onClick={() => setFieldMenuOpen((o) => !o)}
                     >
-                      <SkipForward className="w-3.5 h-3.5" /> Skip to Next
-                    </button>
-                  </>
-                ) : (
-                  <p className="text-xs text-gray-600">Last lead in list</p>
-                )}
+                      Fields ▾
+                    </Button>
+                    {fieldMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setFieldMenuOpen(false)} />
+                        <div className="absolute right-0 mt-1 z-20 w-60 max-h-72 overflow-auto bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl">
+                          <p className="text-xs font-semibold text-gray-100 px-2 py-1.5 sticky top-0 bg-gray-800 border-b border-gray-700 mb-1">
+                            Show these fields
+                          </p>
+                          {allFields.map((f) => (
+                            <label key={f.key} className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-100 hover:bg-gray-700 rounded-lg cursor-pointer">
+                              <input type="checkbox" className="accent-blue-500 w-4 h-4"
+                                checked={displayFields.includes(f.key)} onChange={() => toggleField(f.key)} />
+                              <span className="truncate">{f.label}</span>
+                              {f.key.startsWith("cf:") && (
+                                <span className="text-[10px] bg-blue-600/20 text-blue-300 px-1.5 py-0.5 rounded ml-auto shrink-0">Excel</span>
+                              )}
+                            </label>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2 overflow-y-auto max-h-[220px]">
+                  {displayFields.length === 0 && (
+                    <p className="text-xs text-gray-500">No fields selected. Click "Fields".</p>
+                  )}
+                  {displayFields.map((fk) => {
+                    const f = allFields.find((x) => x.key === fk);
+                    if (!f) return null;
+                    return (
+                      <div key={fk}>
+                        <label className="text-xs font-medium text-gray-300">{f.label}</label>
+                        {fk === "notes" ? (
+                          <Textarea value={getFieldValue(fk)} onChange={(e) => setFieldValue(fk, e.target.value)}
+                            onBlur={() => saveField(fk)} className="bg-gray-800 border-gray-600 text-gray-100 placeholder:text-gray-500 mt-0.5 text-sm min-h-[55px]" />
+                        ) : (
+                          <Input value={getFieldValue(fk)} onChange={(e) => setFieldValue(fk, e.target.value)}
+                            onBlur={() => saveField(fk)} className="bg-gray-800 border-gray-600 text-gray-100 placeholder:text-gray-500 mt-0.5 text-sm h-8" />
+                        )}
+                      </div>
+                    );
+                  })}
+                  {updateLeadMutation.isPending && <p className="text-xs text-gray-500">Saving…</p>}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6 text-gray-500">
+                <p className="text-sm">Select a lead list above.</p>
+                <p className="text-xs mt-1">Or click <strong>Add Number</strong> to dial any number.</p>
               </div>
             )}
 
             {/* Automation toggles */}
-            <div className="space-y-2">
+            <div className="border-t border-gray-800 pt-3 space-y-2">
               <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Automation</p>
-
-              {/* Auto Record */}
               <TogglePill
                 on={autoRecord}
                 onToggle={handleAutoRecordToggle}
@@ -893,8 +1013,6 @@ export default function DialerPage() {
               {autoRecord && recorder.isRecording && (
                 <p className="text-xs text-red-400 px-1">● Recording in progress…</p>
               )}
-
-              {/* Auto Call */}
               <TogglePill
                 on={autoCall}
                 onToggle={() => setAutoCall((v) => !v)}
@@ -903,10 +1021,19 @@ export default function DialerPage() {
               />
               {autoCall && (
                 <p className="text-xs text-green-400 px-1">
-                  After "Save + Auto Call", next lead dials automatically.
+                  After saving, the next lead dials automatically.
                 </p>
               )}
             </div>
+
+            {/* Live duration (during call) */}
+            {callStatus !== "idle" && (
+              <div className="border-t border-gray-800 pt-3 text-center">
+                <Clock className="w-5 h-5 text-gray-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-white font-mono">{formatDuration(duration)}</p>
+                <p className="text-xs text-gray-400">Duration</p>
+              </div>
+            )}
 
           </CardContent>
         </Card>

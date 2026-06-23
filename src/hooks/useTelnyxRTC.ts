@@ -222,7 +222,13 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
 
   const answerCall = useCallback(() => {
     try {
-      callRef.current?.answer();
+      const call = callRef.current;
+      if (call) {
+        // Ensure audio routes to the remote audio element for inbound calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (call as any).remoteElement = REMOTE_AUDIO_ID;
+        call.answer();
+      }
     } catch { /* noop */ }
     setCallState("active");
   }, []);
