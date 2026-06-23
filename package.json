@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build && esbuild api/boot.ts --platform=node --bundle --format=esm --outfile=dist/boot.js && node scripts/hostinger-deploy.cjs",
+    "build": "vite build && esbuild api/boot.ts --platform=node --bundle --format=esm --packages=external --outfile=dist/boot.js && node scripts/hostinger-deploy.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node dist/boot.js",
