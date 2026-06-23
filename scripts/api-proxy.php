@@ -21,7 +21,7 @@ if (isset($_GET['debug'])) {
         'exec_available' => array_values($avail),
         'disabled_fns'   => $disabled,
         'app_dir'        => $appDir2,
-        'boot_exists'    => $appDir2 ? file_exists($appDir2 . '/dist/boot.cjs') : false,
+        'boot_exists'    => $appDir2 ? file_exists($appDir2 . '/dist/boot.js') : false,
         'server_running' => isServerRunning(),
         'node_paths'     => array_filter(['/usr/local/bin/node','/usr/bin/node','/opt/node/bin/node'], 'file_exists'),
     ], JSON_PRETTY_PRINT);
@@ -44,7 +44,7 @@ function isServerRunning() {
 
 // Try to start Node.js server
 function startServer($appDir) {
-    $script  = $appDir . '/dist/boot.cjs';
+    $script  = $appDir . '/dist/boot.js';
     $logFile = sys_get_temp_dir() . '/salesvora.log';
     if (!file_exists($script)) return;
 
@@ -61,7 +61,7 @@ function startServer($appDir) {
 
     if (empty($available)) return;
 
-    $cmd = 'cd ' . escapeshellarg($appDir) . ' && PORT=3000 NODE_ENV=production nohup ' . escapeshellarg($node) . ' dist/boot.cjs >> ' . escapeshellarg($logFile) . ' 2>&1 &';
+    $cmd = 'cd ' . escapeshellarg($appDir) . ' && PORT=3000 NODE_ENV=production nohup ' . escapeshellarg($node) . ' dist/boot.js >> ' . escapeshellarg($logFile) . ' 2>&1 &';
 
     $fn = reset($available);
     @$fn($cmd);

@@ -64,9 +64,9 @@ if (fs.existsSync(phpSrc)) {
 }
 
 // Also copy the server file for Node.js
-const serverSrc = path.join(cwd, 'dist/boot.cjs');
+const serverSrc = path.join(cwd, 'dist/boot.js');
 if (fs.existsSync(serverSrc)) {
-  console.log('[deploy] ✓ dist/boot.cjs ready at:', serverSrc);
+  console.log('[deploy] ✓ dist/boot.js ready at:', serverSrc);
 }
 
 console.log('[deploy] ✓ Deployment complete!');
