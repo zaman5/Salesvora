@@ -34,8 +34,8 @@ if (!fs.existsSync(src)) {
 fs.cpSync(src, dest, { recursive: true, force: true });
 console.log('[deploy] ✓ Static files copied to public_html/');
 
-// Create .htaccess for React Router (SPA) + API proxy
-const htaccess = `# Salesvora - React SPA + Node.js API
+// Create .htaccess — routes API calls through PHP proxy (no mod_proxy needed)
+const htaccess = `# Salesvora - React SPA + PHP API Proxy
 Options -MultiViews
 RewriteEngine On
 
@@ -44,10 +44,10 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Proxy API and tRPC calls to Node.js server on port 3000
+# Route API calls through PHP proxy (auto-starts Node.js server)
 RewriteCond %{REQUEST_URI} ^/api [NC,OR]
 RewriteCond %{REQUEST_URI} ^/health [NC]
-RewriteRule ^(.*)$ http://127.0.0.1:3000/$1 [P,L,QSA]
+RewriteRule ^(.*)$ /api-proxy.php [L,QSA]
 
 # All other routes → React SPA
 RewriteRule ^ /index.html [L]
@@ -55,6 +55,13 @@ RewriteRule ^ /index.html [L]
 
 fs.writeFileSync(path.join(dest, '.htaccess'), htaccess);
 console.log('[deploy] ✓ .htaccess created in public_html/');
+
+// Copy PHP proxy to public_html/
+const phpSrc = path.join(cwd, 'scripts/api-proxy.php');
+if (fs.existsSync(phpSrc)) {
+  fs.copyFileSync(phpSrc, path.join(dest, 'api-proxy.php'));
+  console.log('[deploy] ✓ api-proxy.php copied to public_html/');
+}
 
 // Also copy the server file for Node.js
 const serverSrc = path.join(cwd, 'dist/boot.cjs');
