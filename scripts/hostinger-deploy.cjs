@@ -5,16 +5,21 @@ const path = require('path');
 const cwd = process.cwd();
 const src = path.join(cwd, 'dist/public');
 
-// Detect Hostinger by checking if .builds is in the path
-const isHostinger = cwd.includes('.builds');
+// Detect Hostinger by checking if public_html is in the path
+const isHostinger = cwd.includes('public_html');
 
 if (!isHostinger) {
   console.log('[deploy] Local environment detected — skipping copy.');
   process.exit(0);
 }
 
-// On Hostinger: .builds/source/ → ../../ = public_html/
-const dest = path.resolve(cwd, '../../');
+// Find public_html directory dynamically regardless of subdirectory depth
+const parts = cwd.split('/');
+const pubIndex = parts.indexOf('public_html');
+const dest = parts.slice(0, pubIndex + 1).join('/');
+
+console.log('[deploy] Detected path parts:', parts.slice(pubIndex));
+
 
 console.log('[deploy] Hostinger detected.');
 console.log('[deploy] Copying from:', src);
