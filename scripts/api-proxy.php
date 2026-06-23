@@ -2,8 +2,31 @@
 // Salesvora API Proxy — PHP 7.4+ compatible
 // Auto-starts Node.js and proxies /api/ requests
 
-error_reporting(0);
+error_reporting(E_ALL);
 ini_set('display_errors', 0);
+
+// Debug endpoint — visit /api-proxy.php?debug=1 to diagnose
+if (isset($_GET['debug'])) {
+    header('Content-Type: application/json');
+    $possible = glob('/home/*/domains/*/public_html/.builds/source/repository');
+    $appDir2  = !empty($possible) ? $possible[0] : null;
+    $fns      = ['exec','shell_exec','system','passthru','proc_open'];
+    $disabled = array_map('trim', explode(',', ini_get('disable_functions')));
+    $avail    = array_filter($fns, function($f) use ($disabled) {
+        return function_exists($f) && !in_array($f, $disabled);
+    });
+    echo json_encode([
+        'php_version'    => PHP_VERSION,
+        'curl_available' => function_exists('curl_init'),
+        'exec_available' => array_values($avail),
+        'disabled_fns'   => $disabled,
+        'app_dir'        => $appDir2,
+        'boot_exists'    => $appDir2 ? file_exists($appDir2 . '/dist/boot.cjs') : false,
+        'server_running' => isServerRunning(),
+        'node_paths'     => array_filter(['/usr/local/bin/node','/usr/bin/node','/opt/node/bin/node'], 'file_exists'),
+    ], JSON_PRETTY_PRINT);
+    exit;
+}
 
 // Find app directory dynamically
 $appDir = null;
