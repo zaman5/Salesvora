@@ -28,6 +28,8 @@ export type JsonDb = {
   campaigns: unknown[];
   campaignLeads: unknown[];
   calls: unknown[];
+  callDispositions: unknown[];
+  callRecordings: unknown[];
   smsCampaigns: unknown[];
   smsLogs: unknown[];
   aiAgents: unknown[];
@@ -40,7 +42,8 @@ const TMP_PATH = path.resolve(process.cwd(), "db.json.tmp");
 const EMPTY = (): JsonDb => ({
   users: [], companies: [], leadLists: [], leads: [],
   leadListAssignments: [], campaigns: [], campaignLeads: [],
-  calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [],
+  calls: [], callDispositions: [], callRecordings: [],
+  smsCampaigns: [], smsLogs: [], aiAgents: [],
 });
 
 /** Bootstrap data written when db.json is created for the first time. */
@@ -65,12 +68,25 @@ function defaultDb(): JsonDb {
         updatedAt: now,
       },
     ],
+    callDispositions: [
+      { id: 1,  name: "connected",      label: "Connected",                category: "connected",     isSystem: true, isActive: true, color: "#10B981", order: 1,  createdAt: now },
+      { id: 2,  name: "no_answer",      label: "No Answer",                category: "no_answer",     isSystem: true, isActive: true, color: "#EF4444", order: 2,  createdAt: now },
+      { id: 3,  name: "machine",        label: "Answering Machine",        category: "machine",       isSystem: true, isActive: true, color: "#F59E0B", order: 3,  createdAt: now },
+      { id: 4,  name: "voicemail",      label: "Voice Mail",               category: "voicemail",     isSystem: true, isActive: true, color: "#8B5CF6", order: 4,  createdAt: now },
+      { id: 5,  name: "wrong_number",   label: "Wrong Number",             category: "wrong_number",  isSystem: true, isActive: true, color: "#EC4899", order: 5,  createdAt: now },
+      { id: 6,  name: "invalid",        label: "Invalid / Irrelevant",     category: "wrong_number",  isSystem: true, isActive: true, color: "#6B7280", order: 6,  createdAt: now },
+      { id: 7,  name: "interested",     label: "Interested",               category: "converted",     isSystem: true, isActive: true, color: "#059669", order: 7,  createdAt: now },
+      { id: 8,  name: "not_interested", label: "Not Interested",           category: "not_interested",isSystem: true, isActive: true, color: "#DC2626", order: 8,  createdAt: now },
+      { id: 9,  name: "dnc",            label: "Do Not Call Again",        category: "dnc",           isSystem: true, isActive: true, color: "#991B1B", order: 9,  createdAt: now },
+      { id: 10, name: "custom",         label: "Custom",                   category: "custom",        isSystem: true, isActive: true, color: "#3B82F6", order: 10, createdAt: now },
+    ],
   };
 }
 
 const KEYS: Array<keyof JsonDb> = [
   "users","companies","leadLists","leads","leadListAssignments",
-  "campaigns","campaignLeads","calls","smsCampaigns","smsLogs","aiAgents",
+  "campaigns","campaignLeads","calls","callDispositions","callRecordings",
+  "smsCampaigns","smsLogs","aiAgents",
 ];
 
 function tryParse(content: string): JsonDb | null {
