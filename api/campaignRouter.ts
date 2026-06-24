@@ -144,8 +144,10 @@ export const campaignRouter = createRouter({
     .input(z.object({
       campaignId: z.number(),
     }))
-    .query(async ({ ctx, input }) => {
-      return getNextCampaignLead(input.campaignId, ctx.user.id);
+    .query(async ({ input }) => {
+      // Do not filter by callerId — campaign leads are created without one,
+      // so passing the user ID would match nothing and return null forever.
+      return getNextCampaignLead(input.campaignId);
     }),
 
   updateLeadStatus: callerQuery

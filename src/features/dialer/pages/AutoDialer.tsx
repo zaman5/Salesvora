@@ -810,7 +810,10 @@ function AutoCampaignTab() {
   const { data: dispositions = [] }  = trpc.calls.dispositions.useQuery({ companyId });
   const campIdVal = parseInt(selectedCampaignId) || 0;
   const { data: campaignProgress, refetch: refetchProgress } = trpc.campaign.progress.useQuery({ id: campIdVal }, { enabled: !!selectedCampaignId });
-  const { data: nextCampaignLead, refetch: refetchNextLead } = trpc.campaign.getNextLead.useQuery({ campaignId: campIdVal }, { enabled: isRunning && !isPaused && callStatus === "idle" });
+  const { data: nextCampaignLead, refetch: refetchNextLead } = trpc.campaign.getNextLead.useQuery(
+    { campaignId: campIdVal },
+    { enabled: isRunning && !isPaused && callStatus === "idle", staleTime: 0, refetchOnMount: true },
+  );
 
   const startCampaignMutation    = trpc.campaign.start.useMutation();
   const pauseCampaignMutation    = trpc.campaign.pause.useMutation();
@@ -842,7 +845,7 @@ function AutoCampaignTab() {
         toNumber: nextCampaignLead.lead.phone, fromNumber: selectedNumber || undefined, type: "auto",
       });
       setActiveCallId(activeCall.id);
-      await updateLeadStatusMutation.mutateAsync({ campaignLeadId: nextCampaignLead.id, status: "in_progress", callerId: user?.id });
+      await updateLeadStatusMutation.mutateAsync({ campaignLeadId: nextCampaignLead.id, status: "in_progress" });
 
       if (webrtcOn) {
         if (rtc.status !== "registered") { setCallError("Browser calling not connected."); setCallStatus("idle"); return; }
