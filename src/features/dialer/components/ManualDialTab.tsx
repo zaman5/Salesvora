@@ -385,11 +385,11 @@ export function ManualDialTab() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-        {/* ── Left: Queue ── */}
+        {/* ── Left: Queue + Automation ── */}
         <Card className="bg-gray-900 border-gray-800">
-          <CardContent className="p-4">
+          <CardContent className="p-4 space-y-0">
             {leads.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-gray-800">
+              <div className="pt-3 border-t border-gray-800">
                 <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Queue</p>
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   <div className="bg-gray-800 rounded-lg p-2 text-center">
@@ -415,6 +415,15 @@ export function ManualDialTab() {
                 )}
               </div>
             )}
+
+            {/* ── Automation — moved below Queue ── */}
+            <div className="border-t border-gray-800 pt-3 mt-3 space-y-2">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Automation</p>
+              <TogglePill on={autoRecord} onToggle={handleAutoRecordToggle} label={autoRecord ? "🔴 Auto Record ON" : "Auto Record OFF"} activeColor="bg-red-500" />
+              {autoRecord && recorder.isRecording && <p className="text-xs text-red-400 px-1">● Recording in progress…</p>}
+              <TogglePill on={autoCall} onToggle={() => setAutoCall((v) => !v)} label={autoCall ? "⚡ Auto Calling ON" : "Auto Calling OFF"} />
+              {autoCall && <p className="text-xs text-green-400 px-1">After saving, the next lead dials automatically.</p>}
+            </div>
           </CardContent>
         </Card>
 
@@ -643,14 +652,6 @@ export function ManualDialTab() {
                 <p className="text-xs mt-1">Or click <strong>Add Number</strong> to dial any number.</p>
               </div>
             )}
-
-            <div className="border-t border-gray-800 pt-3 space-y-2">
-              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Automation</p>
-              <TogglePill on={autoRecord} onToggle={handleAutoRecordToggle} label={autoRecord ? "🔴 Auto Record ON" : "Auto Record OFF"} activeColor="bg-red-500" />
-              {autoRecord && recorder.isRecording && <p className="text-xs text-red-400 px-1">● Recording in progress…</p>}
-              <TogglePill on={autoCall} onToggle={() => setAutoCall((v) => !v)} label={autoCall ? "⚡ Auto Calling ON" : "Auto Calling OFF"} />
-              {autoCall && <p className="text-xs text-green-400 px-1">After saving, the next lead dials automatically.</p>}
-            </div>
 
             {callStatus !== "idle" && (
               <div className="border-t border-gray-800 pt-3 text-center">
