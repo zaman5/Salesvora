@@ -1,61 +1,7 @@
-import { getDb } from "./connection";
+﻿import { getDb } from "./connection";
 import { smsCampaigns, smsLogs } from "@db/schema";
 import { eq, desc, sql } from "drizzle-orm";
-import * as fs from "fs";
-import * as path from "path";
-
-const dbJsonPath = path.resolve(process.cwd(), "db.json");
-
-function readJsonDb() {
-  if (!fs.existsSync(dbJsonPath)) {
-    const initialData = { users: [], companies: [], leadLists: [], leads: [], leadListAssignments: [], campaigns: [], campaignLeads: [], calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [] };
-    fs.writeFileSync(dbJsonPath, JSON.stringify(initialData, null, 2), "utf-8");
-    return initialData;
-  }
-  try {
-    const content = fs.readFileSync(dbJsonPath, "utf-8");
-    const data = JSON.parse(content);
-    let modified = false;
-    for (const key of ["users", "companies", "leadLists", "leads", "leadListAssignments", "campaigns", "campaignLeads", "calls", "smsCampaigns", "smsLogs", "aiAgents"]) {
-      if (!data[key]) {
-        data[key] = [];
-        modified = true;
-      }
-    }
-    
-    // Seed initial mock SMS if empty
-    if (data.smsCampaigns.length === 0) {
-      data.smsCampaigns = [
-        { id: 1, name: "Summer Promo Campaign", companyId: 1, leadListId: 1, createdBy: 1, messageTemplate: "Hi {{firstName}}, check out our summer sales promo!", status: "completed", totalMessages: 2, sentMessages: 2, failedMessages: 0, deliveredMessages: 2, repliedMessages: 0, createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(), updatedAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString() },
-        { id: 2, name: "Re-engagement SMS", companyId: 1, leadListId: 2, createdBy: 1, messageTemplate: "Hello {{firstName}}, we haven't heard from you! Contact us for a free trial.", status: "draft", totalMessages: 0, sentMessages: 0, failedMessages: 0, deliveredMessages: 0, repliedMessages: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-      ];
-      modified = true;
-    }
-    if (data.smsLogs.length === 0) {
-      data.smsLogs = [
-        { id: 1, smsCampaignId: 1, leadId: 1, toNumber: "+1-555-1010", fromNumber: "+1-855-901-2003", message: "Hi Sundar, check out our summer sales promo!", status: "delivered", twilioSid: "sm-sid-1", errorMessage: null, sentAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(), deliveredAt: new Date(Date.now() - 24 * 3600 * 1000 + 20 * 1000).toISOString(), createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString() },
-        { id: 2, smsCampaignId: 1, leadId: 2, toNumber: "+1-555-2020", fromNumber: "+1-855-901-2003", message: "Hi Satya, check out our summer sales promo!", status: "delivered", twilioSid: "sm-sid-2", errorMessage: null, sentAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(), deliveredAt: new Date(Date.now() - 24 * 3600 * 1000 + 25 * 1000).toISOString(), createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString() }
-      ];
-      modified = true;
-    }
-
-    if (modified) {
-      fs.writeFileSync(dbJsonPath, JSON.stringify(data, null, 2), "utf-8");
-    }
-    return data;
-  } catch (err) {
-    console.error("Failed to parse db.json, returning empty structure:", err);
-    return { users: [], companies: [], leadLists: [], leads: [], leadListAssignments: [], campaigns: [], campaignLeads: [], calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [] };
-  }
-}
-
-function writeJsonDb(data: any) {
-  try {
-    fs.writeFileSync(dbJsonPath, JSON.stringify(data, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to write to db.json:", err);
-  }
-}
+import { readJsonDb, writeJsonDb } from "./jsonDb";
 
 export async function findSMSCampaignsByCompany(companyId?: number) {
   try {

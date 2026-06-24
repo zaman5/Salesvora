@@ -2,63 +2,7 @@ import { getDb } from "./connection";
 import { leadLists, leads, leadListAssignments } from "@db/schema";
 import { eq, and, desc, count, sql } from "drizzle-orm";
 import type { InsertLeadListAssignment } from "@db/schema";
-import * as fs from "fs";
-import * as path from "path";
-
-const dbJsonPath = path.resolve(process.cwd(), "db.json");
-
-function readJsonDb() {
-  if (!fs.existsSync(dbJsonPath)) {
-    const initialData = { users: [], companies: [], leadLists: [], leads: [], leadListAssignments: [], campaigns: [], campaignLeads: [], calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [] };
-    fs.writeFileSync(dbJsonPath, JSON.stringify(initialData, null, 2), "utf-8");
-    return initialData;
-  }
-  try {
-    const content = fs.readFileSync(dbJsonPath, "utf-8");
-    const data = JSON.parse(content);
-    let modified = false;
-    for (const key of ["users", "companies", "leadLists", "leads", "leadListAssignments", "campaigns", "campaignLeads", "calls", "smsCampaigns", "smsLogs", "aiAgents"]) {
-      if (!data[key]) {
-        data[key] = [];
-        modified = true;
-      }
-    }
-    
-    // Seed initial mock data if empty
-    if (data.leadLists.length === 0) {
-      data.leadLists = [
-        { id: 1, name: "Summer Sales Leads", description: "Leads acquired from summer webinar campaign", companyId: 1, createdBy: 1, totalLeads: 3, calledLeads: 1, status: "active", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        { id: 2, name: "Enterprise Targets", description: "Fortune 500 tech targets prospect list", companyId: 1, createdBy: 1, totalLeads: 1, calledLeads: 0, status: "active", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-      ];
-      modified = true;
-    }
-    if (data.leads.length === 0) {
-      data.leads = [
-        { id: 1, leadListId: 1, companyId: 1, companyName: "Google", firstName: "Sundar", lastName: "Pichai", phone: "+1-555-1010", email: "sundar@google.com", status: "new", priority: "high", notes: "Expresses interest in enterprise dialer solutions", callCount: 0, isDeleted: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        { id: 2, leadListId: 1, companyId: 1, companyName: "Microsoft", firstName: "Satya", lastName: "Nadella", phone: "+1-555-2020", email: "satya@microsoft.com", status: "contacted", priority: "medium", notes: "Prefers callback next week", callCount: 1, isDeleted: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        { id: 3, leadListId: 1, companyId: 1, companyName: "Apple", firstName: "Tim", lastName: "Cook", phone: "+1-555-3030", email: "tim@apple.com", status: "callback", priority: "high", notes: "Needs follow-up details on security compliance", callCount: 0, isDeleted: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        { id: 4, leadListId: 2, companyId: 1, companyName: "Meta", firstName: "Mark", lastName: "Zuckerberg", phone: "+1-555-4040", email: "zuck@meta.com", status: "new", priority: "medium", notes: "Prospect for automated dialing campaigns", callCount: 0, isDeleted: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-      ];
-      modified = true;
-    }
-
-    if (modified) {
-      fs.writeFileSync(dbJsonPath, JSON.stringify(data, null, 2), "utf-8");
-    }
-    return data;
-  } catch (err) {
-    console.error("Failed to parse db.json, returning empty structure:", err);
-    return { users: [], companies: [], leadLists: [], leads: [], leadListAssignments: [], campaigns: [], campaignLeads: [], calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [] };
-  }
-}
-
-function writeJsonDb(data: any) {
-  try {
-    fs.writeFileSync(dbJsonPath, JSON.stringify(data, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to write to db.json:", err);
-  }
-}
+import { readJsonDb, writeJsonDb } from "./jsonDb";
 
 // ─── Lead Lists ───
 export async function findLeadListsByCompany(companyId?: number) {

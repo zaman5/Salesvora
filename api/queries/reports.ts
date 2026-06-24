@@ -1,25 +1,7 @@
 import { getDb } from "./connection";
 import { calls, leads, campaigns, users } from "@db/schema";
 import { eq, and, count, sql, gte, lte } from "drizzle-orm";
-import * as fs from "fs";
-import * as path from "path";
-
-const dbJsonPath = path.resolve(process.cwd(), "db.json");
-
-function readJsonDb() {
-  if (!fs.existsSync(dbJsonPath)) {
-    const initialData = { users: [], companies: [], leadLists: [], leads: [], leadListAssignments: [], campaigns: [], campaignLeads: [], calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [] };
-    fs.writeFileSync(dbJsonPath, JSON.stringify(initialData, null, 2), "utf-8");
-    return initialData;
-  }
-  try {
-    const content = fs.readFileSync(dbJsonPath, "utf-8");
-    return JSON.parse(content);
-  } catch (err) {
-    console.error("Failed to parse db.json, returning empty structure:", err);
-    return { users: [], companies: [], leadLists: [], leads: [], leadListAssignments: [], campaigns: [], campaignLeads: [], calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [] };
-  }
-}
+import { readJsonDb } from "./jsonDb";
 
 export async function getDashboardStats(companyId: number, dateFrom?: Date, dateTo?: Date) {
   const inRange = (d: any) => {

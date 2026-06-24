@@ -39,7 +39,7 @@ export const campaignRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const companyId = ctx.user.companyId;
       if (!companyId) throw new Error("No company");
-      
+
       const campaignId = await createCampaign({
         ...input,
         companyId,
@@ -48,6 +48,28 @@ export const campaignRouter = createRouter({
         startDate: input.startDate ? new Date(input.startDate) : undefined,
         endDate: input.endDate ? new Date(input.endDate) : undefined,
       });
+
+      // Automatically link all leads from the selected list to this campaign
+      // so it's immediately usable in the Auto Dialer without a separate step.
+      if (campaignId && input.leadListId) {
+        try {
+          const listLeads = await findLeadsByList(input.leadListId);
+          const leadsArray = Array.isArray(listLeads) ? listLeads : (listLeads as { items?: unknown[] })?.items ?? [];
+          if (leadsArray.length > 0) {
+            const campaignLeadData = leadsArray.map((lead: { id: number }, index: number) => ({
+              campaignId,
+              leadId: lead.id,
+              sequenceOrder: index + 1,
+              status: "pending" as const,
+            }));
+            await addLeadsToCampaign(campaignLeadData);
+          }
+        } catch (err) {
+          // Non-fatal: campaign was created; leads can be added later
+          console.error("[campaign.create] Failed to auto-add leads:", err);
+        }
+      }
+
       return { id: campaignId, success: true };
     }),
 

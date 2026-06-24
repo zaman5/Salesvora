@@ -1,39 +1,7 @@
-import { getDb } from "./connection";
+﻿import { getDb } from "./connection";
 import { users } from "@db/schema";
 import { eq, and, desc, ne } from "drizzle-orm";
-import * as fs from "fs";
-import * as path from "path";
-
-const dbJsonPath = path.resolve(process.cwd(), "db.json");
-
-function readJsonDb() {
-  if (!fs.existsSync(dbJsonPath)) {
-    const initialData = {
-      users: [
-        { id: 1, unionId: "dev-owner-id-admin", name: "Developer Admin", email: "admin@example.com", avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=admin", role: "admin", status: "active", companyId: 1, dailyCallLimit: 200, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        { id: 2, unionId: "dev-owner-id-caller", name: "Developer Caller", email: "caller@example.com", avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=caller", role: "caller", status: "active", companyId: 1, dailyCallLimit: 200, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        { id: 3, unionId: "dev-owner-id-viewer", name: "Developer Viewer", email: "viewer@example.com", avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=viewer", role: "viewer", status: "active", companyId: 1, dailyCallLimit: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-      ]
-    };
-    fs.writeFileSync(dbJsonPath, JSON.stringify(initialData, null, 2), "utf-8");
-    return initialData;
-  }
-  try {
-    const content = fs.readFileSync(dbJsonPath, "utf-8");
-    return JSON.parse(content);
-  } catch (err) {
-    console.error("Failed to parse db.json, returning empty structure:", err);
-    return { users: [] };
-  }
-}
-
-function writeJsonDb(data: any) {
-  try {
-    fs.writeFileSync(dbJsonPath, JSON.stringify(data, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to write to db.json:", err);
-  }
-}
+import { readJsonDb, writeJsonDb } from "./jsonDb";
 
 export async function findAllUsers(companyId?: number) {
   try {

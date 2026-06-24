@@ -422,20 +422,23 @@ export default function CampaignsPage() {
   const [dailyStart, setDailyStart] = useState("09:00");
   const [dailyEnd, setDailyEnd] = useState("18:00");
 
-  const { data: campaigns = [], refetch: refetchCampaigns } = trpc.campaign.list.useQuery();
-  const { data: leadLists = [] }  = trpc.lead.listLists.useQuery();
+  const utils = trpc.useUtils();
+  const invalidate = () => utils.campaign.list.invalidate();
+
+  const { data: campaigns = [] } = trpc.campaign.list.useQuery();
+  const { data: leadLists = [] } = trpc.lead.listLists.useQuery();
 
   const createCampaignMutation = trpc.campaign.create.useMutation({
     onSuccess: () => {
-      refetchCampaigns();
+      invalidate();
       setShowCreate(false);
       setNewName(""); setNewType("auto"); setSelectedListId("");
       setDailyStart("09:00"); setDailyEnd("18:00");
     },
   });
-  const startCampaignMutation  = trpc.campaign.start.useMutation({ onSuccess: () => refetchCampaigns() });
-  const pauseCampaignMutation  = trpc.campaign.pause.useMutation({ onSuccess: () => refetchCampaigns() });
-  const deleteCampaignMutation = trpc.campaign.delete.useMutation({ onSuccess: () => refetchCampaigns() });
+  const startCampaignMutation  = trpc.campaign.start.useMutation({ onSuccess: invalidate });
+  const pauseCampaignMutation  = trpc.campaign.pause.useMutation({ onSuccess: invalidate });
+  const deleteCampaignMutation = trpc.campaign.delete.useMutation({ onSuccess: invalidate });
 
   const handleCreateCampaign = async () => {
     if (!newName.trim() || !selectedListId) return;

@@ -2,63 +2,7 @@ import { getDb } from "./connection";
 import { campaigns, campaignLeads } from "@db/schema";
 import { eq, and, desc, count, sql } from "drizzle-orm";
 import type { InsertCampaignLead } from "@db/schema";
-import * as fs from "fs";
-import * as path from "path";
-
-const dbJsonPath = path.resolve(process.cwd(), "db.json");
-
-function readJsonDb() {
-  if (!fs.existsSync(dbJsonPath)) {
-    const initialData = { users: [], companies: [], leadLists: [], leads: [], leadListAssignments: [], campaigns: [], campaignLeads: [], calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [] };
-    fs.writeFileSync(dbJsonPath, JSON.stringify(initialData, null, 2), "utf-8");
-    return initialData;
-  }
-  try {
-    const content = fs.readFileSync(dbJsonPath, "utf-8");
-    const data = JSON.parse(content);
-    let modified = false;
-    for (const key of ["users", "companies", "leadLists", "leads", "leadListAssignments", "campaigns", "campaignLeads", "calls", "smsCampaigns", "smsLogs", "aiAgents"]) {
-      if (!data[key]) {
-        data[key] = [];
-        modified = true;
-      }
-    }
-    
-    // Seed initial mock campaigns if empty
-    if (data.campaigns.length === 0) {
-      data.campaigns = [
-        { id: 1, name: "Summer Sales Blitz", description: "Outreach for summer sales leads", type: "manual", status: "running", companyId: 1, leadListId: 1, createdBy: 1, assignedCallers: [2], startDate: new Date().toISOString(), totalLeads: 3, completedLeads: 1, successfulCalls: 1, failedCalls: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        { id: 2, name: "Enterprise Targets Campaign", description: "Fortune 500 tech targets prospect list", type: "auto", status: "draft", companyId: 1, leadListId: 2, createdBy: 1, assignedCallers: [2], startDate: null, totalLeads: 1, completedLeads: 0, successfulCalls: 0, failedCalls: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-      ];
-      modified = true;
-    }
-    if (data.campaignLeads.length === 0) {
-      data.campaignLeads = [
-        { id: 1, campaignId: 1, leadId: 1, callerId: 2, status: "completed", attemptCount: 1, sequenceOrder: 1, createdAt: new Date().toISOString() },
-        { id: 2, campaignId: 1, leadId: 2, callerId: 2, status: "pending", attemptCount: 0, sequenceOrder: 2, createdAt: new Date().toISOString() },
-        { id: 3, campaignId: 1, leadId: 3, callerId: 2, status: "pending", attemptCount: 0, sequenceOrder: 3, createdAt: new Date().toISOString() },
-        { id: 4, campaignId: 2, leadId: 4, callerId: 2, status: "pending", attemptCount: 0, sequenceOrder: 1, createdAt: new Date().toISOString() }
-      ];
-      modified = true;
-    }
-
-    if (modified) {
-      fs.writeFileSync(dbJsonPath, JSON.stringify(data, null, 2), "utf-8");
-    }
-    return data;
-  } catch (err) {
-    console.error("Failed to parse db.json, returning empty structure:", err);
-    return { users: [], companies: [], leadLists: [], leads: [], leadListAssignments: [], campaigns: [], campaignLeads: [], calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [] };
-  }
-}
-
-function writeJsonDb(data: any) {
-  try {
-    fs.writeFileSync(dbJsonPath, JSON.stringify(data, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to write to db.json:", err);
-  }
-}
+import { readJsonDb, writeJsonDb } from "./jsonDb";
 
 export async function findCampaignsByCompany(companyId?: number) {
   try {

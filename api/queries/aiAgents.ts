@@ -1,59 +1,7 @@
-import { getDb } from "./connection";
+﻿import { getDb } from "./connection";
 import { aiAgents, aiConversations } from "@db/schema";
 import { eq, desc } from "drizzle-orm";
-import * as fs from "fs";
-import * as path from "path";
-
-const dbJsonPath = path.resolve(process.cwd(), "db.json");
-
-function readJsonDb() {
-  if (!fs.existsSync(dbJsonPath)) {
-    const initialData = { users: [], companies: [], leadLists: [], leads: [], leadListAssignments: [], campaigns: [], campaignLeads: [], calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [] };
-    fs.writeFileSync(dbJsonPath, JSON.stringify(initialData, null, 2), "utf-8");
-    return initialData;
-  }
-  try {
-    const content = fs.readFileSync(dbJsonPath, "utf-8");
-    const data = JSON.parse(content);
-    let modified = false;
-    for (const key of ["users", "companies", "leadLists", "leads", "leadListAssignments", "campaigns", "campaignLeads", "calls", "smsCampaigns", "smsLogs", "aiAgents", "aiConversations"]) {
-      if (!data[key]) {
-        data[key] = [];
-        modified = true;
-      }
-    }
-    
-    // Seed initial mock AI agent if empty
-    if (data.aiAgents.length === 0) {
-      data.aiAgents = [
-        { id: 1, name: "Sales Outreach Bot", companyId: 1, voice: "alloy", language: "en", greeting: "Hello, my name is Alex. How are you today?", systemPrompt: "You are a professional sales agent outreach assistant.", isActive: true, createdBy: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-      ];
-      modified = true;
-    }
-    if (data.aiConversations.length === 0) {
-      data.aiConversations = [
-        { id: 1, agentId: 1, leadId: 1, campaignId: 1, callId: 1, transcript: [{ speaker: "ai", text: "Hello, my name is Alex. How are you today?", timestamp: new Date().toISOString() }, { speaker: "human", text: "Hello, yes I am doing good. Who is this?", timestamp: new Date().toISOString() }], sentiment: "positive", duration: 15, outcome: "Interested", recordingUrl: "https://example.com/recording.mp3", createdAt: new Date().toISOString() }
-      ];
-      modified = true;
-    }
-
-    if (modified) {
-      fs.writeFileSync(dbJsonPath, JSON.stringify(data, null, 2), "utf-8");
-    }
-    return data;
-  } catch (err) {
-    console.error("Failed to parse db.json, returning empty structure:", err);
-    return { users: [], companies: [], leadLists: [], leads: [], leadListAssignments: [], campaigns: [], campaignLeads: [], calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [], aiConversations: [] };
-  }
-}
-
-function writeJsonDb(data: any) {
-  try {
-    fs.writeFileSync(dbJsonPath, JSON.stringify(data, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to write to db.json:", err);
-  }
-}
+import { readJsonDb, writeJsonDb } from "./jsonDb";
 
 export async function findAIAgentsByCompany(companyId?: number) {
   try {
