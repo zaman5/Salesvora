@@ -17,7 +17,7 @@ import {
   Phone, PhoneCall, CheckCircle2, XCircle, Ban, User,
   BarChart3, Disc, Square, Download,
   Mic, MicOff, X, Hash, Save, Plus,
-  PhoneMissed, PhoneIncoming,
+  PhoneIncoming,
 } from "lucide-react";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -108,12 +108,6 @@ function ManualDialTab() {
   const nextLeadIdx = currentLeadIndex + 1 < leads.length ? currentLeadIndex + 1 : 0;
   const nextLead    = leads.length > 1 ? leads[nextLeadIdx] : null;
 
-  const { data: recentCallsRaw, refetch: refetchRecentCalls } = trpc.calls.myCalls.useQuery({ limit: 8 });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recentCalls: any[] = useMemo(
-    () => Array.isArray(recentCallsRaw) ? recentCallsRaw : (recentCallsRaw as { items?: unknown[] })?.items ?? [],
-    [recentCallsRaw],
-  );
 
   const customFieldKeys = useMemo(() => {
     const s = new Set<string>();
@@ -234,7 +228,6 @@ function ManualDialTab() {
       if (timerRef.current) clearInterval(timerRef.current);
       finalizeRecording().catch(() => {});
       if (activeCallId) updateStatusMutation.mutate({ id: activeCallId, status: "completed" });
-      refetchRecentCalls();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rtc.callState, webrtcOn]);
@@ -369,7 +362,6 @@ function ManualDialTab() {
       const disp = (dispositions as Array<{ id: number; label: string; category: string }>).find((d) => d.id.toString() === dispId);
       if (disp) updateLeadMutation.mutate({ id: lead.id, data: { customFields: { ...((lead.customFields as Record<string, unknown>) ?? {}), _lastDisposition: disp.label } } });
     }
-    setTimeout(() => refetchRecentCalls(), 1000);
   };
 
   const dialPadDigits = ["1","2","3","4","5","6","7","8","9","*","0","#"];
@@ -381,15 +373,6 @@ function ManualDialTab() {
     if (cat === "machine" || cat === "voicemail") return <Radio className="w-4 h-4" />;
     if (cat === "wrong_number") return <Hash className="w-4 h-4" />;
     return <Ban className="w-4 h-4" />;
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const getCallIcon = (call: any) => {
-    const s = call?.status || "";
-    if (s === "connected" || s === "completed") return <Phone className="w-3 h-3 text-green-400" />;
-    if (s === "no_answer" || s === "failed")    return <PhoneMissed className="w-3 h-3 text-red-400" />;
-    if (call?.type === "inbound")               return <PhoneIncoming className="w-3 h-3 text-blue-400" />;
-    return <Phone className="w-3 h-3 text-gray-400" />;
   };
 
   return (
@@ -444,39 +427,9 @@ function ManualDialTab() {
       {/* 3-column grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-        {/* ── Left: Last Calls + Queue ── */}
+        {/* ── Left: Queue ── */}
         <Card className="bg-gray-900 border-gray-800">
           <CardContent className="p-4">
-            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Last Calls</p>
-            {recentCalls.length === 0 ? (
-              <p className="text-xs text-gray-600 text-center py-6">No recent calls</p>
-            ) : (
-              <div className="space-y-1">
-                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                {recentCalls.map((call: any) => (
-                  <div key={call.id}
-                    className="flex items-center gap-2 px-2 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 cursor-pointer transition-colors"
-                    onClick={() => { if (callStatus === "idle" && call.toNumber) { setPhoneNumber(call.toNumber); setAddMode(true); } }}
-                    title={callStatus === "idle" ? "Click to redial" : ""}
-                  >
-                    <div className="shrink-0">{getCallIcon(call)}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-white truncate">
-                        {call.lead?.firstName
-                          ? `${call.lead.firstName}${call.lead.lastName ? " " + call.lead.lastName : ""}`
-                          : call.lead?.companyName || call.toNumber || "Unknown"}
-                      </p>
-                      <p className="text-[11px] text-gray-500 font-mono truncate">{call.toNumber}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      {call.duration > 0 && <p className="text-[10px] text-gray-500 font-mono">{formatDur(call.duration)}</p>}
-                      {call.disposition?.label && <p className="text-[10px] text-gray-600 truncate max-w-[56px]">{call.disposition.label}</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
             {leads.length > 0 && (
               <div className="mt-4 pt-3 border-t border-gray-800">
                 <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Queue</p>
