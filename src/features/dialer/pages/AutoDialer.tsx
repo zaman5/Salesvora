@@ -877,7 +877,17 @@ function AutoCampaignTab() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [callStatus, isPaused]);
 
-  // Auto-dial removed — user clicks Call to dial each lead (power-dialer style)
+  // Auto-dial after disposition — fires when callStatus returns to "idle" AND
+  // autoDialNext flag is set (only after a disposition click, not on first load).
+  const autoDialNextRef = useRef(false);
+  useEffect(() => {
+    if (autoDialNextRef.current && isRunning && !isPaused && callStatus === "idle" && nextCampaignLead?.lead) {
+      autoDialNextRef.current = false;
+      const t = setTimeout(() => triggerAutoDialCall(), 800);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callStatus, nextCampaignLead, isRunning, isPaused]);
 
   // Auto-end on SIP error
   useEffect(() => {
@@ -972,6 +982,31 @@ function AutoCampaignTab() {
   };
 
   const handleDisposition = async (dispId: string) => {
+    const lead = currentLead;
+
+    // 1. Save any inline edits the user made to the lead fields
+    if (lead && Object.keys(editedLead).length > 0) {
+      try {
+        const standardUpdates: Record<string, unknown> = {};
+        const cfUpdates: Record<string, unknown> = { ...(lead.customFields || {}) };
+        let hasCf = false;
+        for (const [key, val] of Object.entries(editedLead)) {
+          if (key.startsWith("cf:")) {
+            cfUpdates[key.slice(3)] = val;
+            hasCf = true;
+          } else {
+            standardUpdates[key] = val || undefined;
+          }
+        }
+        const patch: Record<string, unknown> = { ...standardUpdates };
+        if (hasCf) patch.customFields = cfUpdates;
+        if (Object.keys(patch).length > 0) {
+          await updateLeadMutation.mutateAsync({ id: lead.id, data: patch });
+        }
+      } catch (err) { console.error("Failed to save lead edits:", err); }
+    }
+
+    // 2. Save call record, recording and update campaign lead status
     if (activeCallId && nextCampaignLead) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -986,9 +1021,13 @@ function AutoCampaignTab() {
         await updateLeadStatusMutation.mutateAsync({ campaignLeadId: nextCampaignLead.id, status: leadStatus, callerId: user?.id });
       } catch (err) { console.error("Failed to submit disposition:", err); }
     }
+
+    // 3. Reset UI and schedule auto-dial of the next lead
+    autoDialNextRef.current = true;
     setCallStatus("idle"); setDuration(0); setCallNotes(""); setActiveCallId(null); setCallError(null);
     recorder.resetRecording(); setSavedRecordingDataUrl(null); setRecordingDuration(0); setIsMuted(false); setEditedLead({});
-    refetchProgress(); setTimeout(() => refetchNextLead(), 500);
+    refetchProgress();
+    setTimeout(() => refetchNextLead(), 300);
   };
 
   const stopDialer = async () => {
