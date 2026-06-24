@@ -1332,6 +1332,25 @@ function AutoCampaignTab() {
           {/* ── RIGHT: Stats + Automation ── */}
           <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800">
             <div className="px-6 space-y-4">
+              <span className="flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> Auto-advance leads</span>
+              <span className="flex items-center gap-1"><BarChart3 className="w-4 h-4" /> Track dispositions</span>
+              <span className="flex items-center gap-1"><SkipForward className="w-4 h-4" /> Resume from last</span>
+              <span className="flex items-center gap-1"><Radio className="w-4 h-4" /> Auto-record calls</span>
+              
+            #out
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {!isRunning && (
+        <Card className="bg-gray-900 border-gray-800">
+          <CardContent className="p-12 text-center">
+            <Radio className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-white mb-2">Auto Dialer Ready</h3>
+            <p className="text-gray-400 mb-4 max-w-md mx-auto">Select a campaign and click Start to begin automated calling.</p>
+            <div className="flex gap-4 justify-center text-sm text-gray-500 flex-wrap">
+            
               <div className="text-center pb-3 border-b border-gray-700">
                 <Clock className="w-6 h-6 text-gray-500 mx-auto mb-1" />
                 <p className="text-2xl font-bold text-white font-mono">{formatDur(duration)}</p>
@@ -1350,22 +1369,6 @@ function AutoCampaignTab() {
                 <TogglePill on={autoRecord} onToggle={handleAutoRecordToggle} label={autoRecord ? "🔴 Auto Record ON" : "Auto Record OFF"} activeColor="bg-red-500" />
                 {autoRecord && recorder.isRecording && <p className="text-xs text-red-400 px-1">● Recording in progress…</p>}
               </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {!isRunning && (
-        <Card className="bg-gray-900 border-gray-800">
-          <CardContent className="p-12 text-center">
-            <Radio className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">Auto Dialer Ready</h3>
-            <p className="text-gray-400 mb-4 max-w-md mx-auto">Select a campaign and click Start to begin automated calling.</p>
-            <div className="flex gap-4 justify-center text-sm text-gray-500 flex-wrap">
-              <span className="flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> Auto-advance leads</span>
-              <span className="flex items-center gap-1"><BarChart3 className="w-4 h-4" /> Track dispositions</span>
-              <span className="flex items-center gap-1"><SkipForward className="w-4 h-4" /> Resume from last</span>
-              <span className="flex items-center gap-1"><Radio className="w-4 h-4" /> Auto-record calls</span>
             </div>
           </CardContent>
         </Card>
