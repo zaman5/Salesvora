@@ -1316,7 +1316,23 @@ function AutoCampaignTab() {
                     )}
                   </div>
 
-                  <Textarea value={callNotes} onChange={(e) => setCallNotes(e.target.value)} placeholder="Call notes…" className="bg-gray-800 border-gray-700 text-white min-h-[60px]" />
+                  {/* DTMF keypad — press digits during IVR (e.g. "press 3 for sales") */}
+                  <div className="rounded-xl bg-gray-800 border border-gray-700 p-3">
+                    <p className="text-xs font-medium text-gray-400 text-center mb-2">Keypad — IVR navigation</p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {["1","2","3","4","5","6","7","8","9","*","0","#"].map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => { if (webrtcOn) rtc.sendDTMF(d); }}
+                          className="h-11 rounded-lg bg-gray-700 text-white font-semibold text-lg hover:bg-gray-600 active:bg-gray-500 active:scale-95 transition-all border border-gray-600"
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Textarea value={callNotes} onChange={(e) => setCallNotes(e.target.value)} placeholder="Call notes…" className="bg-gray-800 border-gray-700 text-white min-h-[55px]" />
                   <Button className="w-full bg-red-600 hover:bg-red-700 h-11 font-semibold" onClick={handleEndCall}>
                     <PhoneOff className="w-4 h-4 mr-2" /> End Call
                   </Button>
