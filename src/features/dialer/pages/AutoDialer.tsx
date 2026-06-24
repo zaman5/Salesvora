@@ -1137,32 +1137,59 @@ function AutoCampaignTab() {
       {isRunning && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          {/* ── Stats + Automation — visually RIGHT via lg:order-3 ── */}
-          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800 lg:order-3">
+          {/* ── LEFT: Lead Info — inline editable fields ── */}
+          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800">
             <div className="px-6 space-y-4">
-              <div className="text-center pb-3 border-b border-gray-700">
-                <Clock className="w-6 h-6 text-gray-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-white font-mono">{formatDur(duration)}</p>
-                <p className="text-xs text-gray-400">Current Call Duration</p>
-              </div>
-              <div>
-                <h4 className="text-sm font-medium text-gray-300 mb-2">Campaign Metrics</h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm"><span className="text-gray-400">Total Leads</span><span className="text-white font-medium">{progressTotal}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-gray-400">Completed</span><span className="text-green-400 font-medium">{progressCompleted}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-gray-400">Pending</span><span className="text-amber-400 font-medium">{campaignProgress?.pending || 0}</span></div>
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-gray-700">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0">
+                    <User className="w-5 h-5 text-blue-400" />
+                  </div>
+                  {currentLead ? (
+                    <div>
+                      <h3 className="text-base font-semibold text-white">
+                        {getLeadValue("firstName")} {getLeadValue("lastName") || getLeadValue("companyName") || "Lead"}
+                      </h3>
+                      <p className="text-xs text-gray-500">Lead #{currentLead.id}</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <h3 className="text-base font-semibold text-white">Searching…</h3>
+                      <p className="text-xs text-gray-500">Finding next pending lead</p>
+                    </div>
+                  )}
                 </div>
+                <Badge className="bg-blue-500/20 text-blue-400 shrink-0">Current</Badge>
               </div>
-              <div className="border-t border-gray-800 pt-3 space-y-2">
-                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Automation</p>
-                <TogglePill on={autoRecord} onToggle={handleAutoRecordToggle} label={autoRecord ? "🔴 Auto Record ON" : "Auto Record OFF"} activeColor="bg-red-500" />
-                {autoRecord && recorder.isRecording && <p className="text-xs text-red-400 px-1">● Recording in progress…</p>}
-              </div>
+              {/* Inline editable fields — saves on blur */}
+              {currentLead ? (
+                <div className="space-y-2 overflow-y-auto max-h-[340px]">
+                  {displayFields.map((fk) => {
+                    const f = allDisplayFields.find((x) => x.key === fk);
+                    if (!f) return null;
+                    return (
+                      <div key={fk}>
+                        <label className="text-xs font-medium text-gray-400">{f.label}</label>
+                        {fk === "notes" ? (
+                          <Textarea value={getLeadValue(fk)} onChange={(e) => setLeadValue(fk, e.target.value)} onBlur={() => saveLeadField(fk)} placeholder={f.label} className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-600 mt-0.5 text-sm min-h-[55px]" />
+                        ) : (
+                          <Input value={getLeadValue(fk)} onChange={(e) => setLeadValue(fk, e.target.value)} onBlur={() => saveLeadField(fk)} placeholder={f.label} className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-600 mt-0.5 text-sm h-8" />
+                        )}
+                      </div>
+                    );
+                  })}
+                  {displayFields.length === 0 && <p className="text-xs text-gray-500">No fields selected. Use Fields ▾ before starting.</p>}
+                  {updateLeadMutation.isPending && <p className="text-xs text-blue-400">Saving…</p>}
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 text-sm py-4">Waiting for next pending campaign lead…</p>
+              )}
             </div>
           </Card>
 
-          {/* Call Interface — CENTER via lg:order-2 */}
-          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800 lg:order-2">
+          {/* ── CENTER: Call Interface ── */}
+          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800">
             <div className="px-6 space-y-3">
 
               {/* ── IDLE: dial pad (matches screenshot) ── */}
@@ -1349,71 +1376,27 @@ function AutoCampaignTab() {
             </div>
           </Card>
 
-          {/* ── Lead Info — inline editable fields — visually LEFT via lg:order-1 ── */}
-          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800 lg:order-1">
+          {/* ── RIGHT: Stats + Automation ── */}
+          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800">
             <div className="px-6 space-y-4">
-              {/* Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-gray-700">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0">
-                    <User className="w-5 h-5 text-blue-400" />
-                  </div>
-                  {currentLead ? (
-                    <div>
-                      <h3 className="text-base font-semibold text-white">
-                        {getLeadValue("firstName")} {getLeadValue("lastName") || getLeadValue("companyName") || "Lead"}
-                      </h3>
-                      <p className="text-xs text-gray-500">Lead #{currentLead.id}</p>
-                    </div>
-                  ) : (
-                    <div>
-                      <h3 className="text-base font-semibold text-white">Searching…</h3>
-                      <p className="text-xs text-gray-500">Finding next pending lead</p>
-                    </div>
-                  )}
-                </div>
-                <Badge className="bg-blue-500/20 text-blue-400 shrink-0">Current</Badge>
+              <div className="text-center pb-3 border-b border-gray-700">
+                <Clock className="w-6 h-6 text-gray-500 mx-auto mb-1" />
+                <p className="text-2xl font-bold text-white font-mono">{formatDur(duration)}</p>
+                <p className="text-xs text-gray-400">Current Call Duration</p>
               </div>
-
-              {/* Inline editable fields — saves on blur */}
-              {currentLead ? (
-                <div className="space-y-2 overflow-y-auto max-h-[340px]">
-                  {displayFields.map((fk) => {
-                    const f = allDisplayFields.find((x) => x.key === fk);
-                    if (!f) return null;
-                    return (
-                      <div key={fk}>
-                        <label className="text-xs font-medium text-gray-400">{f.label}</label>
-                        {fk === "notes" ? (
-                          <Textarea
-                            value={getLeadValue(fk)}
-                            onChange={(e) => setLeadValue(fk, e.target.value)}
-                            onBlur={() => saveLeadField(fk)}
-                            placeholder={f.label}
-                            className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-600 mt-0.5 text-sm min-h-[55px]"
-                          />
-                        ) : (
-                          <Input
-                            value={getLeadValue(fk)}
-                            onChange={(e) => setLeadValue(fk, e.target.value)}
-                            onBlur={() => saveLeadField(fk)}
-                            placeholder={f.label}
-                            className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-600 mt-0.5 text-sm h-8"
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                  {displayFields.length === 0 && (
-                    <p className="text-xs text-gray-500">No fields selected. Use Fields ▾ before starting.</p>
-                  )}
-                  {updateLeadMutation.isPending && (
-                    <p className="text-xs text-blue-400">Saving…</p>
-                  )}
+              <div>
+                <h4 className="text-sm font-medium text-gray-300 mb-2">Campaign Metrics</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm"><span className="text-gray-400">Total Leads</span><span className="text-white font-medium">{progressTotal}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-gray-400">Completed</span><span className="text-green-400 font-medium">{progressCompleted}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-gray-400">Pending</span><span className="text-amber-400 font-medium">{campaignProgress?.pending || 0}</span></div>
                 </div>
-              ) : (
-                <p className="text-center text-gray-500 text-sm py-4">Waiting for next pending campaign lead…</p>
-              )}
+              </div>
+              <div className="border-t border-gray-800 pt-3 space-y-2">
+                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Automation</p>
+                <TogglePill on={autoRecord} onToggle={handleAutoRecordToggle} label={autoRecord ? "🔴 Auto Record ON" : "Auto Record OFF"} activeColor="bg-red-500" />
+                {autoRecord && recorder.isRecording && <p className="text-xs text-red-400 px-1">● Recording in progress…</p>}
+              </div>
             </div>
           </Card>
         </div>
