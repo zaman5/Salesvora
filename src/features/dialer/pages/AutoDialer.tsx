@@ -878,8 +878,7 @@ function AutoCampaignTab() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [callStatus, isPaused]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (isRunning && !isPaused && callStatus === "idle" && nextCampaignLead) triggerAutoDialCall(); }, [isRunning, isPaused, callStatus, nextCampaignLead]);
+  // Auto-dial removed — user clicks Call to dial each lead (power-dialer style)
 
   // Auto-end on SIP error
   useEffect(() => {
@@ -1166,38 +1165,100 @@ function AutoCampaignTab() {
 
           {/* Call Interface */}
           <Card className="bg-gray-900 border-gray-800">
-            <CardContent className="p-5">
+            <CardContent className="p-4 space-y-3">
+
+              {/* ── IDLE: dial pad (matches screenshot) ── */}
+              {callStatus === "idle" && (
+                <>
+                  {nextCampaignLead ? (
+                    <div className="space-y-3">
+                      <div className="text-center pt-2">
+                        <div className="w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-2">
+                          <Phone className="w-7 h-7 text-gray-400" />
+                        </div>
+                        <p className="text-gray-400 text-sm">Ready to call</p>
+                      </div>
+
+                      {/* Number display */}
+                      <Input
+                        value={currentLead?.phone || ""}
+                        readOnly
+                        className="bg-gray-950 border-gray-600 text-white text-center text-lg font-mono placeholder:text-gray-500 cursor-default"
+                      />
+
+                      {/* Dial pad */}
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {["1","2","3","4","5","6","7","8","9","*","0","#"].map((d) => (
+                          <button key={d}
+                            className="h-12 rounded-lg bg-gray-800 text-white font-medium text-lg hover:bg-gray-700 active:bg-gray-600 transition-colors border border-gray-700/50">
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+
+                      {callError && (
+                        <div className="text-sm rounded-lg px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20">{callError}</div>
+                      )}
+
+                      {/* Call button */}
+                      <Button
+                        className="w-full h-12 bg-green-600 hover:bg-green-700 text-white text-base font-semibold"
+                        onClick={triggerAutoDialCall}
+                        disabled={!currentLead?.phone}
+                      >
+                        <PhoneCall className="w-5 h-5 mr-2" /> Call
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-3">
+                        <Phone className="w-7 h-7 text-gray-600" />
+                      </div>
+                      <p className="text-gray-500 text-sm">All leads in this campaign have been dialed.</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── CALLING ── */}
               {callStatus === "calling" && (
                 <div className="text-center py-8 space-y-4">
                   <div className="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center mx-auto animate-pulse">
                     <Phone className="w-8 h-8 text-blue-400" />
                   </div>
                   <div>
-                    <p className="text-lg font-semibold text-white">Auto-dialing...</p>
-                    <p className="text-gray-400 font-mono">{currentLead?.phone}</p>
+                    <p className="text-lg font-semibold text-white">Dialing…</p>
+                    <p className="text-gray-400 font-mono mt-1">{currentLead?.phone}</p>
                     {selectedNumber && <p className="text-xs text-gray-500 mt-1">From: {selectedNumber}</p>}
                   </div>
                 </div>
               )}
 
+              {/* ── CONNECTED ── */}
               {callStatus === "connected" && (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <div className="text-center">
                     <div className="w-14 h-14 rounded-full bg-green-500/20 flex items-center justify-center mx-auto animate-pulse">
                       <Phone className="w-7 h-7 text-green-400" />
                     </div>
                     <p className="text-2xl font-bold text-white font-mono mt-2">{formatDur(duration)}</p>
-                    <Badge className="bg-green-500/20 text-green-400 mt-1">Connected</Badge>
+                    <Badge className="bg-green-500/20 text-green-400 mt-1">On Call</Badge>
                     {selectedNumber && <p className="text-xs text-gray-500 mt-1 font-mono">{selectedNumber}</p>}
                   </div>
+
                   {callError && <div className="text-xs rounded-lg px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20">{callError}</div>}
+
                   {recorder.isRecording && (
                     <div className="flex items-center justify-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg py-1.5 px-3">
-                      <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" /></span>
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+                      </span>
                       <span className="text-xs font-semibold text-red-400">{autoRecord ? "AUTO REC" : "REC"}</span>
                       <span className="text-xs font-mono text-red-300">{formatDur(recorder.recordingTime)}</span>
                     </div>
                   )}
+
                   <div className="flex justify-center gap-2 flex-wrap">
                     <Button variant="outline" size="sm" className={`border-gray-700 ${isMuted ? "text-red-400 bg-red-500/10" : "text-gray-300"}`} onClick={() => setIsMuted(!isMuted)}>
                       {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -1212,44 +1273,65 @@ function AutoCampaignTab() {
                       </Button>
                     )}
                   </div>
-                  <Textarea value={callNotes} onChange={(e) => setCallNotes(e.target.value)} placeholder="Call notes..." className="bg-gray-800 border-gray-700 text-white min-h-[60px]" />
-                  <Button className="w-full bg-red-600 hover:bg-red-700" onClick={handleEndCall}><PhoneOff className="w-4 h-4 mr-2" /> End Call</Button>
+
+                  <Textarea value={callNotes} onChange={(e) => setCallNotes(e.target.value)} placeholder="Call notes…" className="bg-gray-800 border-gray-700 text-white min-h-[60px]" />
+                  <Button className="w-full bg-red-600 hover:bg-red-700 h-11 font-semibold" onClick={handleEndCall}>
+                    <PhoneOff className="w-4 h-4 mr-2" /> End Call
+                  </Button>
                 </div>
               )}
 
+              {/* ── DISPOSITION ── */}
               {callStatus === "disposition" && (
                 <div className="space-y-3">
-                  <div className="text-center py-2">
-                    <p className="text-lg font-semibold text-white">Call Ended</p>
-                    <p className="text-gray-400 font-mono">{formatDur(duration)}</p>
+                  <div className="text-center py-1">
+                    <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center mx-auto mb-2">
+                      <Phone className="w-6 h-6 text-gray-400" />
+                    </div>
+                    <p className="text-base font-semibold text-white">Call Ended</p>
+                    <p className="text-gray-400 text-sm font-mono">{formatDur(duration)}</p>
                     {callError && <p className="text-xs text-red-400 mt-1">{callError}</p>}
                   </div>
+
+                  {/* Recording playback */}
                   {recorder.audioUrl && (
                     <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-medium text-gray-300 flex items-center gap-1.5"><Disc className="w-3.5 h-3.5 text-red-400" /> Recording ({formatDur(recordingDuration)})</p>
-                        <a href={recorder.audioUrl} download={`call-${activeCallId ?? "call"}.webm`} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"><Download className="w-3 h-3" /> Download</a>
+                        <p className="text-xs font-medium text-gray-300 flex items-center gap-1.5">
+                          <Disc className="w-3.5 h-3.5 text-red-400" /> Recording ({formatDur(recordingDuration)})
+                        </p>
+                        <a href={recorder.audioUrl} download={`call-${activeCallId ?? "call"}.webm`} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                          <Download className="w-3 h-3" /> Download
+                        </a>
                       </div>
                       <audio controls src={recorder.audioUrl} className="w-full h-9" />
                     </div>
                   )}
-                  <label className="text-sm font-medium text-gray-300 block">Select Result</label>
-                  <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto pr-1">
-                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                    {(dispositions as any[]).map((disp) => (
-                      <Button key={disp.id} size="sm" onClick={() => handleDisposition(disp.id.toString())} className="bg-gray-800 text-white hover:bg-gray-700 justify-start">
-                        {getDispIcon(disp.category)}<span className="ml-1 truncate">{disp.label}</span>
-                      </Button>
-                    ))}
+
+                  {/* Call notes */}
+                  <Textarea value={callNotes} onChange={(e) => setCallNotes(e.target.value)} placeholder="Call notes…" className="bg-gray-800 border-gray-700 text-white min-h-[55px] text-sm" />
+
+                  {/* Disposition buttons — all visible, no scroll */}
+                  <div>
+                    <p className="text-sm font-semibold text-gray-100 mb-2">Select Call Result</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {(dispositions as any[]).map((disp) => (
+                        <Button
+                          key={disp.id}
+                          size="sm"
+                          onClick={() => handleDisposition(disp.id.toString())}
+                          className="bg-gray-800 hover:bg-gray-700 text-white justify-start h-10 border border-gray-700 hover:border-gray-500 transition-colors"
+                        >
+                          {getDispIcon(disp.category)}
+                          <span className="ml-2 truncate text-sm">{disp.label}</span>
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {callStatus === "idle" && (
-                <div className="text-center py-8">
-                  {nextCampaignLead ? <p className="text-gray-400 animate-pulse">Preparing next call...</p> : <p className="text-gray-500 text-sm">All leads in this campaign queue have been dialed.</p>}
-                </div>
-              )}
             </CardContent>
           </Card>
 
