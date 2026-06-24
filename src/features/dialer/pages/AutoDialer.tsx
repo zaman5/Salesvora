@@ -1137,8 +1137,8 @@ function AutoCampaignTab() {
       {isRunning && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          {/* ── Stats + Automation (LEFT) ── */}
-          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800">
+          {/* ── Stats + Automation — visually RIGHT via lg:order-3 ── */}
+          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800 lg:order-3">
             <div className="px-6 space-y-4">
               <div className="text-center pb-3 border-b border-gray-700">
                 <Clock className="w-6 h-6 text-gray-500 mx-auto mb-1" />
@@ -1161,8 +1161,8 @@ function AutoCampaignTab() {
             </div>
           </Card>
 
-          {/* Call Interface (CENTER) */}
-          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800">
+          {/* Call Interface — CENTER via lg:order-2 */}
+          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800 lg:order-2">
             <div className="px-6 space-y-3">
 
               {/* ── IDLE: dial pad (matches screenshot) ── */}
@@ -1349,8 +1349,8 @@ function AutoCampaignTab() {
             </div>
           </Card>
 
-          {/* ── Lead Info — inline editable fields (RIGHT) ── */}
-          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800">
+          {/* ── Lead Info — inline editable fields — visually LEFT via lg:order-1 ── */}
+          <Card className="text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm bg-gray-900 border-gray-800 lg:order-1">
             <div className="px-6 space-y-4">
               {/* Header */}
               <div className="flex items-center justify-between pb-3 border-b border-gray-700">
