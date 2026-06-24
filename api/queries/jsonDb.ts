@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { hasDatabase } from "./connection";
+import { env } from "../lib/env";
 
 // Log which storage mode is active once on startup
 let _modeLogged = false;
@@ -42,6 +43,31 @@ const EMPTY = (): JsonDb => ({
   calls: [], smsCampaigns: [], smsLogs: [], aiAgents: [],
 });
 
+/** Bootstrap data written when db.json is created for the first time. */
+function defaultDb(): JsonDb {
+  const now = new Date().toISOString();
+  return {
+    ...EMPTY(),
+    companies: [
+      { id: 1, name: "Salesvora", status: "active", settings: {}, createdAt: now, updatedAt: now },
+    ],
+    users: [
+      {
+        id: 1,
+        unionId: "admin-default",
+        name: "Admin",
+        email: env.adminEmail,
+        password: env.adminPassword,
+        role: "admin",
+        status: "active",
+        companyId: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+  };
+}
+
 const KEYS: Array<keyof JsonDb> = [
   "users","companies","leadLists","leads","leadListAssignments",
   "campaigns","campaignLeads","calls","smsCampaigns","smsLogs","aiAgents",
@@ -62,10 +88,11 @@ function tryParse(content: string): JsonDb | null {
 
 export function readJsonDb(): JsonDb {
   logStorageMode();
-  // File doesn't exist yet — start fresh, no seeding
+  // File doesn't exist — first run. Write default data including the admin user.
   if (!fs.existsSync(DB_PATH)) {
-    const fresh = EMPTY();
+    const fresh = defaultDb();
     writeJsonDb(fresh);
+    console.log(`[db] Created db.json with default admin: ${env.adminEmail}`);
     return fresh;
   }
 
