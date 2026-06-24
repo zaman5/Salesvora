@@ -3,23 +3,69 @@ import * as path from "path";
 import { hasDatabase } from "./connection";
 import { env } from "../lib/env";
 
-// Resolve db.json location.
-// Priority: DB_JSON_PATH env var → process.cwd()/db.json
-// On Hostinger (or any platform that replaces the app folder on each deploy),
-// set DB_JSON_PATH to a directory OUTSIDE the deployment folder so data
-// survives redeployments. Example:
-//   DB_JSON_PATH=/home/username/salesvora-data/db.json
+function ensureDir(dir: string) {
+  if (!fs.existsSync(dir)) {
+    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Resolve where db.json lives.
+ *
+ * Priority:
+ *  1. DB_JSON_PATH env var (explicit override — always respected)
+ *  2. Auto-detect Hostinger: if process.cwd() is inside a .builds/ deployment
+ *     directory, store data in ~/salesvora-data/ which survives redeployments.
+ *  3. Fallback: process.cwd()/db.json  (local development)
+ *
+ * Why this matters on Hostinger:
+ *   Each git push creates a fresh checkout at
+ *   /home/<user>/domains/<domain>/public_html/.builds/source/repository/
+ *   db.json inside that folder is wiped every deploy.
+ *   Storing it at /home/<user>/salesvora-data/db.json means it is NEVER
+ *   touched by deployments — data persists forever.
+ *
+ * One-time migration: if the persistent path doesn't exist yet but there is
+ * a db.json in the current deployment folder, it is copied over automatically
+ * so no data from previous deploys is lost.
+ */
 function resolveDbPath(): string {
+  const cwd = process.cwd();
+  const cwdDbPath = path.resolve(cwd, "db.json");
+
+  // 1. Explicit env override
   if (env.dbJsonPath) {
     const p = path.resolve(env.dbJsonPath);
-    // Make sure parent directory exists
-    const dir = path.dirname(p);
-    if (!fs.existsSync(dir)) {
-      try { fs.mkdirSync(dir, { recursive: true }); } catch { /* ignore */ }
-    }
+    ensureDir(path.dirname(p));
     return p;
   }
-  return path.resolve(process.cwd(), "db.json");
+
+  // 2. Auto-detect Hostinger: deployment path contains ".builds"
+  const cwdPosix = cwd.replace(/\\/g, "/");
+  if (cwdPosix.includes("/.builds/") || cwdPosix.includes(".builds/source/repository")) {
+    const parts = cwdPosix.split("/");
+    const homeIdx = parts.indexOf("home");
+    if (homeIdx !== -1 && parts[homeIdx + 1]) {
+      // Build /home/<username>/salesvora-data/db.json
+      const homeDir  = "/" + parts.slice(1, homeIdx + 2).join("/");
+      const dataDir  = homeDir + "/salesvora-data";
+      ensureDir(dataDir);
+      const persistent = dataDir + "/db.json";
+
+      // One-time migration: copy existing data from deployment folder → persistent path
+      if (!fs.existsSync(persistent) && fs.existsSync(cwdDbPath)) {
+        try {
+          fs.copyFileSync(cwdDbPath, persistent);
+          console.log(`[db] Migrated db.json → ${persistent}`);
+        } catch { /* ignore — will start fresh if copy fails */ }
+      }
+
+      return persistent;
+    }
+  }
+
+  // 3. Local development default
+  return cwdDbPath;
 }
 
 const DB_PATH_RESOLVED = resolveDbPath();
@@ -30,14 +76,17 @@ export function logStorageMode() {
   if (_modeLogged) return;
   _modeLogged = true;
   if (hasDatabase()) {
-    console.log("[db] MySQL mode — DATABASE_URL is set. Data stored in MySQL.");
+    console.log("[db] MySQL mode — data is stored in MySQL and survives all deployments.");
   } else {
-    console.warn(
-      `[db] JSON file mode — DATABASE_URL is not set.\n` +
-      `     db.json location: ${DB_PATH_RESOLVED}\n` +
-      `     On Hostinger: set DB_JSON_PATH=/home/username/salesvora-data/db.json\n` +
-      `     in your .env so data is not wiped on every deployment.`,
-    );
+    console.log(`[db] JSON file mode — db.json: ${DB_PATH_RESOLVED}`);
+    if (DB_PATH_RESOLVED.includes("salesvora-data")) {
+      console.log("[db] ✓ Persistent path detected — data will survive redeployments.");
+    } else {
+      console.warn(
+        "[db] WARNING: db.json is inside the deployment folder and may be wiped on deploy.\n" +
+        "     To fix: set DB_JSON_PATH=/home/<username>/salesvora-data/db.json in .env",
+      );
+    }
   }
 }
 
