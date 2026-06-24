@@ -31,6 +31,10 @@ dist-ssr
 *.sqlite
 *.sqlite3
 db/migrations/*.sql
+# JSON fallback store — never commit; pulling code would wipe user data
+db.json
+db.json.bak
+db.json.tmp
 # TypeScript cache
 *.tsbuildinfo
 # Build outputs

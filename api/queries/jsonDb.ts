@@ -1,19 +1,22 @@
-/**
- * Shared JSON database fallback.
- * Used by all query modules when the MySQL connection is unavailable.
- *
- * Key design decisions:
- * - Single module — eliminates the duplicate read/write functions that existed
- *   in every query file and caused last-write-wins data loss.
- * - NO seeding — mock seed data was overwriting real user data whenever the DB
- *   fell back to JSON. Empty arrays are now the correct "no data" state.
- * - Safe write — writes to a temp file first, then renames atomically so a
- *   crashed mid-write never corrupts the existing file.
- * - Parse recovery — if the JSON is corrupt, restores from the .bak copy
- *   rather than silently returning empty data that then gets re-seeded.
- */
 import * as fs from "fs";
 import * as path from "path";
+import { hasDatabase } from "./connection";
+
+// Log which storage mode is active once on startup
+let _modeLogged = false;
+export function logStorageMode() {
+  if (_modeLogged) return;
+  _modeLogged = true;
+  if (hasDatabase()) {
+    console.log("[db] MySQL (PlanetScale) mode — DATABASE_URL is set.");
+  } else {
+    console.warn(
+      "[db] JSON file mode — DATABASE_URL is not set.\n" +
+      "     Data is stored in db.json (local file, persists across restarts).\n" +
+      "     Set DATABASE_URL in your .env file to use MySQL instead.",
+    );
+  }
+}
 
 export type JsonDb = {
   users: unknown[];
@@ -58,6 +61,7 @@ function tryParse(content: string): JsonDb | null {
 }
 
 export function readJsonDb(): JsonDb {
+  logStorageMode();
   // File doesn't exist yet — start fresh, no seeding
   if (!fs.existsSync(DB_PATH)) {
     const fresh = EMPTY();
