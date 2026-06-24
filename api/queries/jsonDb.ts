@@ -3,18 +3,40 @@ import * as path from "path";
 import { hasDatabase } from "./connection";
 import { env } from "../lib/env";
 
+// Resolve db.json location.
+// Priority: DB_JSON_PATH env var → process.cwd()/db.json
+// On Hostinger (or any platform that replaces the app folder on each deploy),
+// set DB_JSON_PATH to a directory OUTSIDE the deployment folder so data
+// survives redeployments. Example:
+//   DB_JSON_PATH=/home/username/salesvora-data/db.json
+function resolveDbPath(): string {
+  if (env.dbJsonPath) {
+    const p = path.resolve(env.dbJsonPath);
+    // Make sure parent directory exists
+    const dir = path.dirname(p);
+    if (!fs.existsSync(dir)) {
+      try { fs.mkdirSync(dir, { recursive: true }); } catch { /* ignore */ }
+    }
+    return p;
+  }
+  return path.resolve(process.cwd(), "db.json");
+}
+
+const DB_PATH_RESOLVED = resolveDbPath();
+
 // Log which storage mode is active once on startup
 let _modeLogged = false;
 export function logStorageMode() {
   if (_modeLogged) return;
   _modeLogged = true;
   if (hasDatabase()) {
-    console.log("[db] MySQL (PlanetScale) mode — DATABASE_URL is set.");
+    console.log("[db] MySQL mode — DATABASE_URL is set. Data stored in MySQL.");
   } else {
     console.warn(
-      "[db] JSON file mode — DATABASE_URL is not set.\n" +
-      "     Data is stored in db.json (local file, persists across restarts).\n" +
-      "     Set DATABASE_URL in your .env file to use MySQL instead.",
+      `[db] JSON file mode — DATABASE_URL is not set.\n` +
+      `     db.json location: ${DB_PATH_RESOLVED}\n` +
+      `     On Hostinger: set DB_JSON_PATH=/home/username/salesvora-data/db.json\n` +
+      `     in your .env so data is not wiped on every deployment.`,
     );
   }
 }
@@ -35,8 +57,8 @@ export type JsonDb = {
   aiAgents: unknown[];
 };
 
-const DB_PATH  = path.resolve(process.cwd(), "db.json");
-const BAK_PATH = path.resolve(process.cwd(), "db.json.bak");
+const DB_PATH  = DB_PATH_RESOLVED;
+const BAK_PATH = DB_PATH_RESOLVED + ".bak";
 
 const EMPTY = (): JsonDb => ({
   users: [], companies: [], leadLists: [], leads: [],
