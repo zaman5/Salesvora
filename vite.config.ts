@@ -20,6 +20,12 @@ export default defineConfig(async ({ command }) => {
     plugins,
     server: {
       port: 3000,
+      watch: {
+        // Ignore the JSON database files so Vite does NOT restart the dev
+        // server every time data is written — that restart was breaking writes
+        // mid-flight and causing the database to appear "reset".
+        ignored: ["**/db.json", "**/db.json.bak", "**/db.json.tmp"],
+      },
     },
     resolve: {
       alias: {

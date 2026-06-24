@@ -37,7 +37,6 @@ export type JsonDb = {
 
 const DB_PATH  = path.resolve(process.cwd(), "db.json");
 const BAK_PATH = path.resolve(process.cwd(), "db.json.bak");
-const TMP_PATH = path.resolve(process.cwd(), "db.json.tmp");
 
 const EMPTY = (): JsonDb => ({
   users: [], companies: [], leadLists: [], leads: [],
@@ -143,13 +142,14 @@ export function readJsonDb(): JsonDb {
 export function writeJsonDb(data: JsonDb): void {
   try {
     const json = JSON.stringify(data, null, 2);
-    // Backup existing file before overwriting
+    // Keep a rolling backup before every write so we can recover if the
+    // main write is interrupted (e.g. process killed mid-write).
     if (fs.existsSync(DB_PATH)) {
-      fs.copyFileSync(DB_PATH, BAK_PATH);
+      try { fs.copyFileSync(DB_PATH, BAK_PATH); } catch { /* non-fatal */ }
     }
-    // Write to temp then rename (atomic on most OS)
-    fs.writeFileSync(TMP_PATH, json, "utf-8");
-    fs.renameSync(TMP_PATH, DB_PATH);
+    // Direct write — fs.renameSync over an existing file throws EPERM on
+    // Windows when the file is open, so we write directly instead.
+    fs.writeFileSync(DB_PATH, json, "utf-8");
   } catch (err) {
     console.error("[jsonDb] Failed to write db.json:", err);
   }
