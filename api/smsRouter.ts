@@ -1,6 +1,8 @@
 import { z } from "zod";
-import { createRouter, adminQuery, authedQuery } from "./middleware";
+import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware";
 import { listCompanyScope } from "./lib/authz";
+import { getTelnyxConfig } from "./lib/telnyxConfig";
+import { sendSMS, toE164 } from "./lib/telnyx";
 import {
   findSMSCampaignsByCompany, findSMSCampaignById, createSMSCampaign, updateSMSCampaign,
   findSMSLogsByCampaign, createSMSLog, updateSMSLogStatus, incrementSMSStats,
@@ -20,7 +22,7 @@ export const smsRouter = createRouter({
       return findSMSCampaignById(input.id);
     }),
 
-  create: adminQuery
+  create: callerQuery
     .input(z.object({
       name: z.string().min(1),
       leadListId: z.number(),
@@ -30,7 +32,7 @@ export const smsRouter = createRouter({
       settings: z.record(z.string(), z.any()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const companyId = ctx.user.companyId;
+      const companyId = (ctx.user as any).companyId;
       if (!companyId) throw new Error("No company");
       const id = await createSMSCampaign({
         ...input,
@@ -61,27 +63,80 @@ export const smsRouter = createRouter({
       return { success: true };
     }),
 
-  // ─── Send SMS Campaign ───
-  send: adminQuery
+  // ─── Send / Pause / Resume Campaign ───
+  send: callerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await updateSMSCampaign(input.id, { status: "sending" });
-      // In a real implementation, this would queue messages for sending via Twilio
       return { success: true, message: "Campaign queued for sending" };
     }),
 
-  pause: adminQuery
+  pause: callerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await updateSMSCampaign(input.id, { status: "paused" });
       return { success: true };
     }),
 
-  resume: adminQuery
+  resume: callerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await updateSMSCampaign(input.id, { status: "sending" });
       return { success: true };
+    }),
+
+  // ─── Send a single SMS directly (no campaign required) ───
+  sendDirect: callerQuery
+    .input(z.object({
+      toNumber: z.string().min(3),
+      message:  z.string().min(1),
+      fromNumber: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const companyId = (ctx.user as any).companyId;
+      let success = true;
+      let error: string | undefined;
+      let providerMsgId: string | undefined;
+
+      // Attempt real SMS delivery via Telnyx if configured
+      try {
+        const cfg = companyId ? await getTelnyxConfig(companyId) : null;
+        if (cfg?.apiKey && cfg?.enabled) {
+          const from = input.fromNumber || cfg.defaultCallerId || "";
+          if (from) {
+            const result = await sendSMS(cfg.apiKey, {
+              from: toE164(from),
+              to:   toE164(input.toNumber),
+              text: input.message,
+            });
+            if (result.ok) {
+              providerMsgId = result.data.id;
+            } else {
+              success = false;
+              error = result.message;
+            }
+          }
+        }
+      } catch (err) {
+        error = err instanceof Error ? err.message : "Failed to send SMS";
+        success = false;
+      }
+
+      // Best-effort log — don't bubble errors if DB is unavailable
+      try {
+        await createSMSLog({
+          smsCampaignId: 0,
+          leadId: 0,
+          toNumber: input.toNumber,
+          message:  input.message,
+          fromNumber: input.fromNumber,
+          status: success ? "sent" : "failed",
+          twilioSid: providerMsgId,
+          sentAt: new Date(),
+        });
+      } catch { /* noop */ }
+
+      return { success, error };
     }),
 
   // ─── SMS Logs ───

@@ -99,6 +99,38 @@ export function toE164(raw: string): string {
   return hasPlus ? `+${digits}` : digits;
 }
 
+export type SendSMSResult = { id: string; status: string };
+
+/**
+ * Send a single SMS via Telnyx Messaging.
+ * POST /v2/messages
+ */
+export async function sendSMS(
+  apiKey: string,
+  params: { from: string; to: string; text: string },
+): Promise<TelnyxResult<SendSMSResult>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/messages`, {
+      method: "POST",
+      headers: authHeaders(apiKey),
+      body: JSON.stringify({ from: params.from, to: params.to, text: params.text, type: "SMS" }),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    const body = (await res.json()) as { data: Record<string, unknown> };
+    return {
+      ok: true,
+      data: {
+        id: String(body.data?.id ?? ""),
+        // Telnyx puts status inside to[0].status for SMS
+        status: String((body.data?.to as Array<Record<string, unknown>>)?.[0]?.status ?? "sent"),
+      },
+    };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? `Telnyx: ${err.message}` : "Network error." };
+  }
+}
+
 export type PlaceCallResult = {
   callControlId: string;
   callLegId?: string;
