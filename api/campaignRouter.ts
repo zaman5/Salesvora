@@ -170,14 +170,14 @@ export const campaignRouter = createRouter({
       return getCampaignProgress(input.id);
     }),
 
-  start: adminQuery
+  start: callerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await updateCampaign(input.id, { status: "running" });
       return { success: true };
     }),
 
-  pause: adminQuery
+  pause: callerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await updateCampaign(input.id, { status: "paused" });

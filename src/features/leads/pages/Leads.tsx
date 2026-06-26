@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,10 +32,18 @@ import {
 } from "lucide-react";
 
 export default function LeadsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+
   const [search, setSearch] = useState("");
   const [showUpload, setShowUpload] = useState(false);
   const [showCreateList, setShowCreateList] = useState(false);
   const [activeTab, setActiveTab] = useState("lists");
+
+  // Assign-to-caller dialog
+  const [showAssign, setShowAssign] = useState(false);
+  const [assigningListId, setAssigningListId] = useState<number | null>(null);
+  const [assignCallerId, setAssignCallerId] = useState<string>("");
 
   // State for list selection
   const [selectedListId, setSelectedListId] = useState<number | null>(null);
@@ -90,8 +99,19 @@ export default function LeadsPage() {
     { key: "notes", label: "Notes/Comments", required: false },
   ];
 
-  // Load Lead Lists from backend
-  const { data: leadLists = [], refetch: refetchLists } = trpc.lead.listLists.useQuery();
+  // Load Lead Lists — admin sees all; caller sees only their assigned lists
+  const { data: adminListsData = [], refetch: refetchAdminLists } = trpc.lead.listLists.useQuery(
+    undefined, { enabled: isAdmin },
+  );
+  const { data: myListsData = [], refetch: refetchMyLists } = trpc.lead.myLists.useQuery(
+    undefined, { enabled: !isAdmin },
+  );
+  const leadLists = (isAdmin ? adminListsData : myListsData) as any[];
+  const refetchLists = isAdmin ? refetchAdminLists : refetchMyLists;
+
+  // Callers list for assign dialog
+  const { data: allUsers = [] } = trpc.user.list.useQuery(undefined, { enabled: isAdmin });
+  const callerUsers = (allUsers as any[]).filter((u) => u.role === "caller");
 
   // Load Leads from selected list
   const { data: leadsResponse, refetch: refetchLeads } = trpc.lead.list.useQuery(
@@ -99,17 +119,29 @@ export default function LeadsPage() {
     { enabled: selectedListId !== null }
   );
 
-  const leads = Array.isArray(leadsResponse) ? leadsResponse : (leadsResponse as { items?: unknown[] })?.items || [];
+  const leads = (Array.isArray(leadsResponse) ? leadsResponse : (leadsResponse as { items?: unknown[] })?.items || []) as any[];
 
   // Default selection to first list
   useEffect(() => {
     if (leadLists.length > 0 && selectedListId === null) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedListId(leadLists[0].id);
+      setSelectedListId((leadLists[0] as any).id);
     }
   }, [leadLists, selectedListId]);
 
   // Mutations
+  const assignListMutation = trpc.lead.assignList.useMutation({ onSuccess: () => refetchLists() });
+
+  const handleAssignList = async () => {
+    if (!assigningListId || !assignCallerId) return;
+    try {
+      await assignListMutation.mutateAsync({ leadListId: assigningListId, callerId: parseInt(assignCallerId) });
+      setShowAssign(false);
+      setAssigningListId(null);
+      setAssignCallerId("");
+    } catch (err) { console.error(err); }
+  };
+
   const createListMutation = trpc.lead.createList.useMutation({
     onSuccess: () => {
       refetchLists();
@@ -123,7 +155,7 @@ export default function LeadsPage() {
     onSuccess: () => {
       refetchLists();
       if (leadLists.length > 0) {
-        setSelectedListId(leadLists[0].id);
+        setSelectedListId((leadLists[0] as any).id);
       } else {
         setSelectedListId(null);
       }
@@ -427,7 +459,7 @@ export default function LeadsPage() {
     }
   };
 
-  const filteredLeads = leads.filter((lead: { firstName?: string; lastName?: string; companyName?: string; phone?: string; email?: string }) => {
+  const filteredLeads = (leads as any[]).filter((lead: any) => {
     const q = search.toLowerCase();
     const fullName = `${lead.firstName || ""} ${lead.lastName || ""}`.toLowerCase();
     return (
@@ -469,121 +501,123 @@ export default function LeadsPage() {
           <p className="text-gray-400 mt-1">Manage lead lists and individual leads</p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={showUpload} onOpenChange={setShowUpload}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800">
-                <Upload className="w-4 h-4 mr-2" />
-                Upload
-              </Button>
-            </DialogTrigger>
+          {/* Assign-to-caller dialog (opened programmatically from card) */}
+          <Dialog open={showAssign} onOpenChange={setShowAssign}>
             <DialogContent className="bg-gray-900 border-gray-800 text-white">
-              <DialogHeader>
-                <DialogTitle>Upload Leads</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 mt-4 text-left">
-                {mappingStep === "file" ? (
-                  <div className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center">
-                    <FileSpreadsheet className="w-12 h-12 text-gray-500 mx-auto mb-3" />
-                    <p className="text-gray-300 font-medium">Drop CSV file here or click to browse</p>
-                    <p className="text-gray-500 text-sm mt-1">Supports CSV files up to 10MB</p>
-                    <Input 
-                      type="file" 
-                      accept=".csv" 
-                      onChange={handleFileChange}
-                      className="mt-4 bg-gray-800 border-gray-700 text-white" 
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Map CSV Columns to Database Fields:</p>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => {
-                          setUploadFile(null);
-                          setCsvHeaders([]);
-                          setCsvLines([]);
-                          setColumnMapping({});
-                          setMappingStep("file");
-                        }}
-                        className="text-xs text-blue-400 hover:text-blue-300 h-6 px-1"
-                      >
-                        Change File
-                      </Button>
-                    </div>
-                    {leadFields.map((field) => (
-                      <div key={field.key} className="grid grid-cols-3 items-center gap-2">
-                        <Label className="text-xs text-gray-300 col-span-1">
-                          {field.label} {field.required && <span className="text-red-500">*</span>}
-                        </Label>
-                        <select
-                          value={columnMapping[field.key] || ""}
-                          onChange={(e) => setColumnMapping({ ...columnMapping, [field.key]: e.target.value })}
-                          className="bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs text-white col-span-2 focus:ring-1 focus:ring-blue-500"
-                        >
-                          <option value="" className="text-gray-950 bg-white">-- None / Skip --</option>
-                          {csvHeaders.map((header) => (
-                            <option key={header} value={header} className="text-gray-950 bg-white">{header}</option>
-                          ))}
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div>
-                  <Label className="text-gray-300">Target List</Label>
-                  <select 
-                    value={selectedUploadListId}
-                    onChange={(e) => setSelectedUploadListId(e.target.value)}
-                    className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white text-sm"
-                  >
-                    <option value="create-new" className="text-gray-950 bg-white">Create new list</option>
-                    {leadLists.map((l: { id: number; name: string }) => <option key={l.id} value={l.id} className="text-gray-950 bg-white">{l.name}</option>)}
-                  </select>
-                </div>
-                <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleUploadLeads}>
-                  Upload & Import
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-          <Dialog open={showCreateList} onOpenChange={setShowCreateList}>
-            <DialogTrigger asChild>
-              <Button className="bg-blue-600 hover:bg-blue-700">
-                <Plus className="w-4 h-4 mr-2" />
-                New List
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-gray-900 border-gray-800 text-white">
-              <DialogHeader>
-                <DialogTitle>Create Lead List</DialogTitle>
-              </DialogHeader>
+              <DialogHeader><DialogTitle>Assign List to Caller</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4">
-                <div>
-                  <Label className="text-gray-300">List Name</Label>
-                  <Input 
-                    value={newListName}
-                    onChange={(e) => setNewListName(e.target.value)}
-                    placeholder="Enter list name" 
-                    className="bg-gray-800 border-gray-700 text-white mt-1" 
-                  />
-                </div>
-                <div>
-                  <Label className="text-gray-300">Description</Label>
-                  <Textarea 
-                    value={newListDesc}
-                    onChange={(e) => setNewListDesc(e.target.value)}
-                    placeholder="Optional description" 
-                    className="bg-gray-800 border-gray-700 text-white mt-1" 
-                  />
-                </div>
-                <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleCreateList}>
-                  Create List
+                <p className="text-sm text-gray-400">Select a caller to give them access to this lead list.</p>
+                <select
+                  value={assignCallerId}
+                  onChange={(e) => setAssignCallerId(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white text-sm"
+                >
+                  <option value="">— Select caller —</option>
+                  {callerUsers.map((u: any) => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                  ))}
+                </select>
+                <Button
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  onClick={handleAssignList}
+                  disabled={!assignCallerId || assignListMutation.isPending}
+                >
+                  {assignListMutation.isPending ? "Assigning…" : "Assign"}
                 </Button>
               </div>
             </DialogContent>
           </Dialog>
+
+          {isAdmin && (
+            <>
+              <Dialog open={showUpload} onOpenChange={setShowUpload}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800">
+                    <Upload className="w-4 h-4 mr-2" />Upload
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-gray-900 border-gray-800 text-white">
+                  <DialogHeader><DialogTitle>Upload Leads</DialogTitle></DialogHeader>
+                  <div className="space-y-4 mt-4 text-left">
+                    {mappingStep === "file" ? (
+                      <div className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center">
+                        <FileSpreadsheet className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+                        <p className="text-gray-300 font-medium">Drop CSV file here or click to browse</p>
+                        <p className="text-gray-500 text-sm mt-1">Supports CSV files up to 10MB</p>
+                        <Input type="file" accept=".csv" onChange={handleFileChange}
+                          className="mt-4 bg-gray-800 border-gray-700 text-white" />
+                      </div>
+                    ) : (
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Map CSV Columns to Database Fields:</p>
+                          <Button variant="ghost" size="sm"
+                            onClick={() => { setUploadFile(null); setCsvHeaders([]); setCsvLines([]); setColumnMapping({}); setMappingStep("file"); }}
+                            className="text-xs text-blue-400 hover:text-blue-300 h-6 px-1">
+                            Change File
+                          </Button>
+                        </div>
+                        {leadFields.map((field) => (
+                          <div key={field.key} className="grid grid-cols-3 items-center gap-2">
+                            <Label className="text-xs text-gray-300 col-span-1">
+                              {field.label} {field.required && <span className="text-red-500">*</span>}
+                            </Label>
+                            <select
+                              value={columnMapping[field.key] || ""}
+                              onChange={(e) => setColumnMapping({ ...columnMapping, [field.key]: e.target.value })}
+                              className="bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs text-white col-span-2 focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="" className="text-gray-950 bg-white">-- None / Skip --</option>
+                              {csvHeaders.map((header) => (
+                                <option key={header} value={header} className="text-gray-950 bg-white">{header}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div>
+                      <Label className="text-gray-300">Target List</Label>
+                      <select value={selectedUploadListId} onChange={(e) => setSelectedUploadListId(e.target.value)}
+                        className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white text-sm">
+                        <option value="create-new" className="text-gray-950 bg-white">Create new list</option>
+                        {leadLists.map((l: any) => <option key={l.id} value={l.id} className="text-gray-950 bg-white">{l.name}</option>)}
+                      </select>
+                    </div>
+                    <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleUploadLeads}>
+                      Upload &amp; Import
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={showCreateList} onOpenChange={setShowCreateList}>
+                <DialogTrigger asChild>
+                  <Button className="bg-blue-600 hover:bg-blue-700">
+                    <Plus className="w-4 h-4 mr-2" />New List
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-gray-900 border-gray-800 text-white">
+                  <DialogHeader><DialogTitle>Create Lead List</DialogTitle></DialogHeader>
+                  <div className="space-y-4 mt-4">
+                    <div>
+                      <Label className="text-gray-300">List Name</Label>
+                      <Input value={newListName} onChange={(e) => setNewListName(e.target.value)}
+                        placeholder="Enter list name" className="bg-gray-800 border-gray-700 text-white mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-gray-300">Description</Label>
+                      <Textarea value={newListDesc} onChange={(e) => setNewListDesc(e.target.value)}
+                        placeholder="Optional description" className="bg-gray-800 border-gray-700 text-white mt-1" />
+                    </div>
+                    <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleCreateList}>
+                      Create List
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
         </div>
       </div>
 
@@ -595,7 +629,7 @@ export default function LeadsPage() {
 
         <TabsContent value="lists" className="mt-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {leadLists.map((list: { id: number; name: string; status: string; createdAt: string; totalLeads?: number; calledLeads?: number }) => (
+            {leadLists.map((list: any) => (
               <Card key={list.id} className="bg-gray-900 border-gray-800 hover:border-gray-700 transition-colors">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-4">
@@ -621,26 +655,35 @@ export default function LeadsPage() {
                   <div className="w-full bg-gray-800 rounded-full h-2 mb-4">
                     <div
                       className="bg-blue-600 h-2 rounded-full transition-all"
-                      style={{ width: `${(list.totalLeads ?? 0) > 0 ? ((list.calledLeads || 0) / list.totalLeads!) * 100 : 0}%` }}
+                      style={{ width: `${(list.totalLeads ?? 0) > 0 ? ((list.calledLeads || 0) / list.totalLeads) * 100 : 0}%` }}
                     />
                   </div>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant="ghost" size="sm"
                       onClick={() => { setSelectedListId(list.id); setActiveTab("leads"); }}
                       className="text-gray-400 hover:text-white h-8 px-2"
                     >
                       <Eye className="w-4 h-4 mr-1" /> View
                     </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => handleDeleteList(list.id)}
-                      className="text-gray-400 hover:text-red-400 h-8 px-2 ml-auto"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {isAdmin && (
+                      <Button
+                        variant="ghost" size="sm"
+                        onClick={() => { setAssigningListId(list.id); setAssignCallerId(""); setShowAssign(true); }}
+                        className="text-blue-400 hover:text-blue-300 h-8 px-2"
+                      >
+                        <Users className="w-4 h-4 mr-1" /> Assign
+                      </Button>
+                    )}
+                    {isAdmin && (
+                      <Button
+                        variant="ghost" size="sm"
+                        onClick={() => handleDeleteList(list.id)}
+                        className="text-gray-400 hover:text-red-400 h-8 px-2 ml-auto"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -664,7 +707,7 @@ export default function LeadsPage() {
               onChange={(e) => setSelectedListId(parseInt(e.target.value) || null)}
               className="bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-white text-sm animate-none"
             >
-              {leadLists.map((l: { id: number; name: string }) => <option key={l.id} value={l.id} className="text-gray-950 bg-white">{l.name}</option>)}
+              {leadLists.map((l: any) => <option key={l.id} value={l.id} className="text-gray-950 bg-white">{l.name}</option>)}
             </select>
             {selectedListId && (
               <Button onClick={() => { resetLeadForm(); setShowAddLead(true); }} className="bg-blue-600 hover:bg-blue-700">
@@ -688,7 +731,7 @@ export default function LeadsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredLeads.map((lead: { id: number; firstName?: string; lastName?: string; companyName?: string; phone?: string; email?: string; designation?: string; city?: string; state?: string; status?: string; priority?: string }) => (
+                    {filteredLeads.map((lead: any) => (
                       <tr key={lead.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                         <td className="px-4 py-3">
                           <div>

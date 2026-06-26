@@ -217,7 +217,25 @@ export const leadRouter = createRouter({
       return { success: true };
     }),
 
+  // Admin: view which lists are assigned to a specific caller
+  getCallerLists: adminQuery
+    .input(z.object({ callerId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const assignments = await getAssignedListsForCaller(input.callerId);
+      if (!assignments.length) return [];
+      const listIds = new Set(assignments.map((a: any) => a.leadListId));
+      const scope = listCompanyScope(ctx.user);
+      const allLists = scope === null ? [] : await findLeadListsByCompany(scope);
+      return allLists.filter((l: any) => listIds.has(l.id));
+    }),
+
+  // Caller: get own assigned lists as full list objects (not raw assignment records)
   myLists: callerQuery.query(async ({ ctx }) => {
-    return getAssignedListsForCaller(ctx.user.id);
+    const assignments = await getAssignedListsForCaller(ctx.user.id);
+    if (!assignments.length) return [];
+    const listIds = new Set(assignments.map((a: any) => a.leadListId));
+    const scope = listCompanyScope(ctx.user);
+    const allLists = scope === null ? [] : await findLeadListsByCompany(scope);
+    return allLists.filter((l: any) => listIds.has(l.id));
   }),
 });
