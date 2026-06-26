@@ -160,7 +160,24 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
               const c = note.call;
               const failed = c.sipCode && c.sipCode >= 400;
               if (failed || (c.cause && c.cause !== "NORMAL_CLEARING" && c.cause !== "USER_HANGUP")) {
-                setError(`Call ended: ${c.sipReason || c.cause || "failed"}${c.sipCode ? ` (SIP ${c.sipCode})` : ""}`);
+                // Provide actionable messages for common SIP error codes
+                let msg = `${c.sipReason || c.cause || "Call failed"}`;
+                if (c.sipCode === 480) {
+                  msg = "Destination temporarily unavailable (SIP 480). Possible causes: " +
+                    "the from-number is not linked to your Telnyx Credential Connection, " +
+                    "or the connection has no outbound voice profile. " +
+                    "Check Settings → Integration → Telnyx and ensure the Caller ID " +
+                    "matches a number on your Telnyx account.";
+                } else if (c.sipCode === 403) {
+                  msg = "Call forbidden (SIP 403) — the from-number may not be authorized on this connection.";
+                } else if (c.sipCode === 486) {
+                  msg = "Destination busy (SIP 486).";
+                } else if (c.sipCode === 404) {
+                  msg = "Number not found (SIP 404) — check the destination number format (+country code).";
+                } else if (c.sipCode) {
+                  msg += ` (SIP ${c.sipCode})`;
+                }
+                setError(msg);
               }
               setCallState("ended");
               setCallDirection(null);
@@ -200,10 +217,22 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
       setError("Browser calling isn't connected yet. Check your SIP credentials in Settings.");
       return false;
     }
+    // Normalize numbers to E.164 — Telnyx WebRTC requires "+countrycode..." format.
+    // Strip spaces, dashes, parens, dots; preserve a leading "+".
+    const toE164 = (raw: string) => {
+      if (!raw) return raw;
+      const trimmed = raw.trim();
+      const hasPlus = trimmed.startsWith("+");
+      const digits = trimmed.replace(/[^0-9]/g, "");
+      return hasPlus ? `+${digits}` : digits;
+    };
+    const dest   = toE164(destinationNumber);
+    const caller = toE164(callerNumber);   // empty string = Telnyx picks default
+
     try {
       callRef.current = clientRef.current.newCall({
-        destinationNumber,
-        callerNumber,
+        destinationNumber: dest,
+        callerNumber:      caller || undefined, // omit if empty so Telnyx uses its default
         audio: true,
         video: false,
         remoteElement: REMOTE_AUDIO_ID,

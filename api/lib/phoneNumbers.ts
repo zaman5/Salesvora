@@ -6,7 +6,7 @@ export type PhoneNumber = {
   number: string;
   label?: string;
   status: "active" | "inactive";
-  assignedTo?: number | null; // caller (user) id, or null = unassigned (any caller can use)
+  assignedTo?: number | null; // caller user id, or null/undefined = unassigned pool
 };
 
 function settingsOf(company: unknown): Record<string, unknown> {
@@ -20,8 +20,6 @@ export async function listPhoneNumbers(companyId: number): Promise<PhoneNumber[]
   return Array.isArray(list) ? (list as PhoneNumber[]) : [];
 }
 
-// All mutations read-merge-write so other settings (e.g. the Telnyx config) are
-// never clobbered.
 async function writePhoneNumbers(companyId: number, numbers: PhoneNumber[]): Promise<PhoneNumber[]> {
   const company = await findCompanyById(companyId);
   const settings = settingsOf(company);
@@ -35,9 +33,7 @@ export async function addPhoneNumber(
 ): Promise<PhoneNumber[]> {
   const numbers = await listPhoneNumbers(companyId);
   const normalized = toE164(input.number);
-  if (numbers.some((n) => n.number === normalized)) {
-    return numbers; // already present, no duplicate
-  }
+  if (numbers.some((n) => n.number === normalized)) return numbers;
   const entry: PhoneNumber = {
     id: Date.now(),
     number: normalized,
@@ -92,9 +88,27 @@ export async function assignPhoneNumber(
   );
 }
 
-/** Active numbers a caller may use: their assigned numbers + any unassigned ones. */
+/**
+ * Numbers a caller may dial from.
+ *
+ * Strict rule: if ANY numbers are explicitly assigned to this caller, return
+ * ONLY those — they must not see numbers belonging to other callers or the
+ * global pool.
+ *
+ * Fallback: if no number is assigned to them yet, return pool numbers
+ * (assignedTo = null / undefined) so they can still make calls while the
+ * admin hasn't made an explicit assignment yet.
+ */
 export function numbersForCaller(numbers: PhoneNumber[], userId: number): string[] {
+  const mine = numbers.filter(
+    (n) => n.status !== "inactive" && n.number && n.assignedTo === userId,
+  );
+  if (mine.length > 0) {
+    // Caller has explicit assignments — show ONLY those
+    return mine.map((n) => n.number);
+  }
+  // No assignment yet → show unassigned pool numbers (no number belongs to another caller)
   return numbers
-    .filter((n) => n.status !== "inactive" && (!n.assignedTo || n.assignedTo === userId))
+    .filter((n) => n.status !== "inactive" && n.number && !n.assignedTo)
     .map((n) => n.number);
 }

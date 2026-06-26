@@ -51,18 +51,31 @@ export const integrationRouter = createRouter({
   getDialerConfig: authedQuery.query(async ({ ctx }) => {
     const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? undefined);
     const cfg = companyId ? await getTelnyxConfig(companyId) : null;
+    const isCaller = ctx.user.role === "caller";
     const numbers = new Set<string>();
-    if (cfg?.defaultCallerId) numbers.add(cfg.defaultCallerId);
-    for (const n of cfg?.assignedNumbers ?? []) numbers.add(n);
-    // Include numbers from Settings → Phone Numbers. Callers only see numbers
-    // assigned to them (plus unassigned ones); admins/superadmins see all.
+
+    // Build the visible from-number list.
+    // Admins see every number (global defaults + all phone numbers).
+    // Callers see ONLY their assigned numbers — if none are assigned yet,
+    // they see unassigned pool numbers but NEVER numbers assigned to others
+    // and NEVER the global admin defaults.
+    if (!isCaller) {
+      if (cfg?.defaultCallerId) numbers.add(cfg.defaultCallerId);
+      for (const n of cfg?.assignedNumbers ?? []) numbers.add(n);
+    }
+
     if (companyId) {
       const phones = await listPhoneNumbers(companyId);
-      const visible =
-        ctx.user.role === "caller"
-          ? numbersForCaller(phones, ctx.user.id)
-          : phones.filter((p) => p.status !== "inactive" && p.number).map((p) => p.number);
+      const visible = isCaller
+        ? numbersForCaller(phones, ctx.user.id)       // strict per-caller filtering
+        : phones.filter((p) => p.status !== "inactive" && p.number).map((p) => p.number);
       for (const n of visible) numbers.add(n);
+    }
+
+    // If caller still has no numbers (nothing assigned, no pool) fall back to
+    // the global default so they can at least make calls.
+    if (isCaller && numbers.size === 0 && cfg?.defaultCallerId) {
+      numbers.add(cfg.defaultCallerId);
     }
     // Per-caller SIP credentials — each caller registers independently so
     // multiple callers can be on calls at the same time without kicking each
