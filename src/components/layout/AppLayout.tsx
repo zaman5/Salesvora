@@ -39,6 +39,7 @@ const adminNavItems = [
 const callerNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: PhoneCall, label: "Dialer", path: "/dialer" },
+  { icon: Radio, label: "Auto Dialer", path: "/auto-dialer" },
   { icon: List, label: "My Leads", path: "/leads" },
   { icon: Phone, label: "Campaigns", path: "/campaigns" },
   { icon: BarChart3, label: "My Calls", path: "/call-logs" },

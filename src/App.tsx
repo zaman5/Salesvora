@@ -49,9 +49,10 @@ export default function App() {
         <Route path="/call-logs" element={<Layout><CallLogsPage /></Layout>} />
         <Route path="/settings"  element={<Layout><SettingsPage /></Layout>} />
 
+        <Route path="/auto-dialer" element={<Layout><AutoDialerPage /></Layout>} />
+
         {/* Protected — admin / superadmin only */}
         <Route path="/users"       element={<AdminLayout><UsersPage /></AdminLayout>} />
-        <Route path="/auto-dialer" element={<AdminLayout><AutoDialerPage /></AdminLayout>} />
         <Route path="/monitoring"  element={<AdminLayout><MonitoringPage /></AdminLayout>} />
         <Route path="/reports"     element={<AdminLayout><ReportsPage /></AdminLayout>} />
         <Route path="/ai-agents"   element={<AdminLayout><AIAgentsPage /></AdminLayout>} />
