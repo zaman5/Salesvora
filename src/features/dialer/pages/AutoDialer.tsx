@@ -11,7 +11,6 @@ export default function AutoDialerPage() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-white">Dialer</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Manual or automated campaign calling</p>
         </div>
         <div className="flex bg-gray-800 rounded-xl p-1 gap-1">
           <button
