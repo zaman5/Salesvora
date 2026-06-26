@@ -1,3 +1,12 @@
-// All dialer functionality has been consolidated into AutoDialer.
-// This re-export keeps the DialerPage name working for existing imports.
-export { default } from "./AutoDialer";
+import { ManualDialTab } from "../components/ManualDialTab";
+
+export default function DialerPage() {
+  return (
+    <div className="space-y-4 max-w-7xl mx-auto">
+      <div>
+        <h1 className="text-xl font-bold text-white">Dialer</h1>
+      </div>
+      <ManualDialTab />
+    </div>
+  );
+}
