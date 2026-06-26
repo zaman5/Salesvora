@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { createRouter, adminQuery } from "./middleware";
 import { requireCompanyScope } from "./lib/authz";
+import { getTelnyxConfig } from "./lib/telnyxConfig";
+import { hangupTelnyxCall } from "./lib/telnyx";
+import { findCallById, updateCall } from "./queries/calls";
 import {
   createMonitorSession, findActiveMonitorSessions,
   endMonitorSession, getActiveCallsForMonitoring, getCallerActiveCall,
@@ -8,7 +11,7 @@ import {
 } from "./queries/monitoring";
 
 export const monitoringRouter = createRouter({
-  // ─── Start Monitoring a Caller's Call ───
+  // ─── Start Monitoring a Caller's Call (listen-only) ───
   startListening: adminQuery
     .input(z.object({
       callerId: z.number(),
@@ -47,11 +50,11 @@ export const monitoringRouter = createRouter({
       return getActiveCallsForMonitoring(companyId);
     }),
 
-  // ─── Caller Day Report (date-wise full-day performance) ───
+  // ─── Caller Day Report ───
   callerDayReport: adminQuery
     .input(z.object({
       callerId: z.number(),
-      date: z.string(), // YYYY-MM-DD
+      date: z.string(),
     }))
     .query(async ({ input }) => {
       return getCallerDayReport(input.callerId, input.date);
@@ -64,7 +67,7 @@ export const monitoringRouter = createRouter({
       return getCallerActiveCall(input.callerId);
     }),
 
-  // ─── Barge In (Force Join Call) ───
+  // ─── Barge In (Admin joins call — both sides hear admin) ───
   bargeIn: adminQuery
     .input(z.object({
       callerId: z.number(),
@@ -82,7 +85,7 @@ export const monitoringRouter = createRouter({
       return { id, monitorChannel, success: true, mode: "barge" };
     }),
 
-  // ─── Whisper (Private Message to Caller) ───
+  // ─── Whisper (Private message to caller only) ───
   whisper: adminQuery
     .input(z.object({
       callerId: z.number(),
@@ -90,7 +93,41 @@ export const monitoringRouter = createRouter({
       message: z.string(),
     }))
     .mutation(async ({ input }) => {
-      // In a real implementation, this would send a WebSocket message to the caller
+      // WebSocket push to caller's browser would go here
       return { success: true, message: input.message, mode: "whisper" };
+    }),
+
+  // ─── Force-End a Caller's Active Call ───
+  endCallerCall: adminQuery
+    .input(z.object({
+      callId: z.number(),
+      callerId: z.number(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const companyId = requireCompanyScope(ctx.user);
+      let telnyxHungUp = false;
+
+      try {
+        // Retrieve the call record to get the Telnyx callControlId
+        const call = await findCallById(input.callId);
+        const callSid = (call as any)?.callSid as string | undefined;
+
+        // Only attempt Telnyx hangup if this was a real REST-controlled call
+        if (callSid && !callSid.startsWith("CALL_")) {
+          const cfg = companyId ? await getTelnyxConfig(companyId) : null;
+          if (cfg?.apiKey) {
+            const result = await hangupTelnyxCall(cfg.apiKey, callSid);
+            telnyxHungUp = result.ok;
+          }
+        }
+      } catch { /* noop — always update DB below */ }
+
+      // Mark the call as completed in DB regardless
+      await updateCall(input.callId, {
+        status: "cancelled",
+        endedAt: new Date(),
+      });
+
+      return { success: true, telnyxHungUp };
     }),
 });

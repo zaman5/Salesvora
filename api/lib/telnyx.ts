@@ -131,6 +131,28 @@ export async function sendSMS(
   }
 }
 
+/**
+ * Force-hang-up a live Telnyx call via Call Control.
+ * POST /v2/calls/{call_control_id}/actions/hangup
+ */
+export async function hangupTelnyxCall(
+  apiKey: string,
+  callControlId: string,
+): Promise<TelnyxResult<{ done: boolean }>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/calls/${encodeURIComponent(callControlId)}/actions/hangup`, {
+      method: "POST",
+      headers: authHeaders(apiKey),
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    return { ok: true, data: { done: true } };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error." };
+  }
+}
+
 export type PlaceCallResult = {
   callControlId: string;
   callLegId?: string;

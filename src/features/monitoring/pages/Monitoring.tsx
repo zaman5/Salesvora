@@ -1,156 +1,159 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Headphones,
-  Radio,
-  Phone,
-  User,
-  Clock,
-  Mic,
-  MicOff,
-  Eye,
-  PhoneOff,
-  Volume2,
-  AlertTriangle,
-  CalendarDays,
-  Coffee,
-  PlayCircle,
-  Timer,
-  Activity,
+  Headphones, Radio, Phone, User, Clock, Mic,
+  Volume2, AlertTriangle, CalendarDays, Coffee,
+  PlayCircle, Timer, Activity, Eye, EyeOff, UserX, MessageSquare,
 } from "lucide-react";
+
+// ── Live duration ticker (re-renders every second) ──────────────────────────
+function useTicker() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+}
+
+function liveDuration(startedAt: string | null): string {
+  if (!startedAt) return "00:00";
+  const secs = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+const fmtSecs = (secs: number) => {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const sec = secs % 60;
+  if (h > 0) return `${h}h ${m}m ${sec}s`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+};
+
+const fmtTime = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
+
+// ── Audio Wave animation for monitoring indicator ──────────────────────────
+function AudioWave({ active }: { active: boolean }) {
+  return (
+    <div className="flex items-end gap-0.5 h-5">
+      {[1, 2, 3, 4, 3, 2, 1].map((h, i) => (
+        <div
+          key={i}
+          className={`w-1 rounded-full transition-all ${active ? "bg-green-400" : "bg-gray-600"}`}
+          style={{
+            height: active ? `${h * 4}px` : "4px",
+            animationDelay: `${i * 80}ms`,
+            animation: active ? `pulse 0.8s ease-in-out infinite alternate` : "none",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 export default function MonitoringPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
   const companyId = user?.companyId || 1;
 
+  useTicker(); // forces re-render every second for live durations
+
   const [listeningSessionId, setListeningSessionId] = useState<number | null>(null);
-  const [listeningCallId, setListeningCallId] = useState<number | null>(null);
-  const [bargeCallId, setBargeCallId] = useState<number | null>(null);
-
-  // Whisper form states
-  const [whisperCallerId, setWhisperCallerId] = useState<string>("");
-  const [whisperMessage, setWhisperMessage] = useState("");
-
-  // Queries
-  const { data: activeCalls = [] } = trpc.monitoring.activeCalls.useQuery(
-    { companyId },
-    { 
-      enabled: isAdmin,
-      refetchInterval: 3000 // Poll active calls every 3 seconds
-    }
-  );
-  
-  const { data: users = [] } = trpc.user.list.useQuery(undefined, { enabled: isAdmin });
-  const { data: campaigns = [] } = trpc.campaign.list.useQuery(undefined, { enabled: isAdmin });
-
-  // ── Date-wise Caller Day Report ──
+  const [listeningCallId, setListeningCallId]       = useState<number | null>(null);
+  const [bargeCallId, setBargeCallId]               = useState<number | null>(null);
+  const [removingCallId, setRemovingCallId]         = useState<number | null>(null);
+  const [whisperCallerId, setWhisperCallerId]       = useState<string>("");
+  const [whisperMessage, setWhisperMessage]         = useState("");
+  const [whisperSent, setWhisperSent]               = useState(false);
+  const [reportCallerId, setReportCallerId]         = useState<string>("");
   const todayStr = new Date().toISOString().slice(0, 10);
-  const [reportCallerId, setReportCallerId] = useState<string>("");
   const [reportDate, setReportDate] = useState<string>(todayStr);
+
+  // ── Queries ──
+  const { data: activeCalls = [], refetch: refetchCalls } = trpc.monitoring.activeCalls.useQuery(
+    { companyId },
+    { enabled: isAdmin, refetchInterval: 4000 },
+  );
+  const { data: users = [] }     = trpc.user.list.useQuery(undefined, { enabled: isAdmin });
+  const { data: campaigns = [] } = trpc.campaign.list.useQuery(undefined, { enabled: isAdmin });
   const { data: dayReport, isFetching: reportLoading } = trpc.monitoring.callerDayReport.useQuery(
     { callerId: parseInt(reportCallerId) || 0, date: reportDate },
-    { enabled: isAdmin && !!reportCallerId && !!reportDate }
+    { enabled: isAdmin && !!reportCallerId && !!reportDate },
   );
-  const callerUsers = users.filter((u: any) => u.role === "caller" || u.role === "admin");
+  const callerUsers = (users as any[]).filter((u: any) => u.role === "caller" || u.role === "admin");
 
-  const fmtSecs = (secs: number) => {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const sec = secs % 60;
-    if (h > 0) return `${h}h ${m}m ${sec}s`;
-    if (m > 0) return `${m}m ${sec}s`;
-    return `${sec}s`;
-  };
-  const fmtTime = (iso: string | null) =>
-    iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
-
-  // Mutations
+  // ── Mutations ──
   const startListeningMutation = trpc.monitoring.startListening.useMutation();
-  const stopListeningMutation = trpc.monitoring.stopListening.useMutation();
-  const bargeInMutation = trpc.monitoring.bargeIn.useMutation();
-  const whisperMutation = trpc.monitoring.whisper.useMutation();
+  const stopListeningMutation  = trpc.monitoring.stopListening.useMutation();
+  const bargeInMutation        = trpc.monitoring.bargeIn.useMutation();
+  const whisperMutation        = trpc.monitoring.whisper.useMutation();
+  const endCallerCallMutation  = trpc.monitoring.endCallerCall.useMutation({
+    onSuccess: () => { refetchCalls(); setRemovingCallId(null); },
+  });
 
+  // ── Handlers ──
   const handleListen = async (callId: number, callerId: number) => {
     try {
-      const res = await startListeningMutation.mutateAsync({ callId, callerId });
-      setListeningSessionId(res.id);
+      const res = await startListeningMutation.mutateAsync({ callId, callerId }) as any;
+      setListeningSessionId(res.id as number);
       setListeningCallId(callId);
       setBargeCallId(null);
-    } catch (err) {
-      console.error("Failed to start listening:", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
-  const handleStopListening = async () => {
+  const handleStopListening = useCallback(async () => {
     if (listeningSessionId) {
-      try {
-        await stopListeningMutation.mutateAsync({ sessionId: listeningSessionId });
-      } catch (err) {
-        console.error("Failed to stop listening:", err);
-      }
+      try { await stopListeningMutation.mutateAsync({ sessionId: listeningSessionId }); } catch { /* noop */ }
     }
     setListeningSessionId(null);
     setListeningCallId(null);
     setBargeCallId(null);
-  };
+  }, [listeningSessionId, stopListeningMutation]);
 
   const handleBargeIn = async (callId: number, callerId: number) => {
     try {
-      const res = await bargeInMutation.mutateAsync({ callId, callerId });
-      setListeningSessionId(res.id);
+      const res = await bargeInMutation.mutateAsync({ callId, callerId }) as any;
+      setListeningSessionId(res.id as number);
       setListeningCallId(callId);
       setBargeCallId(callId);
-    } catch (err) {
-      console.error("Failed to barge in:", err);
-    }
+    } catch (err) { console.error(err); }
+  };
+
+  const handleRemoveCaller = async (callId: number, callerId: number) => {
+    if (!confirm("Remove this caller from the active call? This will immediately disconnect them.")) return;
+    setRemovingCallId(callId);
+    try {
+      await endCallerCallMutation.mutateAsync({ callId, callerId });
+      // If we were monitoring this call, stop
+      if (listeningCallId === callId) handleStopListening();
+    } catch (err) { console.error(err); setRemovingCallId(null); }
   };
 
   const handleSendWhisper = async () => {
     if (!whisperCallerId || !whisperMessage.trim()) return;
-    const callerId = parseInt(whisperCallerId);
-    const targetCall = activeCalls.find((c: any) => c.callerId === callerId);
-    if (!targetCall) {
-      alert("No active call found for this caller.");
-      return;
-    }
+    const callerId   = parseInt(whisperCallerId);
+    const targetCall = (activeCalls as any[]).find((c: any) => c.callerId === callerId);
+    if (!targetCall) { alert("No active call found for this caller."); return; }
     try {
-      await whisperMutation.mutateAsync({
-        callerId,
-        callId: targetCall.id,
-        message: whisperMessage,
-      });
+      await whisperMutation.mutateAsync({ callerId, callId: targetCall.id, message: whisperMessage });
       setWhisperMessage("");
-      alert("Whisper message sent privately to caller.");
-    } catch (err) {
-      console.error("Failed to whisper:", err);
-    }
+      setWhisperSent(true);
+      setTimeout(() => setWhisperSent(false), 3000);
+    } catch (err) { console.error(err); }
   };
 
-  const formatDuration = (startedAt: string | null) => {
-    if (!startedAt) return "00:00";
-    // eslint-disable-next-line react-hooks/purity
-    const diffMs = Date.now() - new Date(startedAt).getTime();
-    const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
-    const mins = Math.floor(diffSecs / 60);
-    const secs = diffSecs % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  // Lead details resolver matching db.json initial seed
-  const getLeadDetails = (leadId: number) => {
-    const leadsMap: Record<number, { name: string; company: string }> = {
-      1: { name: "Sundar Pichai", company: "Google" },
-      2: { name: "Satya Nadella", company: "Microsoft" },
-      3: { name: "Tim Cook", company: "Apple" },
-      4: { name: "Mark Zuckerberg", company: "Meta" }
-    };
-    return leadsMap[leadId] || { name: `Lead #${leadId}`, company: "Enterprise Target" };
-  };
+  // ── Derived state ──
+  const activeListeningCall   = (activeCalls as any[]).find((c: any) => c.id === listeningCallId) as any;
+  const activeListeningCaller = activeListeningCall
+    ? (users as any[]).find((u: any) => u.id === (activeListeningCall as any).callerId) as any
+    : null;
 
   if (!isAdmin) {
     return (
@@ -161,182 +164,265 @@ export default function MonitoringPage() {
     );
   }
 
-  const activeListeningCall = activeCalls.find((c: any) => c.id === listeningCallId);
-  const activeListeningLead = activeListeningCall ? getLeadDetails(activeListeningCall.leadId) : null;
-  const activeListeningCaller = activeListeningCall ? users.find((u: any) => u.id === activeListeningCall.callerId) : null;
+  // Cast dayReport once so every property access is typed as any
+  const rpt = dayReport as any;
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Live Monitoring</h1>
-          <p className="text-gray-400 mt-1">Listen to active calls in real-time without permission</p>
+          <p className="text-gray-400 mt-1">Listen to active calls, barge in, or remove a caller</p>
         </div>
         <div className="flex items-center gap-2 px-4 py-2 bg-gray-900 rounded-lg border border-gray-800">
-          <Radio className="w-4 h-4 text-green-400 animate-pulse" />
-          <span className="text-sm text-gray-300">{activeCalls.length} active calls</span>
+          <Radio className={`w-4 h-4 ${(activeCalls as any[]).length > 0 ? "text-green-400 animate-pulse" : "text-gray-600"}`} />
+          <span className="text-sm text-gray-300">{(activeCalls as any[]).length} active call{(activeCalls as any[]).length !== 1 ? "s" : ""}</span>
         </div>
       </div>
 
-      {/* Active Monitoring Sessions */}
+      {/* ── Active Monitoring Session banner ── */}
       {listeningCallId && activeListeningCall && (
-        <Card className="bg-gray-900 border-blue-800/50">
+        <Card className="bg-gray-900 border-blue-600/40 shadow-lg shadow-blue-900/20">
           <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center animate-pulse">
-                <Headphones className="w-6 h-6 text-blue-400" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-white font-medium">Listening to call #{listeningCallId}</p>
-                  <Badge className="bg-blue-500/20 text-blue-400 animate-pulse">Live</Badge>
+            <div className="flex items-center gap-4 flex-wrap">
+              {/* Animated headphones icon */}
+              <div className="relative shrink-0">
+                <div className="w-14 h-14 rounded-full bg-blue-500/20 flex items-center justify-center">
+                  <Headphones className="w-7 h-7 text-blue-400" />
                 </div>
-                <p className="text-sm text-gray-400">
-                  {activeListeningCaller?.name || `Caller ${activeListeningCall.callerId}`} → {activeListeningLead?.name} ({activeListeningLead?.company})
+                <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-500" />
+                </span>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-white font-semibold">
+                    {bargeCallId ? "Barged into call" : "Monitoring call"}
+                  </p>
+                  <Badge className="bg-blue-500/20 text-blue-400 border-0 animate-pulse">● Live</Badge>
+                  {bargeCallId && <Badge className="bg-purple-500/20 text-purple-400 border-0">Barge Mode</Badge>}
+                </div>
+                <p className="text-sm text-gray-400 mt-0.5">
+                  <span className="font-medium text-gray-200">{activeListeningCaller?.name || `Caller #${activeListeningCall.callerId}`}</span>
+                  <span className="text-gray-500"> → </span>
+                  <span className="font-mono text-blue-300">{activeListeningCall.toNumber}</span>
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5 font-mono">
+                  Duration: {liveDuration(activeListeningCall.startedAt)}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Audio wave */}
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <AudioWave active />
+                <p className="text-[10px] text-gray-500">Audio stream</p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 shrink-0">
                 <Volume2 className="w-5 h-5 text-green-400" />
                 {!bargeCallId && (
                   <Button
-                    variant="outline"
                     size="sm"
-                    className="border-purple-600/30 text-purple-400 hover:bg-purple-600/20"
+                    className="bg-purple-600 hover:bg-purple-700 text-white h-9"
                     onClick={() => handleBargeIn(activeListeningCall.id, activeListeningCall.callerId)}
                   >
                     <Mic className="w-4 h-4 mr-1" /> Barge In
                   </Button>
                 )}
                 <Button
-                  variant="outline"
                   size="sm"
-                  className="border-red-600/30 text-red-400 hover:bg-red-600/20"
+                  className="bg-gray-700 hover:bg-gray-600 text-white h-9"
                   onClick={handleStopListening}
                 >
-                  <PhoneOff className="w-4 h-4 mr-1" /> Stop
+                  <EyeOff className="w-4 h-4 mr-1" /> Stop Listening
                 </Button>
               </div>
             </div>
+
+            {/* Barge-mode note */}
             {bargeCallId && (
-              <div className="mt-3 p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
-                <div className="flex items-center gap-2">
-                  <Mic className="w-4 h-4 text-purple-400" />
-                  <p className="text-sm text-purple-300 font-medium">Barge Mode Active</p>
-                  <Badge className="bg-purple-500/20 text-purple-400 text-xs animate-pulse">Speaking</Badge>
-                </div>
-                <p className="text-xs text-purple-400/70 mt-1">Both caller and lead can hear you</p>
+              <div className="mt-3 flex items-center gap-2 bg-purple-500/10 border border-purple-500/20 rounded-xl px-4 py-2">
+                <Mic className="w-4 h-4 text-purple-400 shrink-0" />
+                <p className="text-sm text-purple-300">
+                  <span className="font-semibold">Barge active</span> — both your caller and the lead can now hear you.
+                </p>
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* Active Calls Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {activeCalls.map((call: any) => {
-          const caller = users.find((u: any) => u.id === call.callerId);
-          const lead = getLeadDetails(call.leadId);
-          const campaign = campaigns.find((c: any) => c.id === call.campaignId);
+      {/* ── Active Calls Grid ── */}
+      <div>
+        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Active Calls</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {(activeCalls as any[]).map((call: any) => {
+            const caller   = (users as any[]).find((u: any) => u.id === call.callerId) as any;
+            const campaign = (campaigns as any[]).find((c: any) => c.id === call.campaignId) as any;
+            const isMonitoring = listeningCallId === call.id;
+            const isRemoving   = removingCallId === call.id;
 
-          return (
-            <Card key={call.id} className={`bg-gray-900 border-gray-800 ${listeningCallId === call.id ? "ring-1 ring-blue-600" : ""}`}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                      <Phone className="w-5 h-5 text-green-400" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-white">{caller?.name || `Caller ${call.callerId}`}</p>
-                        <Badge className="bg-gray-700 text-gray-300 text-xs">ID: {call.callerId}</Badge>
+            return (
+              <Card
+                key={call.id}
+                className={`bg-gray-900 border-gray-800 transition-all ${
+                  isMonitoring ? "ring-2 ring-blue-500/60 border-blue-800/40" : "hover:border-gray-700"
+                }`}
+              >
+                <CardContent className="p-4 space-y-3">
+                  {/* Top row: caller info + status */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <div className="w-11 h-11 rounded-full bg-green-500/15 border border-green-500/30 flex items-center justify-center">
+                          <User className="w-5 h-5 text-green-400" />
+                        </div>
+                        {/* Live indicator */}
+                        <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-60" />
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+                        </span>
                       </div>
-                      <p className="text-xs text-gray-500 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatDuration(call.startedAt)}
-                      </p>
+                      <div>
+                        <p className="text-sm font-semibold text-white">
+                          {caller?.name || `Caller #${call.callerId}`}
+                        </p>
+                        <p className="text-xs text-gray-500">{caller?.email || `ID: ${call.callerId}`}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge className="bg-green-500/20 text-green-400 border-0">● Live</Badge>
+                      <span className="text-xs font-mono text-gray-400">{liveDuration(call.startedAt)}</span>
                     </div>
                   </div>
-                  <Badge className={call.status === "connected" ? "bg-green-500/20 text-green-400 animate-pulse" : "bg-blue-500/20 text-blue-400"}>
-                    {call.status}
-                  </Badge>
-                </div>
 
-                <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <User className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm text-gray-300">{lead.name}</span>
-                    <span className="text-xs text-gray-500">| {lead.company}</span>
+                  {/* Call details */}
+                  <div className="bg-gray-800 rounded-xl p-3 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                      <span className="text-sm font-mono text-white">{call.toNumber || "Unknown"}</span>
+                    </div>
+                    {call.fromNumber && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                        <span className="text-xs text-gray-500">from {call.fromNumber}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                      <span className="text-xs text-gray-500">{campaign?.name || "Manual Dialer"}</span>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-500 ml-6">{call.toNumber}</p>
-                </div>
 
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">{campaign?.name || "Manual Dialer"}</span>
-                  <div className="flex gap-2">
-                    {listeningCallId === call.id ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-red-600/30 text-red-400 hover:bg-red-600/20 h-8"
-                        onClick={handleStopListening}
-                      >
-                        <MicOff className="w-4 h-4 mr-1" /> Stop
-                      </Button>
+                  {/* Audio wave when monitoring */}
+                  {isMonitoring && (
+                    <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
+                      <Volume2 className="w-4 h-4 text-blue-400 shrink-0" />
+                      <AudioWave active />
+                      <span className="text-xs text-blue-400 ml-1">Listening live</span>
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2 pt-1">
+                    {isMonitoring ? (
+                      <>
+                        {!bargeCallId && (
+                          <Button size="sm" className="bg-purple-600 hover:bg-purple-700 text-white flex-1"
+                            onClick={() => handleBargeIn(call.id, call.callerId)}>
+                            <Mic className="w-3.5 h-3.5 mr-1" /> Barge In
+                          </Button>
+                        )}
+                        <Button size="sm" className="bg-gray-700 hover:bg-gray-600 text-white flex-1"
+                          onClick={handleStopListening}>
+                          <EyeOff className="w-3.5 h-3.5 mr-1" /> Stop
+                        </Button>
+                      </>
                     ) : (
                       <>
+                        {/* Listen */}
                         <Button
-                          variant="outline"
                           size="sm"
-                          className="border-blue-600/30 text-blue-400 hover:bg-blue-600/20 h-8"
+                          className="bg-blue-600 hover:bg-blue-700 text-white flex-1"
                           onClick={() => handleListen(call.id, call.callerId)}
+                          disabled={startListeningMutation.isPending}
                         >
-                          <Eye className="w-4 h-4 mr-1" /> Listen
+                          <Eye className="w-3.5 h-3.5 mr-1" /> Listen
                         </Button>
+
+                        {/* Barge */}
                         <Button
-                          variant="outline"
                           size="sm"
-                          className="border-purple-600/30 text-purple-400 hover:bg-purple-600/20 h-8"
+                          className="bg-purple-600 hover:bg-purple-700 text-white flex-1"
                           onClick={() => handleBargeIn(call.id, call.callerId)}
                         >
-                          <Mic className="w-4 h-4 mr-1" /> Barge
+                          <Mic className="w-3.5 h-3.5 mr-1" /> Barge In
+                        </Button>
+
+                        {/* Remove caller */}
+                        <Button
+                          size="sm"
+                          className="bg-red-700 hover:bg-red-600 text-white"
+                          onClick={() => handleRemoveCaller(call.id, call.callerId)}
+                          disabled={isRemoving}
+                          title="Remove caller — force-end this call"
+                        >
+                          {isRemoving
+                            ? <span className="animate-spin text-sm">⟳</span>
+                            : <UserX className="w-3.5 h-3.5" />}
                         </Button>
                       </>
                     )}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-        {activeCalls.length === 0 && (
-          <div className="col-span-2 text-center py-12 text-gray-500">
-            No active calls currently in progress.
-          </div>
-        )}
+
+                  {/* Remove caller label hint */}
+                  {!isMonitoring && (
+                    <p className="text-[10px] text-gray-600 text-right">
+                      <UserX className="w-2.5 h-2.5 inline mr-0.5" /> = Remove caller from call
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          {(activeCalls as any[]).length === 0 && (
+            <div className="col-span-2 text-center py-16 text-gray-600">
+              <Radio className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No active calls right now.</p>
+              <p className="text-xs mt-1 opacity-70">This panel refreshes automatically every 4 seconds.</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Whisper Feature */}
+      {/* ── Whisper Feature ── */}
       <Card className="bg-gray-900 border-gray-800">
-        <CardHeader>
-          <CardTitle className="text-white text-base">Whisper to Caller</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-gray-400 mb-3">
-            Send a private message to a caller that only they can hear. The lead will not hear this message.
+        <CardHeader className="pb-3">
+          <CardTitle className="text-white text-base flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-blue-400" /> Whisper to Caller
+          </CardTitle>
+          <p className="text-sm text-gray-400">
+            Send a private text message to a caller — only they will see it, not the lead.
           </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
           <div className="flex flex-col sm:flex-row gap-2">
-            <select 
+            <select
               value={whisperCallerId}
               onChange={(e) => setWhisperCallerId(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-white"
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
             >
-              <option value="">Select caller...</option>
-              {activeCalls.map((c: any) => {
-                const callerObj = users.find((u: any) => u.id === c.callerId);
+              <option value="">Select caller…</option>
+              {(activeCalls as any[]).map((c: any) => {
+                const callerObj = (users as any[]).find((u: any) => u.id === c.callerId) as any;
                 return (
                   <option key={c.callerId} value={c.callerId}>
-                    {callerObj?.name || `Caller ${c.callerId}`} (Call #{c.id})
+                    {callerObj?.name || `Caller ${c.callerId}`} · {c.toNumber}
                   </option>
                 );
               })}
@@ -345,21 +431,27 @@ export default function MonitoringPage() {
               type="text"
               value={whisperMessage}
               onChange={(e) => setWhisperMessage(e.target.value)}
-              placeholder="Type message..."
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-white"
+              onKeyDown={(e) => e.key === "Enter" && handleSendWhisper()}
+              placeholder="Type message to caller…"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600"
             />
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 h-auto" onClick={handleSendWhisper}>
-              <Headphones className="w-4 h-4 mr-1" /> Send Whisper
+            <Button
+              className={`h-auto px-4 text-white ${whisperSent ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700"}`}
+              onClick={handleSendWhisper}
+              disabled={!whisperCallerId || !whisperMessage.trim()}
+            >
+              <Headphones className="w-4 h-4 mr-1" />
+              {whisperSent ? "Sent ✓" : "Send"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* ─── Date-wise Caller Day Report ─── */}
+      {/* ── Day Report ── */}
       <Card className="bg-gray-900 border-gray-800">
         <CardHeader>
           <CardTitle className="text-white text-lg flex items-center gap-2">
-            <CalendarDays className="w-5 h-5 text-blue-400" /> Caller Day Report (Date-wise)
+            <CalendarDays className="w-5 h-5 text-blue-400" /> Caller Day Report
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -367,9 +459,9 @@ export default function MonitoringPage() {
             <select
               value={reportCallerId}
               onChange={(e) => setReportCallerId(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-white"
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
             >
-              <option value="">Select caller...</option>
+              <option value="">Select caller…</option>
               {callerUsers.map((u: any) => (
                 <option key={u.id} value={u.id}>{u.name || u.email || `User #${u.id}`}</option>
               ))}
@@ -379,65 +471,45 @@ export default function MonitoringPage() {
               value={reportDate}
               max={todayStr}
               onChange={(e) => setReportDate(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-white"
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
             />
-            {reportLoading && <span className="text-sm text-gray-500 self-center animate-pulse">Loading report...</span>}
+            {reportLoading && <span className="text-sm text-gray-500 self-center animate-pulse">Loading…</span>}
           </div>
 
-          {dayReport && reportCallerId && (
+          {rpt && reportCallerId ? (
             <>
-              {/* Summary Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                <div className="bg-gray-800/60 rounded-lg p-3 text-center">
-                  <Clock className="w-4 h-4 text-blue-400 mx-auto mb-1" />
-                  <p className="text-sm font-bold text-white">{fmtTime(dayReport.dayStartTime)}</p>
-                  <p className="text-[10px] text-gray-400">Day Start (1st Call)</p>
-                </div>
-                <div className="bg-gray-800/60 rounded-lg p-3 text-center">
-                  <Clock className="w-4 h-4 text-purple-400 mx-auto mb-1" />
-                  <p className="text-sm font-bold text-white">{fmtTime(dayReport.dayEndTime)}</p>
-                  <p className="text-[10px] text-gray-400">Last Activity</p>
-                </div>
-                <div className="bg-gray-800/60 rounded-lg p-3 text-center">
-                  <Phone className="w-4 h-4 text-green-400 mx-auto mb-1" />
-                  <p className="text-sm font-bold text-white">{dayReport.totalCalls}</p>
-                  <p className="text-[10px] text-gray-400">Total Calls ({dayReport.connectedCalls} connected)</p>
-                </div>
-                <div className="bg-gray-800/60 rounded-lg p-3 text-center">
-                  <Timer className="w-4 h-4 text-cyan-400 mx-auto mb-1" />
-                  <p className="text-sm font-bold text-white">{fmtSecs(dayReport.totalTalkTime)}</p>
-                  <p className="text-[10px] text-gray-400">Total Talk Time</p>
-                </div>
-                <div className="bg-gray-800/60 rounded-lg p-3 text-center">
-                  <Coffee className="w-4 h-4 text-amber-400 mx-auto mb-1" />
-                  <p className="text-sm font-bold text-white">{fmtSecs(dayReport.totalIdleTime)}</p>
-                  <p className="text-[10px] text-gray-400">Free / Pause Time</p>
-                </div>
-                <div className="bg-gray-800/60 rounded-lg p-3 text-center">
-                  <Activity className="w-4 h-4 text-rose-400 mx-auto mb-1" />
-                  <p className="text-sm font-bold text-white">{fmtSecs(dayReport.avgCallDuration)}</p>
-                  <p className="text-[10px] text-gray-400">Avg Call Duration</p>
-                </div>
+                {[
+                  { icon: Clock, color: "text-blue-400", label: "Day Start", value: fmtTime(rpt.dayStartTime) },
+                  { icon: Clock, color: "text-purple-400", label: "Last Activity", value: fmtTime(rpt.dayEndTime) },
+                  { icon: Phone, color: "text-green-400", label: `Total (${rpt.connectedCalls} conn.)`, value: String(rpt.totalCalls) },
+                  { icon: Timer, color: "text-cyan-400", label: "Talk Time", value: fmtSecs(rpt.totalTalkTime) },
+                  { icon: Coffee, color: "text-amber-400", label: "Idle Time", value: fmtSecs(rpt.totalIdleTime) },
+                  { icon: Activity, color: "text-rose-400", label: "Avg Duration", value: fmtSecs(rpt.avgCallDuration) },
+                ].map(({ icon: Icon, color, label, value }) => (
+                  <div key={label} className="bg-gray-800 rounded-xl p-3 text-center">
+                    <Icon className={`w-4 h-4 ${color} mx-auto mb-1`} />
+                    <p className="text-sm font-bold text-white">{value}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{label}</p>
+                  </div>
+                ))}
               </div>
 
-              {/* Timeline */}
-              {dayReport.timeline.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 text-sm">
-                  No calls recorded on {reportDate} for this caller.
-                </div>
+              {rpt.timeline.length === 0 ? (
+                <p className="text-center py-8 text-gray-500 text-sm">No calls on {reportDate}.</p>
               ) : (
                 <div className="space-y-2 max-h-[480px] overflow-y-auto pr-2">
-                  {dayReport.timeline.map((item: any, i: number) =>
+                  {rpt.timeline.map((item: any, i: number) =>
                     item.type === "idle" ? (
                       <div key={i} className="flex items-center gap-3 pl-6 py-1">
                         <div className="w-px h-6 bg-amber-600/40 ml-3" />
                         <Coffee className="w-3.5 h-3.5 text-amber-500" />
                         <span className="text-xs text-amber-400/90">
-                          Free / Pause — {fmtSecs(item.seconds)} ({fmtTime(item.from)} → {fmtTime(item.to)})
+                          Idle — {fmtSecs(item.seconds)} ({fmtTime(item.from)} → {fmtTime(item.to)})
                         </span>
                       </div>
                     ) : (
-                      <div key={i} className="bg-gray-800/40 border border-gray-800 rounded-lg p-3">
+                      <div key={i} className="bg-gray-800/50 border border-gray-800 rounded-xl p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-3">
                             <div className="w-7 h-7 rounded-full bg-blue-600/20 flex items-center justify-center text-xs font-bold text-blue-400">
@@ -445,16 +517,16 @@ export default function MonitoringPage() {
                             </div>
                             <div>
                               <p className="text-sm text-white font-medium">
-                                {item.toNumber}{" "}
-                                <Badge className={`ml-1 text-[10px] ${
+                                {item.toNumber}
+                                <Badge className={`ml-2 text-[10px] ${
                                   item.status === "completed" || item.status === "connected"
-                                    ? "bg-green-500/20 text-green-400"
-                                    : "bg-gray-600/30 text-gray-400"
+                                    ? "bg-green-500/20 text-green-400 border-0"
+                                    : "bg-gray-600/30 text-gray-400 border-0"
                                 }`}>{item.status}</Badge>
-                                <Badge className="ml-1 text-[10px] bg-purple-500/20 text-purple-400">{item.callType}</Badge>
+                                <Badge className="ml-1 text-[10px] bg-purple-500/20 text-purple-400 border-0">{item.callType}</Badge>
                               </p>
                               <p className="text-[11px] text-gray-500">
-                                {fmtTime(item.startedAt)} → {fmtTime(item.endedAt)} · Duration: {fmtSecs(item.duration)}
+                                {fmtTime(item.startedAt)} → {fmtTime(item.endedAt)} · {fmtSecs(item.duration)}
                               </p>
                             </div>
                           </div>
@@ -475,10 +547,9 @@ export default function MonitoringPage() {
                 </div>
               )}
             </>
-          )}
-          {!reportCallerId && (
-            <p className="text-sm text-gray-500 text-center py-4">
-              Select a caller and a date to view their complete day performance — start time, every call with duration and recording, plus all free/pause gaps.
+          ) : (
+            <p className="text-sm text-gray-500 text-center py-6">
+              Select a caller and date to view their full-day performance.
             </p>
           )}
         </CardContent>
