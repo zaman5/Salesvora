@@ -567,12 +567,12 @@ export default function CampaignsPage() {
                   </Button>
 
                   {campaign.status === "running" ? (
-                    <Button size="sm" className="bg-amber-600/20 text-amber-400 hover:bg-amber-600/30"
+                    <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"
                       onClick={() => pauseCampaignMutation.mutate({ id: campaign.id })}>
                       <Pause className="w-4 h-4 mr-1" /> Pause
                     </Button>
                   ) : (campaign.status === "paused" || campaign.status === "draft") ? (
-                    <Button size="sm" className="bg-green-600/20 text-green-400 hover:bg-green-600/30"
+                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white"
                       onClick={() => startCampaignMutation.mutate({ id: campaign.id })}>
                       <Play className="w-4 h-4 mr-1" /> Start
                     </Button>

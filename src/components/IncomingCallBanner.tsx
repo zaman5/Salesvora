@@ -146,8 +146,7 @@ export function IncomingCallBanner({ callerNumber, onAnswer, onDecline }: Props)
             <div className="grid grid-cols-2 gap-3">
               <Button
                 onClick={handleDecline}
-                className="h-14 flex-col gap-1 bg-red-600/15 hover:bg-red-600 border border-red-600/40 text-red-400 hover:text-white transition-all rounded-xl"
-                variant="outline"
+                className="h-14 flex-col gap-1 bg-red-700 hover:bg-red-600 text-white transition-all rounded-xl border-0"
               >
                 <PhoneOff className="w-5 h-5" />
                 <span className="text-xs font-semibold">Decline</span>

@@ -50,8 +50,8 @@ export function ActiveCallBar({ callerNumber, onHangup, isMuted, onToggleMute }:
         onClick={onToggleMute}
         className={`h-8 px-3 rounded-lg font-medium text-xs transition-colors ${
           isMuted
-            ? "bg-red-600/80 hover:bg-red-600 text-white border-0"
-            : "bg-green-700 hover:bg-green-600 text-green-100 border border-green-600/50"
+            ? "bg-red-600 hover:bg-red-700 text-white border-0"
+            : "bg-white/20 hover:bg-white/30 text-white border-0"
         }`}
         variant="ghost"
       >

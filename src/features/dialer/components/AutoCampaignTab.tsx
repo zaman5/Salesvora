@@ -373,9 +373,9 @@ export function AutoCampaignTab() {
         ) : (
           <>
             {isPaused
-              ? <Button className="bg-green-600 hover:bg-green-700 h-9" onClick={resumeDialer}><Play className="w-4 h-4 mr-2" /> Resume</Button>
-              : <Button variant="outline" className="border-amber-600/30 text-amber-400 hover:bg-amber-600/20 h-9" onClick={pauseDialer}><Pause className="w-4 h-4 mr-2" /> Pause</Button>}
-            <Button variant="outline" className="border-red-600/30 text-red-400 hover:bg-red-600/20 h-9" onClick={stopDialer}>
+              ? <Button className="bg-green-600 hover:bg-green-700 text-white h-9" onClick={resumeDialer}><Play className="w-4 h-4 mr-2" /> Resume</Button>
+              : <Button className="bg-amber-500 hover:bg-amber-600 text-white h-9" onClick={pauseDialer}><Pause className="w-4 h-4 mr-2" /> Pause</Button>}
+            <Button className="bg-red-600 hover:bg-red-700 text-white h-9" onClick={stopDialer}>
               <PhoneOff className="w-4 h-4 mr-2" /> Stop
             </Button>
           </>
@@ -575,7 +575,7 @@ export function AutoCampaignTab() {
                       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                       {(dispositions as any[]).map((disp) => (
                         <Button key={disp.id} size="sm" onClick={() => handleDisposition(disp.id.toString())}
-                          className="bg-gray-800 hover:bg-gray-700 text-white justify-start h-10 border border-gray-700 hover:border-gray-500 transition-colors">
+                          className="bg-gray-700 hover:bg-gray-600 text-white justify-start h-10 border border-gray-500 transition-colors">
                           {getDispIcon(disp.category)}
                           <span className="ml-2 truncate text-sm">{disp.label}</span>
                         </Button>

@@ -202,7 +202,7 @@ export default function Dashboard() {
                   key={action.label}
                   variant="outline"
                   onClick={() => navigate(action.path)}
-                  className="h-auto p-4 bg-gray-800/50 border-gray-700 hover:bg-gray-800 hover:border-gray-600 justify-start text-left"
+                  className="h-auto p-4 bg-gray-800 border-gray-600 hover:bg-gray-700 hover:border-gray-500 justify-start text-left"
                 >
                   <div className={`w-10 h-10 rounded-lg bg-gray-700 flex items-center justify-center mr-3 flex-shrink-0`}>
                     <action.icon className="w-5 h-5 text-blue-400" />
