@@ -64,16 +64,31 @@ export const integrationRouter = createRouter({
           : phones.filter((p) => p.status !== "inactive" && p.number).map((p) => p.number);
       for (const n of visible) numbers.add(n);
     }
+    // Per-caller SIP credentials — each caller registers independently so
+    // multiple callers can be on calls at the same time without kicking each
+    // other off. If the user has their own Telnyx SIP credential stored
+    // (domain !== "local"), use it; otherwise fall back to the global one.
+    const userSip = (ctx.user as any)?.sipCredentials as
+      { username?: string; password?: string; domain?: string } | undefined | null;
+    const hasDedicatedSip =
+      Boolean(userSip?.username && userSip?.password && userSip?.domain === "telnyx");
+
+    const webrtcLogin    = hasDedicatedSip ? (userSip!.username ?? "") : (cfg?.sipUsername ?? "");
+    const webrtcPassword = hasDedicatedSip ? (userSip!.password ?? "") : (cfg?.sipPassword ?? "");
+
     return {
       enabled: Boolean(cfg?.enabled && cfg?.apiKey && cfg?.connectionId),
       defaultCallerId: cfg?.defaultCallerId ?? "",
       fromNumbers: Array.from(numbers),
       connectionName: cfg?.connectionName ?? "",
-      // Browser calling (WebRTC). The browser SIP client needs these to register.
+      channelLimit: cfg?.channelLimit ?? null,
+      // Per-caller WebRTC credentials — each caller registers with their own
+      // SIP username so concurrent calls don't interfere.
       webrtc: {
-        enabled: Boolean(cfg?.webrtcEnabled && cfg?.sipUsername && cfg?.sipPassword),
-        login: cfg?.sipUsername ?? "",
-        password: cfg?.sipPassword ?? "",
+        enabled: Boolean(cfg?.webrtcEnabled && webrtcLogin && webrtcPassword),
+        login:    webrtcLogin,
+        password: webrtcPassword,
+        isShared: !hasDedicatedSip, // true = all callers share one credential (risky)
       },
     };
   }),

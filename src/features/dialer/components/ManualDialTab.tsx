@@ -300,12 +300,21 @@ export function ManualDialTab() {
       {/* ── LEFT: Dial Pad ── */}
       <div className="space-y-3">
         {webrtcOn && (
-          <p className="text-xs">
-            <span className={rtc.status === "registered" ? "text-green-400" : rtc.status === "connecting" ? "text-yellow-400" : "text-red-400"}>
-              ● {rtc.status === "registered" ? "Ready" : rtc.status === "connecting" ? "Connecting…" : "Not connected"}
-            </span>
-            {rtc.error && <span className="text-red-400"> — {rtc.error}</span>}
-          </p>
+          <div className="space-y-1">
+            <p className="text-xs">
+              <span className={rtc.status === "registered" ? "text-green-400" : rtc.status === "connecting" ? "text-yellow-400" : "text-red-400"}>
+                ● {rtc.status === "registered" ? "Ready" : rtc.status === "connecting" ? "Connecting…" : "Not connected"}
+              </span>
+              {rtc.error && <span className="text-red-400"> — {rtc.error}</span>}
+            </p>
+            {/* Warn if all callers share one SIP credential (concurrent calling issue) */}
+            {(dialerConfig as any)?.webrtc?.isShared && rtc.status === "registered" && (
+              <p className="text-[11px] text-amber-400 flex items-start gap-1 leading-relaxed">
+                ⚠ Shared SIP credential — if another caller logs in, your call may disconnect.
+                Ask your admin to assign you a dedicated Telnyx SIP credential.
+              </p>
+            )}
+          </div>
         )}
 
         <Card className="bg-gray-900 border-gray-800 p-5">

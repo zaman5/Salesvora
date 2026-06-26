@@ -81,15 +81,20 @@ export const userRouter = createRouter({
         dailyCallLimit: z.number().optional(),
         permissions: z.array(z.string()).optional(),
         password: z.string().optional(),
+        // Per-caller Telnyx SIP credentials for concurrent WebRTC calling
+        sipUsername: z.string().optional(),
+        sipTelnyxPassword: z.string().optional(),
       }).partial(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertUserInScope(ctx, input.id);
-      // Granting the superadmin role is reserved for existing superadmins.
       if (input.data.role === "superadmin" && !isSuperAdmin(ctx.user)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can grant the superadmin role." });
       }
-      const updateData: Record<string, unknown> = { ...input.data };
+      const { sipUsername, sipTelnyxPassword, ...rest } = input.data;
+      const updateData: Record<string, unknown> = { ...rest };
+
+      // Login password → local sipCredentials (for authentication)
       if (updateData.password) {
         updateData.sipCredentials = {
           username: (updateData.email as string) || "",
@@ -97,6 +102,19 @@ export const userRouter = createRouter({
           domain: "local",
         };
       }
+
+      // Per-caller Telnyx SIP credential → domain = "telnyx" so getDialerConfig
+      // picks it up for independent WebRTC registration (concurrent calling).
+      if (sipUsername || sipTelnyxPassword) {
+        const existing = await findUserById(input.id);
+        const cur = (existing as any)?.sipCredentials ?? {};
+        updateData.sipCredentials = {
+          username: sipUsername ?? cur.username ?? "",
+          password: sipTelnyxPassword ?? cur.password ?? "",
+          domain: "telnyx",
+        };
+      }
+
       await updateUser(input.id, updateData);
       return { success: true };
     }),

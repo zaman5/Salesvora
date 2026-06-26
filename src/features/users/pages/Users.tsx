@@ -59,8 +59,10 @@ export default function UsersPage() {
     name: "", email: "", phone: "", role: "caller" as string,
     dailyCallLimit: 200, password: "",
   });
-  const [editPhoneIds, setEditPhoneIds] = useState<number[]>([]);
-  const [editListIds,  setEditListIds]  = useState<number[]>([]);
+  const [editPhoneIds,      setEditPhoneIds]      = useState<number[]>([]);
+  const [editListIds,       setEditListIds]        = useState<number[]>([]);
+  const [editSipUsername,   setEditSipUsername]   = useState("");
+  const [editSipPassword,   setEditSipPassword]   = useState("");
 
   // ── Data queries ──
   const { data: usersList = [], refetch } = trpc.user.list.useQuery(undefined, { enabled: isAdmin });
@@ -140,6 +142,10 @@ export default function UsersPage() {
       role: u.role || "caller", dailyCallLimit: u.dailyCallLimit ?? 200, password: "" });
     setEditPhoneIds(phones.filter((p) => p.assignedTo === u.id).map((p) => p.id));
     setEditListIds([]);
+    // Pre-fill per-caller Telnyx SIP credentials if already set
+    const sip = u.sipCredentials;
+    setEditSipUsername(sip?.domain === "telnyx" ? (sip.username ?? "") : "");
+    setEditSipPassword("");  // never pre-fill password for security
     setShowEdit(true);
   };
 
@@ -155,6 +161,9 @@ export default function UsersPage() {
           role: editUserData.role as any,
           dailyCallLimit: editUserData.dailyCallLimit,
           password: editUserData.password || undefined,
+          // Per-caller Telnyx SIP creds (only send if filled in)
+          sipUsername:        editSipUsername.trim()  || undefined,
+          sipTelnyxPassword:  editSipPassword.trim()  || undefined,
         },
       });
 
@@ -178,6 +187,7 @@ export default function UsersPage() {
       setShowEdit(false);
       setEditingUser(null);
       setEditPhoneIds([]); setEditListIds([]);
+      setEditSipUsername(""); setEditSipPassword("");
     } catch (err) { console.error(err); }
   };
 
@@ -396,6 +406,47 @@ export default function UsersPage() {
                   placeholder="Leave blank to keep current password"
                   className="bg-gray-800 border-gray-700 text-white mt-1" />
               </div>
+
+              {/* ── Telnyx SIP Credentials (caller-only, for concurrent WebRTC calling) ── */}
+              {editUserData.role === "caller" && (
+                <div className="border border-blue-800/40 bg-blue-900/10 rounded-xl p-3 space-y-3">
+                  <div>
+                    <p className="text-xs font-semibold text-blue-400 mb-0.5">
+                      Telnyx SIP Credentials — Concurrent Calling
+                    </p>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Assign a unique Telnyx SIP username &amp; password to each caller so they can
+                      all make calls simultaneously without disconnecting each other.
+                      Create these in your{" "}
+                      <span className="text-blue-400">Telnyx portal → Credential Connections</span>.
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-gray-300 text-xs">Telnyx SIP Username</Label>
+                    <Input
+                      value={editSipUsername}
+                      onChange={(e) => setEditSipUsername(e.target.value)}
+                      placeholder="e.g. caller1@yourcompany.sip.telnyx.com"
+                      className="bg-gray-800 border-gray-700 text-white mt-1 text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-gray-300 text-xs">Telnyx SIP Password</Label>
+                    <Input
+                      type="password"
+                      value={editSipPassword}
+                      onChange={(e) => setEditSipPassword(e.target.value)}
+                      placeholder="Leave blank to keep existing"
+                      className="bg-gray-800 border-gray-700 text-white mt-1 text-sm"
+                    />
+                  </div>
+                  {editingUser?.sipCredentials?.domain === "telnyx" && !editSipUsername && (
+                    <p className="text-[11px] text-green-400">
+                      ✓ Dedicated SIP credentials already set for this caller.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Phone + Lead List assignment — only for caller role */}
               <PhoneAssignSection role={editUserData.role} selectedIds={editPhoneIds} onChange={setEditPhoneIds} />
