@@ -13,7 +13,8 @@ import {
 import {
   Radio, PhoneOff, Phone, PhoneCall, CheckCircle2, XCircle, Ban,
   Disc, Square, Download, Mic, MicOff, Hash, Save, SkipForward,
-  PhoneIncoming, PhoneMissed, ChevronLeft,
+  PhoneIncoming, PhoneMissed, ChevronLeft, ChevronDown, ChevronUp,
+  FileText, Mic2,
 } from "lucide-react";
 import { formatDur } from "./shared";
 
@@ -25,8 +26,13 @@ type CallRecord = {
   type?: string;
   duration?: number;
   dispositionId?: number | null;
+  notes?: string;
+  callDescription?: string;
+  recordingUrl?: string;
   createdAt?: string;
 };
+
+type Disposition = { id: number; label?: string; category: string };
 
 export function ManualDialTab() {
   const { user } = useAuth();
@@ -49,6 +55,9 @@ export function ManualDialTab() {
   const recorder = useCallRecorder();
   const [savedRecordingDataUrl, setSavedRecordingDataUrl] = useState<string | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
+
+  // Expanded call record id for showing notes/recording/disposition
+  const [expandedCallId, setExpandedCallId] = useState<number | null>(null);
 
   const { data: dispositions = [] } = trpc.calls.dispositions.useQuery({ companyId });
   const { data: dialerConfig } = trpc.integration.getDialerConfig.useQuery();
@@ -241,7 +250,7 @@ export function ManualDialTab() {
         duration: rec.duration, fileSize: blobSize, format: "webm",
       });
     }
-    setTimeout(() => refetchCallLogs(), 800);
+    setTimeout(() => refetchCallLogs(), 1000);
   };
 
   const getDispIcon = (cat: string) => {
@@ -250,6 +259,16 @@ export function ManualDialTab() {
     if (cat === "machine" || cat === "voicemail") return <Radio className="w-4 h-4" />;
     if (cat === "wrong_number") return <Hash className="w-4 h-4" />;
     return <Ban className="w-4 h-4" />;
+  };
+
+  const getDispColor = (cat: string) => {
+    if (cat === "connected" || cat === "converted") return "bg-green-500/20 text-green-400 border-0";
+    if (cat === "no_answer") return "bg-amber-500/20 text-amber-400 border-0";
+    if (cat === "machine" || cat === "voicemail") return "bg-blue-500/20 text-blue-400 border-0";
+    if (cat === "wrong_number") return "bg-pink-500/20 text-pink-400 border-0";
+    if (cat === "not_interested" || cat === "dnc") return "bg-red-500/20 text-red-400 border-0";
+    if (cat === "callback") return "bg-purple-500/20 text-purple-400 border-0";
+    return "bg-gray-500/20 text-gray-400 border-0";
   };
 
   const formatTimeAgo = (createdAt?: string) => {
@@ -265,12 +284,15 @@ export function ManualDialTab() {
   };
 
   const getCallRowStyle = (status: string) => {
-    if (status === "completed" || status === "connected") return { bg: "bg-green-500/10", icon: <Phone className="w-4 h-4 text-green-400" />, label: "Connected", labelClass: "text-green-400" };
-    if (status === "no_answer") return { bg: "bg-amber-500/10", icon: <PhoneMissed className="w-4 h-4 text-amber-400" />, label: "No Answer", labelClass: "text-amber-400" };
+    if (status === "completed" || status === "connected")
+      return { bg: "bg-green-500/10", icon: <Phone className="w-4 h-4 text-green-400" />, label: "Connected", labelClass: "text-green-400" };
+    if (status === "no_answer")
+      return { bg: "bg-amber-500/10", icon: <PhoneMissed className="w-4 h-4 text-amber-400" />, label: "No Answer", labelClass: "text-amber-400" };
     return { bg: "bg-red-500/10", icon: <PhoneOff className="w-4 h-4 text-red-400" />, label: "Failed", labelClass: "text-red-400" };
   };
 
   const dialPadDigits = ["1","2","3","4","5","6","7","8","9","*","0","#"];
+  const dispsTyped = dispositions as Disposition[];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
@@ -288,7 +310,7 @@ export function ManualDialTab() {
 
         <Card className="bg-gray-900 border-gray-800 p-5">
 
-          {/* IDLE: dial pad */}
+          {/* IDLE */}
           {callStatus === "idle" && (
             <div className="space-y-3">
               {callerNumbers.length > 0 && (
@@ -304,7 +326,6 @@ export function ManualDialTab() {
                 </Select>
               )}
 
-              {/* Number display */}
               <div className="relative">
                 <input
                   type="tel"
@@ -323,7 +344,6 @@ export function ManualDialTab() {
                 )}
               </div>
 
-              {/* Dial pad */}
               <div className="grid grid-cols-3 gap-2">
                 {dialPadDigits.map((d) => (
                   <button
@@ -350,7 +370,6 @@ export function ManualDialTab() {
                 <PhoneCall className="w-6 h-6 mr-2" /> Call
               </Button>
 
-              {/* Auto-record toggle */}
               <button
                 onClick={handleAutoRecordToggle}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-medium transition-colors ${
@@ -414,7 +433,6 @@ export function ManualDialTab() {
                 </div>
               )}
 
-              {/* Call control buttons */}
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => setIsMuted(!isMuted)}
@@ -449,7 +467,6 @@ export function ManualDialTab() {
                 )}
               </div>
 
-              {/* DTMF keypad */}
               <div className="rounded-xl bg-gray-800 border border-gray-700 p-3">
                 <p className="text-xs text-center text-gray-500 mb-2">Keypad</p>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -479,7 +496,7 @@ export function ManualDialTab() {
             </div>
           )}
 
-          {/* ENDED: disposition + save */}
+          {/* ENDED */}
           {callStatus === "ended" && (
             <div className="space-y-4">
               <div className="text-center">
@@ -518,8 +535,8 @@ export function ManualDialTab() {
 
               <div>
                 <p className="text-sm font-semibold text-gray-100 mb-2">Call Result</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {(dispositions as Array<{ id: number; label?: string; category: string }>).map((disp) => (
+                <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-0.5">
+                  {dispsTyped.map((disp) => (
                     <Button
                       key={disp.id}
                       size="sm"
@@ -538,16 +555,10 @@ export function ManualDialTab() {
               </div>
 
               <div className="flex gap-2">
-                <Button
-                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white rounded-xl"
-                  onClick={resetCall}
-                >
+                <Button className="flex-1 bg-gray-700 hover:bg-gray-600 text-white rounded-xl" onClick={resetCall}>
                   <SkipForward className="w-4 h-4 mr-1" /> Skip
                 </Button>
-                <Button
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
-                  onClick={handleSaveCall}
-                >
+                <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl" onClick={handleSaveCall}>
                   <Save className="w-4 h-4 mr-1" /> Save
                 </Button>
               </div>
@@ -562,6 +573,7 @@ export function ManualDialTab() {
           <h3 className="font-semibold text-white">Recent Calls</h3>
           <span className="text-xs text-gray-500">{callLogs.length} calls</span>
         </div>
+
         <div className="divide-y divide-gray-800/50 overflow-y-auto flex-1">
           {callLogs.length === 0 && (
             <div className="text-center py-16 text-gray-500">
@@ -570,54 +582,142 @@ export function ManualDialTab() {
               <p className="text-xs mt-1 opacity-60">Your calls will appear here</p>
             </div>
           )}
+
           {callLogs.map((log) => {
             const rowStyle = getCallRowStyle(log.status);
+            const isExpanded = expandedCallId === log.id;
+            const disp = dispsTyped.find((d) => d.id === log.dispositionId);
+            const noteText = log.notes || log.callDescription || "";
+            const hasDetails = !!disp || !!noteText || !!log.recordingUrl;
+
             return (
-              <div
-                key={log.id}
-                className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-800/40 cursor-pointer group transition-colors"
-                onClick={() => {
-                  if (callStatus === "idle" && log.toNumber) setPhoneNumber(log.toNumber);
-                }}
-              >
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${rowStyle.bg}`}>
-                  {rowStyle.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white font-mono truncate">
-                    {log.toNumber || "Unknown"}
-                  </p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className={`text-xs font-medium ${rowStyle.labelClass}`}>
-                      {rowStyle.label}
-                    </span>
-                    <span className="text-gray-600 text-xs">·</span>
-                    <span className="text-xs text-gray-500">{formatTimeAgo(log.createdAt)}</span>
-                    {log.type && (
-                      <>
-                        <span className="text-gray-600 text-xs">·</span>
-                        <span className="text-xs text-gray-600 capitalize">{log.type}</span>
-                      </>
+              <div key={log.id}>
+                {/* Main row */}
+                <div
+                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-800/40 cursor-pointer group transition-colors"
+                  onClick={() => {
+                    if (hasDetails) {
+                      setExpandedCallId(isExpanded ? null : log.id);
+                    } else if (callStatus === "idle" && log.toNumber) {
+                      setPhoneNumber(log.toNumber);
+                    }
+                  }}
+                >
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${rowStyle.bg}`}>
+                    {rowStyle.icon}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white font-mono truncate">
+                      {log.toNumber || "Unknown"}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span className={`text-xs font-medium ${rowStyle.labelClass}`}>
+                        {rowStyle.label}
+                      </span>
+                      {disp && (
+                        <>
+                          <span className="text-gray-600 text-xs">·</span>
+                          <Badge className={`${getDispColor(disp.category)} text-[10px] px-1.5 py-0`}>
+                            {disp.label}
+                          </Badge>
+                        </>
+                      )}
+                      <span className="text-gray-600 text-xs">·</span>
+                      <span className="text-xs text-gray-500">{formatTimeAgo(log.createdAt)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {log.duration ? (
+                      <span className="text-xs font-mono text-gray-400">{formatDur(log.duration)}</span>
+                    ) : null}
+                    {/* Redial on hover (when no details to expand or when idle) */}
+                    {!hasDetails && callStatus === "idle" && (
+                      <button
+                        className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (log.toNumber) doCallFlow(log.toNumber);
+                        }}
+                      >
+                        <PhoneCall className="w-3 h-3" /> Redial
+                      </button>
+                    )}
+                    {hasDetails && (
+                      <span className="text-gray-500">
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </span>
                     )}
                   </div>
                 </div>
-                <div className="text-right shrink-0 space-y-1">
-                  {log.duration ? (
-                    <p className="text-xs font-mono text-gray-400">{formatDur(log.duration)}</p>
-                  ) : null}
-                  <button
-                    className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 ml-auto"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (callStatus === "idle" && log.toNumber) {
-                        setPhoneNumber(log.toNumber);
-                        doCallFlow(log.toNumber);
-                      }
-                    }}
-                  >
-                    <PhoneCall className="w-3 h-3" /> Redial
-                  </button>
-                </div>
+
+                {/* Expanded detail panel */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 pt-1 bg-gray-800/30 border-t border-gray-800/60 space-y-3">
+
+                    {/* Disposition badge */}
+                    {disp && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 w-20 shrink-0">Result</span>
+                        <Badge className={`${getDispColor(disp.category)} flex items-center gap-1`}>
+                          {getDispIcon(disp.category)}
+                          {disp.label}
+                        </Badge>
+                      </div>
+                    )}
+
+                    {/* Notes */}
+                    {noteText && (
+                      <div className="flex gap-2">
+                        <FileText className="w-3.5 h-3.5 text-gray-500 mt-0.5 shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-[11px] text-gray-500 mb-0.5">Notes</p>
+                          <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">{noteText}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recording */}
+                    {log.recordingUrl && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] text-gray-500 flex items-center gap-1">
+                            <Mic2 className="w-3 h-3" /> Recording
+                          </p>
+                          <a
+                            href={log.recordingUrl}
+                            download={`call-${log.id}.webm`}
+                            className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Download className="w-3 h-3" /> Download
+                          </a>
+                        </div>
+                        <audio
+                          controls
+                          src={log.recordingUrl}
+                          className="w-full h-9"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    )}
+
+                    {/* Redial from expanded */}
+                    {callStatus === "idle" && log.toNumber && (
+                      <button
+                        className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedCallId(null);
+                          doCallFlow(log.toNumber!);
+                        }}
+                      >
+                        <PhoneCall className="w-3.5 h-3.5" /> Redial {log.toNumber}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
