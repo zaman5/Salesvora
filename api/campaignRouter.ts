@@ -20,7 +20,7 @@ export const campaignRouter = createRouter({
       return findCampaignById(input.id);
     }),
 
-  create: adminQuery
+  create: callerQuery
     .input(z.object({
       name: z.string().min(1),
       description: z.string().optional(),

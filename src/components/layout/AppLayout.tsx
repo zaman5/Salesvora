@@ -43,7 +43,6 @@ const callerNavItems = [
   { icon: List, label: "My Leads", path: "/leads" },
   { icon: Phone, label: "Campaigns", path: "/campaigns" },
   { icon: BarChart3, label: "My Calls", path: "/call-logs" },
-  { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

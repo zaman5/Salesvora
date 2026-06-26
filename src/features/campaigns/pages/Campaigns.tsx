@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
+import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -350,6 +351,9 @@ function CampaignDetail({
 // ── Main Campaigns Page ─────────────────────────────────────────────────────
 export default function CampaignsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+
   const [selectedCampaign, setSelectedCampaign] = useState<{ id: number; name: string; leadListId?: number; companyId?: number; [key: string]: unknown } | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
@@ -362,7 +366,11 @@ export default function CampaignsPage() {
   const invalidate = () => utils.campaign.list.invalidate();
 
   const { data: campaigns = [] } = trpc.campaign.list.useQuery();
-  const { data: leadLists = [] } = trpc.lead.listLists.useQuery();
+
+  // Admin sees all lists; callers see only their assigned lists
+  const { data: adminLists = [] } = trpc.lead.listLists.useQuery(undefined, { enabled: isAdmin });
+  const { data: myLists = [] }    = trpc.lead.myLists.useQuery(undefined, { enabled: !isAdmin });
+  const leadLists = (isAdmin ? adminLists : myLists) as { id: number; name: string }[];
 
   const createCampaignMutation = trpc.campaign.create.useMutation({
     onSuccess: () => {
@@ -577,11 +585,13 @@ export default function CampaignsPage() {
                     </Button>
                   )}
 
-                  <Button size="sm" variant="ghost"
-                    onClick={() => handleDeleteCampaign(campaign.id)}
-                    className="text-gray-500 hover:text-red-400 ml-auto">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  {isAdmin && (
+                    <Button size="sm" variant="ghost"
+                      onClick={() => handleDeleteCampaign(campaign.id)}
+                      className="text-gray-500 hover:text-red-400 ml-auto">
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
