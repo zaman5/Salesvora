@@ -225,6 +225,7 @@ export default function UsersPage() {
   );
 
   const getRoleIcon = (role: string) => {
+    if (role === "superadmin") return <Shield className="w-4 h-4 text-purple-400" />;
     if (role === "admin")  return <Shield className="w-4 h-4 text-amber-400" />;
     if (role === "caller") return <Phone  className="w-4 h-4 text-blue-400" />;
     if (role === "viewer") return <Eye    className="w-4 h-4 text-gray-400" />;
@@ -353,7 +354,7 @@ export default function UsersPage() {
                   <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-gray-800 border-gray-700">
                     <SelectItem value="caller">Caller</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
+                    {isSuperAdmin && <SelectItem value="admin">Admin</SelectItem>}
                     <SelectItem value="viewer">Viewer</SelectItem>
                     {isSuperAdmin && <SelectItem value="superadmin">Superadmin</SelectItem>}
                   </SelectContent>
@@ -408,13 +409,14 @@ export default function UsersPage() {
               </div>
               <div>
                 <Label className="text-gray-300">Role</Label>
-                <Select value={editUserData.role} onValueChange={(v) => setEditUserData({ ...editUserData, role: v })}>
+                <Select value={editUserData.role} onValueChange={(v) => setEditUserData({ ...editUserData, role: v })}
+                  disabled={!isSuperAdmin && (editUserData.role === "admin" || editUserData.role === "superadmin")}>
                   <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-gray-800 border-gray-700">
                     <SelectItem value="caller">Caller</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
+                    {(isSuperAdmin || editUserData.role === "admin") && <SelectItem value="admin">Admin</SelectItem>}
                     <SelectItem value="viewer">Viewer</SelectItem>
-                    {isSuperAdmin && <SelectItem value="superadmin">Superadmin</SelectItem>}
+                    {(isSuperAdmin || editUserData.role === "superadmin") && <SelectItem value="superadmin">Superadmin</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -599,7 +601,7 @@ export default function UsersPage() {
                             <Button variant="ghost" size="sm" onClick={() => handleToggleStatus(u.id, u.status)}
                               className="text-green-400 hover:text-green-300 h-8 px-2">Activate</Button>
                           )}
-                          {u.id !== user?.id && (
+                          {u.id !== user?.id && u.role !== "superadmin" && (
                             <Button variant="ghost" size="sm" onClick={() => handleDeleteUser(u.id)}
                               className="text-red-400 hover:text-red-300 h-8 px-2 flex items-center gap-1">
                               <Trash2 className="w-3.5 h-3.5" /> Delete

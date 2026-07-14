@@ -6,15 +6,18 @@ import { isSuperAdmin, requireCompanyScope } from "./lib/authz";
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { createCredentialConnection } from "./lib/telnyx";
 import {
-  findAllUsers, findUsersByCompany, findUserById,
+  findAllUsers, findUsersCreatedBy, findUserById,
   createUser, updateUser, deleteUser, findCallersByAdmin,
 } from "./queries/users";
 
-// A non-superadmin may only act on users inside their own company.
-async function assertUserInScope(ctx: { user: { role: string; companyId?: number | null } }, targetId: number) {
+// A non-superadmin may only act on users inside their own company AND that
+// they personally created — one admin's team stays invisible/untouchable to
+// another admin. Acting on your own account is always allowed.
+async function assertUserInScope(ctx: { user: { id: number; role: string; companyId?: number | null } }, targetId: number) {
   if (isSuperAdmin(ctx.user)) return;
-  const target = await findUserById(targetId);
-  if (!target || (target as { companyId?: number | null }).companyId !== ctx.user.companyId) {
+  if (targetId === ctx.user.id) return;
+  const target = await findUserById(targetId) as { companyId?: number | null; createdBy?: number | null } | null;
+  if (!target || target.companyId !== ctx.user.companyId || target.createdBy !== ctx.user.id) {
     throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this user." });
   }
 }
@@ -23,7 +26,7 @@ export const userRouter = createRouter({
   list: adminQuery.query(async ({ ctx }) => {
     if (isSuperAdmin(ctx.user)) return findAllUsers();
     if (!ctx.user.companyId) return [];
-    return findUsersByCompany(ctx.user.companyId);
+    return findUsersCreatedBy(ctx.user.companyId, ctx.user.id);
   }),
 
   listCallers: adminQuery.query(async ({ ctx }) => {
@@ -51,8 +54,8 @@ export const userRouter = createRouter({
       password: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (input.role === "superadmin" && !isSuperAdmin(ctx.user)) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can grant the superadmin role." });
+      if ((input.role === "superadmin" || input.role === "admin") && !isSuperAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can create admin accounts." });
       }
       const { password, ...rest } = input;
       const finalUnionId = input.unionId || `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -94,8 +97,18 @@ export const userRouter = createRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await assertUserInScope(ctx, input.id);
-      if (input.data.role === "superadmin" && !isSuperAdmin(ctx.user)) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can grant the superadmin role." });
+      const target = await findUserById(input.id) as { role?: string; sipCredentials?: { username?: string; password?: string } } | null;
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      // Superadmin accounts can't be modified into a lower role by anyone but
+      // themselves/another superadmin — and nobody may self-serve their way
+      // into admin/superadmin. Only block on an actual escalation, not a
+      // no-op resubmit of the role the user already has.
+      const roleChanging = input.data.role !== undefined && input.data.role !== target.role;
+      if (roleChanging && (input.data.role === "superadmin" || input.data.role === "admin") && !isSuperAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can grant the admin or superadmin role." });
+      }
+      if (target.role === "superadmin" && roleChanging && !isSuperAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can change a superadmin's role." });
       }
       const { sipUsername, sipTelnyxPassword, ...rest } = input.data;
       const updateData: Record<string, unknown> = { ...rest };
@@ -112,8 +125,7 @@ export const userRouter = createRouter({
       // Per-caller Telnyx SIP credential → domain = "telnyx" so getDialerConfig
       // picks it up for independent WebRTC registration (concurrent calling).
       if (sipUsername || sipTelnyxPassword) {
-        const existing = await findUserById(input.id);
-        const cur = (existing as any)?.sipCredentials ?? {};
+        const cur = target.sipCredentials ?? {};
         updateData.sipCredentials = {
           username: sipUsername ?? cur.username ?? "",
           password: sipTelnyxPassword ?? cur.password ?? "",
@@ -129,6 +141,10 @@ export const userRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       await assertUserInScope(ctx, input.id);
+      const target = await findUserById(input.id) as { role?: string } | null;
+      if (target?.role === "superadmin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Superadmin accounts cannot be deleted." });
+      }
       await deleteUser(input.id);
       return { success: true };
     }),

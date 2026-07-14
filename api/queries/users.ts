@@ -1,6 +1,6 @@
 ﻿import { getDb } from "./connection";
 import { users } from "@db/schema";
-import { eq, and, desc, ne } from "drizzle-orm";
+import { eq, and, or, desc, ne } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
 
 export async function findAllUsers(companyId?: number) {
@@ -38,6 +38,30 @@ export async function findUsersByCompany(companyId: number) {
     const data = readJsonDb();
     return data.users
       .filter((u: any) => u.companyId == companyId && u.status !== "inactive")
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+}
+
+/**
+ * Users a non-superadmin admin is allowed to see: the ones they personally
+ * created, plus themselves. Keeps different admins' teams separate — an
+ * admin should not see or manage accounts another admin created.
+ */
+export async function findUsersCreatedBy(companyId: number, adminId: number) {
+  try {
+    return await getDb().query.users.findMany({
+      where: and(
+        eq(users.companyId, companyId),
+        ne(users.status, "inactive"),
+        or(eq(users.createdBy, adminId), eq(users.id, adminId)),
+      ),
+      orderBy: [desc(users.createdAt)],
+    });
+  } catch {
+    console.warn("[findUsersCreatedBy] DB offline, falling back to local JSON store.");
+    const data = readJsonDb();
+    return data.users
+      .filter((u: any) => u.companyId == companyId && u.status !== "inactive" && (u.createdBy == adminId || u.id == adminId))
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 }
