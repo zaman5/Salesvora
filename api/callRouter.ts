@@ -121,11 +121,24 @@ export const callRouter = createRouter({
     }))
     .mutation(async ({ input }) => {
       const updateData: Record<string, unknown> = { status: input.status };
-      if (input.status === "connected") updateData.answeredAt = new Date();
+      if (input.status === "connected") {
+        updateData.answeredAt = new Date();
+        updateData.lastHeartbeatAt = new Date();
+      }
       if (["completed", "failed", "no_answer", "busy", "cancelled"].includes(input.status)) {
         updateData.endedAt = new Date();
       }
       await updateCall(input.id, updateData);
+      return { success: true };
+    }),
+
+  // ─── Heartbeat (sent periodically by the browser while a call is live) ───
+  // Lets the server tell a genuinely stuck "connected" row (crashed tab, lost
+  // network) apart from a call that's still actually live.
+  heartbeat: callerQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await updateCall(input.id, { lastHeartbeatAt: new Date() });
       return { success: true };
     }),
 

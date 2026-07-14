@@ -1,4 +1,4 @@
-﻿import { getDb } from "./connection";
+﻿import { getDb, hasDatabase } from "./connection";
 import { calls, callDispositions, callRecordings } from "@db/schema";
 import { eq, and, desc, count, sql, gte, lte } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
@@ -92,6 +92,8 @@ export async function findCallById(id: number) {
 }
 
 export async function findActiveCallByCaller(callerId: number) {
+  const { sweepStaleConnectedCalls } = await import("./monitoring");
+  await sweepStaleConnectedCalls();
   try {
     return await getDb().query.calls.findFirst({
       where: and(
@@ -111,11 +113,7 @@ export async function findActiveCallByCaller(callerId: number) {
 }
 
 export async function createCall(data: any) {
-  try {
-    const result = await getDb().insert(calls).values(data).$returningId();
-    return result[0]?.id;
-  } catch {
-    console.warn("[createCall] DB offline, falling back to local JSON store.");
+  if (!hasDatabase()) {
     const store = readJsonDb();
     const id = Date.now();
     const newCall = {
@@ -127,13 +125,15 @@ export async function createCall(data: any) {
     writeJsonDb(store);
     return id;
   }
+  // DB is configured — let real errors (e.g. constraint violations) surface
+  // instead of silently writing to the JSON store, which would make the
+  // insert invisible to every other query (they all read from MySQL).
+  const result = await getDb().insert(calls).values(data).$returningId();
+  return result[0]?.id;
 }
 
 export async function updateCall(id: number, data: any) {
-  try {
-    await getDb().update(calls).set(data).where(eq(calls.id, id));
-  } catch {
-    console.warn("[updateCall] DB offline, falling back to local JSON store.");
+  if (!hasDatabase()) {
     const store = readJsonDb();
     const idx = store.calls.findIndex((c: any) => c.id == id);
     if (idx !== -1) {
@@ -144,7 +144,9 @@ export async function updateCall(id: number, data: any) {
       };
       writeJsonDb(store);
     }
+    return;
   }
+  await getDb().update(calls).set(data).where(eq(calls.id, id));
 }
 
 export async function getCallStats(callerId: number, dateFrom?: Date, dateTo?: Date) {

@@ -153,6 +153,53 @@ export async function hangupTelnyxCall(
   }
 }
 
+export type CreateCredentialResult = { username: string; password: string; connectionId: string };
+
+/**
+ * Create a dedicated Telnyx Credential Connection for one agent so they can
+ * register their own independent WebRTC/SIP session — Telnyx only keeps one
+ * live registration per credential, so agents sharing a single username get
+ * kicked off / blocked from calling or receiving calls at the same time.
+ * POST /v2/credential_connections
+ */
+export async function createCredentialConnection(
+  apiKey: string,
+  params: { connectionName: string; username: string; password: string; outboundVoiceProfileId?: string | null },
+): Promise<TelnyxResult<CreateCredentialResult>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const body: Record<string, unknown> = {
+      connection_name: params.connectionName,
+      user_name: params.username,
+      password: params.password,
+    };
+    if (params.outboundVoiceProfileId) {
+      body.outbound = { outbound_voice_profile_id: params.outboundVoiceProfileId };
+    }
+    const res = await fetch(`${TELNYX_BASE}/credential_connections`, {
+      method: "POST",
+      headers: authHeaders(apiKey),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    const resBody = (await res.json()) as { data: Record<string, unknown> };
+    return {
+      ok: true,
+      data: {
+        username: params.username,
+        password: params.password,
+        connectionId: String(resBody.data?.id ?? ""),
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      message: err instanceof Error ? `Could not reach Telnyx: ${err.message}` : "Network error reaching Telnyx.",
+    };
+  }
+}
+
 export type PlaceCallResult = {
   callControlId: string;
   callLegId?: string;

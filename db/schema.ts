@@ -210,7 +210,7 @@ export const calls = mysqlTable("calls", {
   callSid: varchar("call_sid", { length: 255 }).unique(),
   callerId: bigint("caller_id", { mode: "number", unsigned: true }).notNull(),
   adminId: bigint("admin_id", { mode: "number", unsigned: true }),
-  leadId: bigint("lead_id", { mode: "number", unsigned: true }).notNull(),
+  leadId: bigint("lead_id", { mode: "number", unsigned: true }),
   campaignId: bigint("campaign_id", { mode: "number", unsigned: true }),
   companyId: bigint("company_id", { mode: "number", unsigned: true }).notNull(),
   type: mysqlEnum("type", ["manual", "auto", "ai", "inbound"]).notNull(),
@@ -228,6 +228,10 @@ export const calls = mysqlTable("calls", {
   startedAt: timestamp("started_at"),
   answeredAt: timestamp("answered_at"),
   endedAt: timestamp("ended_at"),
+  // Updated periodically by the caller's browser while the call is live so
+  // stale "connected" rows (crashed tab, lost network) can be detected and
+  // auto-completed instead of showing as live forever.
+  lastHeartbeatAt: timestamp("last_heartbeat_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   callerIdx: index("calls_caller_idx").on(table.callerId),
@@ -332,18 +336,25 @@ export type SMSCampaign = typeof smsCampaigns.$inferSelect;
 // ─── SMS Logs ───
 export const smsLogs = mysqlTable("sms_logs", {
   id: serial("id").primaryKey(),
-  smsCampaignId: bigint("sms_campaign_id", { mode: "number", unsigned: true }).notNull(),
-  leadId: bigint("lead_id", { mode: "number", unsigned: true }).notNull(),
+  // Nullable: inbound messages and one-off sendDirect messages have no campaign.
+  smsCampaignId: bigint("sms_campaign_id", { mode: "number", unsigned: true }),
+  leadId: bigint("lead_id", { mode: "number", unsigned: true }),
+  companyId: bigint("company_id", { mode: "number", unsigned: true }),
+  direction: mysqlEnum("direction", ["outbound", "inbound"]).default("outbound").notNull(),
   toNumber: varchar("to_number", { length: 50 }).notNull(),
   fromNumber: varchar("from_number", { length: 50 }),
   message: text("message").notNull(),
-  status: mysqlEnum("status", ["pending", "sent", "delivered", "failed", "replied"]).default("pending").notNull(),
+  status: mysqlEnum("status", ["pending", "sent", "delivered", "failed", "replied", "received"]).default("pending").notNull(),
   twilioSid: varchar("twilio_sid", { length: 255 }),
   errorMessage: text("error_message"),
   sentAt: timestamp("sent_at"),
   deliveredAt: timestamp("delivered_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  companyIdx: index("sms_company_idx").on(table.companyId),
+  toNumberIdx: index("sms_to_number_idx").on(table.toNumber),
+  fromNumberIdx: index("sms_from_number_idx").on(table.fromNumber),
+}));
 
 export type SMSLog = typeof smsLogs.$inferSelect;
 

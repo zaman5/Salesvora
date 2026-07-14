@@ -94,6 +94,8 @@ export default function UsersPage() {
   const createUserMutation  = trpc.user.create.useMutation();
   const updateUserMutation  = trpc.user.update.useMutation();
   const deleteUserMutation  = trpc.user.delete.useMutation({ onSuccess: () => refetch() });
+  const provisionSipMutation = trpc.user.provisionTelnyxCredential.useMutation();
+  const [provisionResult, setProvisionResult] = useState<{ ok: boolean; message: string } | null>(null);
   const assignPhoneMutation = trpc.integration.assignPhoneNumber.useMutation();
   const assignListMutation  = trpc.lead.assignList.useMutation();
 
@@ -146,7 +148,27 @@ export default function UsersPage() {
     const sip = u.sipCredentials;
     setEditSipUsername(sip?.domain === "telnyx" ? (sip.username ?? "") : "");
     setEditSipPassword("");  // never pre-fill password for security
+    setProvisionResult(null);
     setShowEdit(true);
+  };
+
+  // ── Auto-assign a dedicated Telnyx SIP credential (fixes concurrent calling) ──
+  const handleAutoProvisionSip = async () => {
+    if (!editingUser) return;
+    setProvisionResult(null);
+    try {
+      const res = await provisionSipMutation.mutateAsync({ id: editingUser.id });
+      if (res.success && res.username) {
+        setEditSipUsername(res.username);
+        setEditSipPassword(""); // stored server-side already; field stays blank so Save doesn't overwrite it
+        setProvisionResult({ ok: true, message: `Assigned dedicated credential "${res.username}".` });
+        refetch();
+      } else {
+        setProvisionResult({ ok: false, message: res.error || "Could not provision a Telnyx credential." });
+      }
+    } catch (err) {
+      setProvisionResult({ ok: false, message: err instanceof Error ? err.message : "Could not provision a Telnyx credential." });
+    }
   };
 
   // ── Save edit ──
@@ -421,6 +443,20 @@ export default function UsersPage() {
                       <span className="text-blue-400">Telnyx portal → Credential Connections</span>.
                     </p>
                   </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full bg-blue-700 hover:bg-blue-600"
+                    onClick={handleAutoProvisionSip}
+                    disabled={provisionSipMutation.isPending}
+                  >
+                    {provisionSipMutation.isPending ? "Assigning…" : "Auto-assign dedicated SIP credential"}
+                  </Button>
+                  {provisionResult && (
+                    <p className={`text-[11px] ${provisionResult.ok ? "text-green-400" : "text-red-400"}`}>
+                      {provisionResult.ok ? "✓ " : ""}{provisionResult.message}
+                    </p>
+                  )}
                   <div>
                     <Label className="text-gray-300 text-xs">Telnyx SIP Username</Label>
                     <Input

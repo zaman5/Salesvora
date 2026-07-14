@@ -4,11 +4,15 @@ import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { createContext } from "./context";
+import { webhooksApp } from "./webhooks";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 app.get("/health", (c) => c.json({ status: "ok", time: new Date().toISOString() }));
+
+// Inbound Telnyx webhooks (SMS, etc.) — see api/webhooks.ts.
+app.route("/api/webhooks", webhooksApp);
 
 app.use("/api/trpc/*", async (c) => {
   return fetchRequestHandler({

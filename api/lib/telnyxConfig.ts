@@ -12,6 +12,8 @@ export type TelnyxConfig = {
   webrtcEnabled?: boolean;
   sipUsername?: string; // SIP credential connection username
   sipPassword?: string; // SIP credential connection password (stored server-side)
+  // Inbound SMS webhook signature verification (Telnyx portal → Public Key)
+  webhookPublicKey?: string;
   // SIP trunk details (from the Telnyx portal connection)
   sipHost?: string; // e.g. hbtuutorial.sip.telnyx.com
   ipAddress?: string; // authorized IP for IP-authenticated trunks
@@ -61,6 +63,7 @@ export function maskTelnyxConfig(cfg: TelnyxConfig | null): MaskedTelnyxConfig {
     destinationFormat: cfg?.destinationFormat ?? "",
     originationFormat: cfg?.originationFormat ?? "",
     assignedNumbers: cfg?.assignedNumbers ?? [],
+    webhookPublicKey: cfg?.webhookPublicKey ?? "",
     updatedAt: cfg?.updatedAt,
     hasApiKey: Boolean(key),
     apiKeyPreview: key ? `${key.slice(0, 4)}…${key.slice(-4)}` : "",

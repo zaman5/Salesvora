@@ -162,6 +162,7 @@ export const integrationRouter = createRouter({
       destinationFormat: z.string().optional(),
       originationFormat: z.string().optional(),
       assignedNumbers: z.array(z.string()).optional(),
+      webhookPublicKey: z.string().optional(),
       enabled: z.boolean().default(false),
     }))
     .mutation(async ({ ctx, input }) => {

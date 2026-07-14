@@ -568,7 +568,89 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      {isAdmin && <InboundSmsWebhookCard telnyxData={telnyxQuery.data} onSaved={() => telnyxQuery.refetch()} />}
     </div>
+  );
+}
+
+function InboundSmsWebhookCard({
+  telnyxData,
+  onSaved,
+}: {
+  telnyxData: { connectionId?: string; enabled?: boolean; webhookPublicKey?: string } | undefined;
+  onSaved: () => void;
+}) {
+  const saveMutation = trpc.integration.saveTelnyx.useMutation({ onSuccess: onSaved });
+  const [publicKey, setPublicKey] = useState("");
+  const [status, setStatus] = useState<{ type: "idle" | "ok" | "error"; message: string }>({ type: "idle", message: "" });
+
+  useEffect(() => {
+    if (telnyxData?.webhookPublicKey) setPublicKey(telnyxData.webhookPublicKey);
+  }, [telnyxData?.webhookPublicKey]);
+
+  const webhookUrl = typeof window !== "undefined" ? `${window.location.origin}/api/webhooks/telnyx` : "/api/webhooks/telnyx";
+
+  const handleSave = async () => {
+    try {
+      await saveMutation.mutateAsync({
+        connectionId: telnyxData?.connectionId || "",
+        enabled: telnyxData?.enabled ?? false,
+        webhookPublicKey: publicKey.trim(),
+      });
+      setStatus({ type: "ok", message: "Webhook public key saved." });
+      setTimeout(() => setStatus({ type: "idle", message: "" }), 2000);
+    } catch (e) {
+      setStatus({ type: "error", message: e instanceof Error ? e.message : "Failed to save." });
+    }
+  };
+
+  return (
+    <Card className="bg-gray-900 border-gray-800">
+      <CardHeader>
+        <CardTitle className="text-white text-base flex items-center gap-2">
+          <PhoneIncoming className="w-5 h-5 text-blue-400" />
+          Inbound SMS Webhook
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-gray-400 leading-relaxed">
+          To receive replies from clients, add this URL as the webhook for your Telnyx Messaging Profile
+          (Telnyx portal → Messaging → your profile → Inbound Settings → Webhook URL):
+        </p>
+        <div className="flex items-center gap-2">
+          <Input readOnly value={webhookUrl} className="bg-gray-800 border-gray-700 text-white font-mono text-xs" />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-gray-700 text-gray-300 shrink-0"
+            onClick={() => navigator.clipboard?.writeText(webhookUrl)}
+          >
+            Copy
+          </Button>
+        </div>
+        <div>
+          <Label className="text-gray-300 text-xs">Telnyx Public Key (optional, verifies webhook signatures)</Label>
+          <Input
+            value={publicKey}
+            onChange={(e) => setPublicKey(e.target.value)}
+            placeholder="From Telnyx portal → Account Settings → Public Key"
+            className="bg-gray-800 border-gray-700 text-white mt-1 text-xs font-mono"
+          />
+          <p className="text-[11px] text-gray-500 mt-1">
+            Without this, inbound messages are still accepted but not signature-verified. Set it once you've
+            copied your account's public key from the Telnyx portal.
+          </p>
+        </div>
+        <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={handleSave} disabled={saveMutation.isPending}>
+          {saveMutation.isPending ? "Saving…" : "Save"}
+        </Button>
+        {status.type !== "idle" && (
+          <p className={`text-xs ${status.type === "ok" ? "text-green-400" : "text-red-400"}`}>{status.message}</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

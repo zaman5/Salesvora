@@ -84,6 +84,31 @@ export function AutoCampaignTab() {
   const endCallMutation          = trpc.calls.endCall.useMutation();
   const saveRecordingMutation    = trpc.calls.saveRecording.useMutation();
   const updateLeadMutation       = trpc.lead.update.useMutation();
+  const heartbeatMutation        = trpc.calls.heartbeat.useMutation();
+
+  // Heartbeat while connected — lets the server tell a crashed/closed tab
+  // apart from a genuinely live call, so the admin monitoring panel doesn't
+  // show this caller as "Live" forever if the browser disappears.
+  useEffect(() => {
+    if (callStatus !== "connected" || !activeCallId) return;
+    const id = activeCallId;
+    heartbeatMutation.mutate({ id });
+    const interval = setInterval(() => heartbeatMutation.mutate({ id }), 15000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callStatus, activeCallId]);
+
+  // Best-effort: mark the call completed if the tab/browser closes mid-call.
+  useEffect(() => {
+    const onUnload = () => {
+      if (callStatus === "connected" && activeCallId) {
+        endCallMutation.mutate({ id: activeCallId, duration });
+      }
+    };
+    window.addEventListener("pagehide", onUnload);
+    return () => window.removeEventListener("pagehide", onUnload);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callStatus, activeCallId, duration]);
 
   const currentLead = nextCampaignLead?.lead || null;
 

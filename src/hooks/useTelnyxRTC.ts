@@ -128,6 +128,7 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
         client.on("telnyx.socket.close", () => {
           if (cancelled) return;
           reconnects += 1;
+          registered = false;
           setStatus((s) => (s === "registered" ? "connecting" : s));
           // Repeated drops = unhealthy signaling path (often a VPN/proxy or
           // restrictive network). Tell the user something actionable.
@@ -136,6 +137,15 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
               "Connection to Telnyx keeps dropping (signaling timed out). This is a network issue — disable any VPN/proxy, avoid restrictive Wi-Fi, and try again.",
             );
           }
+          // The SDK does not always re-open the signaling socket on its own —
+          // without this, the agent silently stays unregistered and misses
+          // every inbound call until they manually refresh the page.
+          const delay = Math.min(1000 * reconnects, 10_000);
+          setTimeout(() => {
+            if (!cancelled) {
+              try { clientRef.current?.connect(); } catch { /* noop */ }
+            }
+          }, delay);
         });
         client.on("telnyx.notification", (n: unknown) => {
           if (cancelled) return;

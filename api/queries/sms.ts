@@ -1,6 +1,6 @@
-﻿import { getDb } from "./connection";
+﻿import { getDb, hasDatabase } from "./connection";
 import { smsCampaigns, smsLogs } from "@db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and, or } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
 
 export async function findSMSCampaignsByCompany(companyId?: number) {
@@ -97,15 +97,19 @@ export async function findSMSLogsByCampaign(smsCampaignId: number) {
   }
 }
 
-export async function createSMSLog(data: { smsCampaignId: number; leadId: number; toNumber: string; fromNumber?: string; message: string; status: string; twilioSid?: string; sentAt?: Date }) {
-  try {
-    const result = await getDb().insert(smsLogs).values({
-      ...data,
-      status: data.status as any,
-    }).$returningId();
-    return result[0]?.id;
-  } catch {
-    console.warn("[createSMSLog] DB offline, falling back to local JSON store.");
+export async function createSMSLog(data: {
+  smsCampaignId?: number | null;
+  leadId?: number | null;
+  companyId?: number;
+  direction?: "outbound" | "inbound";
+  toNumber: string;
+  fromNumber?: string;
+  message: string;
+  status: string;
+  twilioSid?: string;
+  sentAt?: Date;
+}) {
+  if (!hasDatabase()) {
     const store = readJsonDb();
     const id = Date.now();
     const newLog = {
@@ -116,6 +120,48 @@ export async function createSMSLog(data: { smsCampaignId: number; leadId: number
     store.smsLogs.push(newLog);
     writeJsonDb(store);
     return id;
+  }
+  const result = await getDb().insert(smsLogs).values({
+    ...data,
+    status: data.status as any,
+  }).$returningId();
+  return result[0]?.id;
+}
+
+/** All SMS (outbound + inbound) for a company, newest first — used for the Message Logs / inbox view. */
+export async function findSMSLogsByCompany(companyId: number, limit = 200) {
+  try {
+    return await getDb().query.smsLogs.findMany({
+      where: eq(smsLogs.companyId, companyId),
+      orderBy: [desc(smsLogs.createdAt)],
+      limit,
+    });
+  } catch {
+    console.warn("[findSMSLogsByCompany] DB offline, falling back to local JSON store.");
+    const data = readJsonDb();
+    return (data.smsLogs as any[])
+      .filter((sl) => sl.companyId == companyId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, limit);
+  }
+}
+
+/** Full two-way thread with one phone number (matches either side of the conversation). */
+export async function findSMSConversation(companyId: number, otherNumber: string) {
+  try {
+    return await getDb().query.smsLogs.findMany({
+      where: and(
+        eq(smsLogs.companyId, companyId),
+        or(eq(smsLogs.toNumber, otherNumber), eq(smsLogs.fromNumber, otherNumber)),
+      ),
+      orderBy: [smsLogs.createdAt],
+    });
+  } catch {
+    console.warn("[findSMSConversation] DB offline, falling back to local JSON store.");
+    const data = readJsonDb();
+    return (data.smsLogs as any[])
+      .filter((sl) => sl.companyId == companyId && (sl.toNumber === otherNumber || sl.fromNumber === otherNumber))
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }
 }
 

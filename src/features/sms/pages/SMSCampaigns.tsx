@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import {
   MessageSquare, Plus, Send, Pause, Play, Phone, Clock, List,
-  CheckCircle2, XCircle, AlertCircle, Hash,
+  CheckCircle2, XCircle, AlertCircle, Hash, Inbox, PhoneIncoming, PhoneOutgoing,
 } from "lucide-react";
 
 const MAX_SMS_CHARS = 160;
@@ -62,6 +62,10 @@ export default function SMSCampaignsPage() {
     { campaignId: selectedLogCampaignId || 0 },
     { enabled: selectedLogCampaignId !== null },
   );
+
+  // Poll for new messages (including inbound replies) — there's no push
+  // channel from the server, so this is how new client replies show up.
+  const { data: inboxLogs = [] } = trpc.sms.inbox.useQuery(undefined, { refetchInterval: 5000 });
 
   // Pre-select defaults
   useEffect(() => {
@@ -287,6 +291,9 @@ export default function SMSCampaignsPage() {
           </TabsTrigger>
           <TabsTrigger value="logs" className="data-[state=active]:bg-gray-800 text-white">
             <List className="w-4 h-4 mr-1.5" /> Message Logs
+          </TabsTrigger>
+          <TabsTrigger value="inbox" className="data-[state=active]:bg-gray-800 text-white">
+            <Inbox className="w-4 h-4 mr-1.5" /> Inbox
           </TabsTrigger>
         </TabsList>
 
@@ -580,6 +587,75 @@ export default function SMSCampaignsPage() {
                         <td colSpan={5} className="text-center py-10 text-gray-500">
                           <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
                           {selectedLogCampaignId ? "No logs for this campaign." : "Select a campaign above."}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Inbox tab: sent + received, newest first ── */}
+        <TabsContent value="inbox" className="mt-4">
+          <Card className="bg-gray-900 border-gray-800">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-white text-base">Inbox</CardTitle>
+              <span className="text-xs text-gray-500">{(inboxLogs as any[]).length} messages</span>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-800">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Direction</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Contact</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Message</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(inboxLogs as any[]).map((log) => {
+                      const inbound = log.direction === "inbound";
+                      const contact = inbound ? log.fromNumber : log.toNumber;
+                      return (
+                        <tr key={log.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 ${inbound ? "bg-blue-500/5" : ""}`}>
+                          <td className="px-4 py-3">
+                            {inbound ? (
+                              <span className="flex items-center gap-1 text-xs text-blue-400">
+                                <PhoneIncoming className="w-3.5 h-3.5" /> Received
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-xs text-gray-400">
+                                <PhoneOutgoing className="w-3.5 h-3.5" /> Sent
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-white font-mono">{contact || "—"}</td>
+                          <td className="px-4 py-3 text-sm text-gray-300 max-w-sm truncate">{log.message}</td>
+                          <td className="px-4 py-3">
+                            <Badge className={
+                              log.status === "delivered" || log.status === "received" ? "bg-green-500/20 text-green-400 border-0" :
+                              log.status === "replied"   ? "bg-purple-500/20 text-purple-400 border-0" :
+                              log.status === "sent"      ? "bg-blue-500/20 text-blue-400 border-0" :
+                              "bg-red-500/20 text-red-400 border-0"
+                            }>
+                              {log.status}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-500">
+                            {new Date(log.createdAt).toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {(inboxLogs as any[]).length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="text-center py-10 text-gray-500">
+                          <Inbox className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                          No messages yet.
                         </td>
                       </tr>
                     )}

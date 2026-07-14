@@ -1,7 +1,52 @@
-﻿import { getDb } from "./connection";
+﻿import { getDb, hasDatabase } from "./connection";
 import { liveMonitorSessions, calls } from "@db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, lt, or, isNull } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
+
+// A caller's browser pings calls.heartbeat every ~15s while a call is
+// "connected". If no heartbeat (or start) has been seen for this long, the
+// browser is assumed gone (crash, closed tab, dead network) and the call is
+// force-completed so it stops showing as "Live" in the admin monitoring panel.
+const STALE_CALL_MS = 45_000;
+
+/**
+ * Auto-complete any "connected" call whose last heartbeat is older than
+ * STALE_CALL_MS (or that never sent one and started that long ago). Called
+ * opportunistically before reads so the monitoring panel never shows a
+ * caller as live past a dropped session.
+ */
+export async function sweepStaleConnectedCalls(companyId?: number): Promise<void> {
+  if (!hasDatabase()) {
+    const store = readJsonDb();
+    const cutoff = Date.now() - STALE_CALL_MS;
+    let changed = false;
+    for (const c of store.calls as any[]) {
+      if (c.status !== "connected") continue;
+      if (companyId !== undefined && c.companyId != companyId) continue;
+      const last = new Date(c.lastHeartbeatAt || c.startedAt || c.createdAt).getTime();
+      if (last < cutoff) {
+        c.status = "completed";
+        c.endedAt = new Date().toISOString();
+        changed = true;
+      }
+    }
+    if (changed) writeJsonDb(store);
+    return;
+  }
+
+  const cutoff = new Date(Date.now() - STALE_CALL_MS);
+  const staleCondition = or(
+    and(isNull(calls.lastHeartbeatAt), lt(calls.startedAt, cutoff)),
+    lt(calls.lastHeartbeatAt, cutoff),
+  );
+  await getDb().update(calls)
+    .set({ status: "completed", endedAt: new Date() })
+    .where(
+      companyId !== undefined
+        ? and(eq(calls.status, "connected"), eq(calls.companyId, companyId), staleCondition)
+        : and(eq(calls.status, "connected"), staleCondition),
+    );
+}
 
 export async function createMonitorSession(data: { adminId: number; callerId: number; callId: number; monitorChannel: string; status: string }) {
   try {
@@ -58,6 +103,7 @@ export async function endMonitorSession(id: number) {
 }
 
 export async function getActiveCallsForMonitoring(companyId: number) {
+  await sweepStaleConnectedCalls(companyId);
   try {
     return await getDb().query.calls.findMany({
       where: and(eq(calls.companyId, companyId), eq(calls.status, "connected")),
@@ -73,6 +119,7 @@ export async function getActiveCallsForMonitoring(companyId: number) {
 }
 
 export async function getCallerActiveCall(callerId: number) {
+  await sweepStaleConnectedCalls();
   try {
     return await getDb().query.calls.findFirst({
       where: and(eq(calls.callerId, callerId), eq(calls.status, "connected")),

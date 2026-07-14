@@ -6,6 +6,7 @@ import { sendSMS, toE164 } from "./lib/telnyx";
 import {
   findSMSCampaignsByCompany, findSMSCampaignById, createSMSCampaign, updateSMSCampaign,
   findSMSLogsByCampaign, createSMSLog, updateSMSLogStatus, incrementSMSStats,
+  findSMSLogsByCompany, findSMSConversation,
 } from "./queries/sms";
 
 export const smsRouter = createRouter({
@@ -125,8 +126,10 @@ export const smsRouter = createRouter({
       // Best-effort log — don't bubble errors if DB is unavailable
       try {
         await createSMSLog({
-          smsCampaignId: 0,
-          leadId: 0,
+          smsCampaignId: null,
+          leadId: null,
+          companyId,
+          direction: "outbound",
           toNumber: input.toNumber,
           message:  input.message,
           fromNumber: input.fromNumber,
@@ -139,11 +142,27 @@ export const smsRouter = createRouter({
       return { success, error };
     }),
 
-  // ─── SMS Logs ───
+  // ─── SMS Logs (per campaign) ───
   logs: authedQuery
     .input(z.object({ campaignId: z.number() }))
     .query(async ({ input }) => {
       return findSMSLogsByCampaign(input.campaignId);
+    }),
+
+  // ─── Inbox: every message (sent + received) for the company, newest first ───
+  inbox: authedQuery.query(async ({ ctx }) => {
+    const companyId = (ctx.user as any).companyId;
+    if (!companyId) return [];
+    return findSMSLogsByCompany(companyId);
+  }),
+
+  // ─── Full two-way thread with one phone number ───
+  conversation: authedQuery
+    .input(z.object({ number: z.string().min(3) }))
+    .query(async ({ ctx, input }) => {
+      const companyId = (ctx.user as any).companyId;
+      if (!companyId) return [];
+      return findSMSConversation(companyId, toE164(input.number));
     }),
 
   sendSingle: adminQuery
@@ -155,9 +174,12 @@ export const smsRouter = createRouter({
       fromNumber: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
+      const campaign = await findSMSCampaignById(input.campaignId);
       const id = await createSMSLog({
         smsCampaignId: input.campaignId,
         leadId: input.leadId,
+        companyId: (campaign as any)?.companyId,
+        direction: "outbound",
         toNumber: input.toNumber,
         message: input.message,
         fromNumber: input.fromNumber,

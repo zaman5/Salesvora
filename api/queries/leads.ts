@@ -1,6 +1,6 @@
 import { getDb } from "./connection";
 import { leadLists, leads, leadListAssignments } from "@db/schema";
-import { eq, and, desc, count, sql } from "drizzle-orm";
+import { eq, and, or, desc, count, sql } from "drizzle-orm";
 import type { InsertLeadListAssignment } from "@db/schema";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
 
@@ -154,6 +154,24 @@ export async function findLeadsByCompany(companyId: number) {
     return data.leads
       .filter((l: any) => l.companyId == companyId && l.isDeleted !== true)
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+}
+
+export async function findLeadByPhone(companyId: number, phone: string) {
+  try {
+    return await getDb().query.leads.findFirst({
+      where: and(
+        eq(leads.companyId, companyId),
+        eq(leads.isDeleted, false),
+        or(eq(leads.phone, phone), eq(leads.phone2, phone)),
+      ),
+    });
+  } catch {
+    console.warn("[findLeadByPhone] DB offline, falling back to local JSON store.");
+    const data = readJsonDb();
+    return data.leads.find(
+      (l: any) => l.companyId == companyId && l.isDeleted !== true && (l.phone === phone || l.phone2 === phone),
+    ) || null;
   }
 }
 

@@ -1,7 +1,10 @@
 import { z } from "zod";
+import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware";
-import { isSuperAdmin } from "./lib/authz";
+import { isSuperAdmin, requireCompanyScope } from "./lib/authz";
+import { getTelnyxConfig } from "./lib/telnyxConfig";
+import { createCredentialConnection } from "./lib/telnyx";
 import {
   findAllUsers, findUsersByCompany, findUserById,
   createUser, updateUser, deleteUser, findCallersByAdmin,
@@ -125,6 +128,39 @@ export const userRouter = createRouter({
       await assertUserInScope(ctx, input.id);
       await deleteUser(input.id);
       return { success: true };
+    }),
+
+  // Auto-provision a dedicated Telnyx Credential Connection for this caller so
+  // they register their own independent WebRTC session instead of sharing one
+  // SIP credential with every other agent (which is what blocks 2+ agents
+  // from dialing/receiving on the same number at the same time).
+  provisionTelnyxCredential: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertUserInScope(ctx, input.id);
+      const companyId = requireCompanyScope(ctx.user);
+      const telnyx = await getTelnyxConfig(companyId);
+      if (!telnyx?.apiKey) {
+        return { success: false, error: "Configure your company's Telnyx API key in Settings first." };
+      }
+      const target = await findUserById(input.id);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+
+      const username = `sv_${companyId}_${input.id}_${nanoid(6)}`.toLowerCase();
+      const password = nanoid(20);
+      const result = await createCredentialConnection(telnyx.apiKey, {
+        connectionName: `Salesvora — ${(target as { name?: string }).name || "agent"} (#${input.id})`,
+        username,
+        password,
+        outboundVoiceProfileId: telnyx.outboundVoiceProfileId,
+      });
+      if (!result.ok) {
+        return { success: false, error: result.message };
+      }
+      await updateUser(input.id, {
+        sipCredentials: { username: result.data.username, password: result.data.password, domain: "telnyx" },
+      });
+      return { success: true, username: result.data.username };
     }),
 
   me: authedQuery.query(async ({ ctx }) => {
