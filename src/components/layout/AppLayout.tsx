@@ -42,6 +42,7 @@ const callerNavItems = [
   { icon: Radio, label: "Auto Dialer", path: "/auto-dialer" },
   { icon: List, label: "My Leads", path: "/leads" },
   { icon: Phone, label: "Campaigns", path: "/campaigns" },
+  { icon: MessageSquare, label: "SMS", path: "/sms" },
   { icon: BarChart3, label: "My Calls", path: "/call-logs" },
 ];
 

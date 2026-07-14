@@ -41,6 +41,7 @@ type LeadList   = { id: number; name: string; totalLeads?: number };
 export default function UsersPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  const isSuperAdmin = user?.role === "superadmin";
   const [search, setSearch] = useState("");
 
   // ── Create dialog state ──
@@ -110,7 +111,7 @@ export default function UsersPage() {
       const result = await createUserMutation.mutateAsync({
         name: newUser.name, email: newUser.email,
         phone: newUser.phone || undefined,
-        role: newUser.role as "admin" | "caller" | "viewer",
+        role: newUser.role as "superadmin" | "admin" | "caller" | "viewer",
         unionId: newUser.unionId || undefined,
         dailyCallLimit: newUser.dailyCallLimit,
         password: newUser.password || undefined,
@@ -354,6 +355,7 @@ export default function UsersPage() {
                     <SelectItem value="caller">Caller</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="viewer">Viewer</SelectItem>
+                    {isSuperAdmin && <SelectItem value="superadmin">Superadmin</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -412,6 +414,7 @@ export default function UsersPage() {
                     <SelectItem value="caller">Caller</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="viewer">Viewer</SelectItem>
+                    {isSuperAdmin && <SelectItem value="superadmin">Superadmin</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>

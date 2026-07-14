@@ -131,7 +131,10 @@ function defaultDb(): JsonDb {
         name: "Admin",
         email: env.adminEmail,
         password: env.adminPassword,
-        role: "admin",
+        // The seeded owner account is a superadmin (not just admin) so it can
+        // create/promote other admins — otherwise nobody could ever become a
+        // superadmin (creating one requires already being one).
+        role: "superadmin",
         status: "active",
         companyId: 1,
         createdAt: now,
@@ -172,6 +175,25 @@ function tryParse(content: string): JsonDb | null {
   }
 }
 
+/**
+ * One-time upgrade: the seeded owner account used to be created as "admin".
+ * It must be "superadmin" so it can create/promote other admins — creating a
+ * superadmin otherwise requires already being one, which would leave nobody
+ * able to ever become one. Only touches the specific bootstrap account, not
+ * every admin. Returns true if it changed anything (caller should persist).
+ */
+function migrateOwnerToSuperadmin(data: JsonDb): boolean {
+  const owner = (data.users as Array<{ unionId?: string; email?: string; role?: string }>).find(
+    (u) => u.unionId === "admin-default" || u.email === env.adminEmail,
+  );
+  if (owner && owner.role === "admin") {
+    owner.role = "superadmin";
+    console.log(`[db] Upgraded owner account (${owner.email}) from admin to superadmin.`);
+    return true;
+  }
+  return false;
+}
+
 export function readJsonDb(): JsonDb {
   logStorageMode();
   // File doesn't exist — first run. Write default data including the admin user.
@@ -186,7 +208,10 @@ export function readJsonDb(): JsonDb {
   try {
     const content = fs.readFileSync(DB_PATH, "utf-8");
     const data = tryParse(content);
-    if (data) return data;
+    if (data) {
+      if (migrateOwnerToSuperadmin(data)) writeJsonDb(data);
+      return data;
+    }
   } catch { /* fall through to backup */ }
 
   // Main file corrupt — try backup
@@ -198,6 +223,7 @@ export function readJsonDb(): JsonDb {
         // Restore from backup
         fs.copyFileSync(BAK_PATH, DB_PATH);
         console.warn("[jsonDb] Restored db.json from backup.");
+        if (migrateOwnerToSuperadmin(data)) writeJsonDb(data);
         return data;
       }
     } catch { /* fall through */ }

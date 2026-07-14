@@ -129,6 +129,15 @@ export default function LeadsPage() {
     }
   }, [leadLists, selectedListId]);
 
+  // Callers can't create new lists (admin-only), so default the upload
+  // target to one of their assigned lists instead of "create-new".
+  useEffect(() => {
+    if (!isAdmin && leadLists.length > 0 && selectedUploadListId === "create-new") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedUploadListId((leadLists[0] as any).id.toString());
+    }
+  }, [isAdmin, leadLists, selectedUploadListId]);
+
   // Mutations
   const assignListMutation = trpc.lead.assignList.useMutation({ onSuccess: () => refetchLists() });
 
@@ -383,8 +392,12 @@ export default function LeadsPage() {
   const handleUploadLeads = async () => {
     try {
       let targetListId = selectedUploadListId === "create-new" ? null : parseInt(selectedUploadListId);
+      if (!targetListId && !isAdmin) {
+        alert("You don't have a lead list assigned yet. Ask your admin to assign one before uploading leads.");
+        return;
+      }
       if (!targetListId) {
-        const listName = uploadFile 
+        const listName = uploadFile
           ? `Imported: ${uploadFile.name.replace(/\.[^/.]+$/, "")}`
           : `Mock List ${new Date().toLocaleDateString()}`;
         const listIdResult = await createListMutation.mutateAsync({
@@ -528,17 +541,22 @@ export default function LeadsPage() {
             </DialogContent>
           </Dialog>
 
-          {isAdmin && (
-            <>
-              <Dialog open={showUpload} onOpenChange={setShowUpload}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800">
-                    <Upload className="w-4 h-4 mr-2" />Upload
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="bg-gray-900 border-gray-800 text-white">
-                  <DialogHeader><DialogTitle>Upload Leads</DialogTitle></DialogHeader>
-                  <div className="space-y-4 mt-4 text-left">
+          <Dialog open={showUpload} onOpenChange={setShowUpload}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800"
+                disabled={!isAdmin && leadLists.length === 0}>
+                <Upload className="w-4 h-4 mr-2" />Upload
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-gray-900 border-gray-800 text-white">
+              <DialogHeader><DialogTitle>Upload Leads</DialogTitle></DialogHeader>
+              <div className="space-y-4 mt-4 text-left">
+                {!isAdmin && leadLists.length === 0 ? (
+                  <p className="text-sm text-gray-400">
+                    You don't have any lead lists assigned yet. Ask your admin to assign one before uploading leads.
+                  </p>
+                ) : (
+                  <>
                     {mappingStep === "file" ? (
                       <div className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center">
                         <FileSpreadsheet className="w-12 h-12 text-gray-500 mx-auto mb-3" />
@@ -580,43 +598,45 @@ export default function LeadsPage() {
                       <Label className="text-gray-300">Target List</Label>
                       <select value={selectedUploadListId} onChange={(e) => setSelectedUploadListId(e.target.value)}
                         className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white text-sm">
-                        <option value="create-new" className="text-gray-950 bg-white">Create new list</option>
+                        {isAdmin && <option value="create-new" className="text-gray-950 bg-white">Create new list</option>}
                         {leadLists.map((l: any) => <option key={l.id} value={l.id} className="text-gray-950 bg-white">{l.name}</option>)}
                       </select>
                     </div>
                     <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleUploadLeads}>
                       Upload &amp; Import
                     </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                  </>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
 
-              <Dialog open={showCreateList} onOpenChange={setShowCreateList}>
-                <DialogTrigger asChild>
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    <Plus className="w-4 h-4 mr-2" />New List
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="bg-gray-900 border-gray-800 text-white">
-                  <DialogHeader><DialogTitle>Create Lead List</DialogTitle></DialogHeader>
-                  <div className="space-y-4 mt-4">
-                    <div>
-                      <Label className="text-gray-300">List Name</Label>
-                      <Input value={newListName} onChange={(e) => setNewListName(e.target.value)}
-                        placeholder="Enter list name" className="bg-gray-800 border-gray-700 text-white mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-gray-300">Description</Label>
-                      <Textarea value={newListDesc} onChange={(e) => setNewListDesc(e.target.value)}
-                        placeholder="Optional description" className="bg-gray-800 border-gray-700 text-white mt-1" />
-                    </div>
-                    <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleCreateList}>
-                      Create List
-                    </Button>
+          {isAdmin && (
+            <Dialog open={showCreateList} onOpenChange={setShowCreateList}>
+              <DialogTrigger asChild>
+                <Button className="bg-blue-600 hover:bg-blue-700">
+                  <Plus className="w-4 h-4 mr-2" />New List
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-gray-900 border-gray-800 text-white">
+                <DialogHeader><DialogTitle>Create Lead List</DialogTitle></DialogHeader>
+                <div className="space-y-4 mt-4">
+                  <div>
+                    <Label className="text-gray-300">List Name</Label>
+                    <Input value={newListName} onChange={(e) => setNewListName(e.target.value)}
+                      placeholder="Enter list name" className="bg-gray-800 border-gray-700 text-white mt-1" />
                   </div>
-                </DialogContent>
-              </Dialog>
-            </>
+                  <div>
+                    <Label className="text-gray-300">Description</Label>
+                    <Textarea value={newListDesc} onChange={(e) => setNewListDesc(e.target.value)}
+                      placeholder="Optional description" className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  </div>
+                  <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleCreateList}>
+                    Create List
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           )}
         </div>
       </div>

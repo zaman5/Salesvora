@@ -151,6 +151,10 @@ export function createOAuthCallbackHandler() {
         unionId: userId,
         name: userProfile.name,
         avatar: userProfile.avatar_url,
+        // The designated owner (OWNER_UNION_ID) becomes superadmin so they can
+        // create/promote admins — everyone else keeps upsertUser's normal
+        // default (new users land as "admin"; existing users keep their role).
+        role: env.ownerUnionId && userId === env.ownerUnionId ? "superadmin" : undefined,
       });
 
       const token = await signSessionToken({

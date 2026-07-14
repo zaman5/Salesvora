@@ -50,13 +50,15 @@ export default function App() {
         <Route path="/settings"  element={<Layout><SettingsPage /></Layout>} />
 
         <Route path="/auto-dialer" element={<Layout><AutoDialerPage /></Layout>} />
+        {/* Callers can send/receive SMS and see their own campaigns too — the
+            page itself already scopes campaign editing to admins. */}
+        <Route path="/sms"        element={<Layout><SMSCampaignsPage /></Layout>} />
 
         {/* Protected — admin / superadmin only */}
         <Route path="/users"       element={<AdminLayout><UsersPage /></AdminLayout>} />
         <Route path="/monitoring"  element={<AdminLayout><MonitoringPage /></AdminLayout>} />
         <Route path="/reports"     element={<AdminLayout><ReportsPage /></AdminLayout>} />
         <Route path="/ai-agents"   element={<AdminLayout><AIAgentsPage /></AdminLayout>} />
-        <Route path="/sms"         element={<AdminLayout><SMSCampaignsPage /></AdminLayout>} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>

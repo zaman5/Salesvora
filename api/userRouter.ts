@@ -42,7 +42,7 @@ export const userRouter = createRouter({
       name: z.string().min(1),
       email: z.string().email(),
       phone: z.string().optional(),
-      role: z.enum(["admin", "caller", "viewer"]),
+      role: z.enum(["superadmin", "admin", "caller", "viewer"]),
       unionId: z.string().optional(),
       companyId: z.number().optional(),
       extension: z.string().optional(),
@@ -51,6 +51,9 @@ export const userRouter = createRouter({
       password: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      if (input.role === "superadmin" && !isSuperAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can grant the superadmin role." });
+      }
       const { password, ...rest } = input;
       const finalUnionId = input.unionId || `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       // Only a superadmin may place a user into an arbitrary company; everyone
