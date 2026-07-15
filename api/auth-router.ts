@@ -1,13 +1,18 @@
 import * as cookie from "cookie";
+import { TRPCError } from "@trpc/server";
 import { Session } from "@contracts/constants";
 import { getSessionCookieOptions } from "./lib/cookies";
 import { createRouter, authedQuery, publicQuery } from "./middleware";
 import { signSessionToken } from "./kimi/session";
 import { upsertUser, findUserByEmail } from "./queries/users";
+import { env } from "./lib/env";
 import { z } from "zod";
 
 export const authRouter = createRouter({
   me: authedQuery.query((opts) => opts.ctx.user),
+  // Dev-only convenience login that grants any role, including superadmin,
+  // with zero credentials. Must never be reachable in production — that
+  // would let anyone on the internet instantly become superadmin.
   devLogin: publicQuery
     .input(
       z.object({
@@ -15,6 +20,9 @@ export const authRouter = createRouter({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      if (env.isProduction) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not available in production." });
+      }
       try {
         await upsertUser({
           unionId: `dev-owner-id-${input.role}`,

@@ -218,12 +218,15 @@ export async function upsertUser(data: { unionId: string; name?: string | null; 
         .where(eq(users.id, existing.id));
       return findUserById(existing.id);
     }
+    // A brand-new self-registering user (e.g. via OAuth) gets the
+    // least-privileged role by default — admin/superadmin must be granted
+    // explicitly (Users page, or OWNER_UNION_ID for the designated owner).
     const id = await createUser({
       unionId: data.unionId,
       name: data.name,
       email: data.email,
       avatar: data.avatar,
-      role: (data.role || "admin") as any,
+      role: (data.role || "caller") as any,
       status: data.status || "active",
       companyId: undefined,
     });
@@ -256,7 +259,7 @@ export async function upsertUser(data: { unionId: string; name?: string | null; 
       name: data.name || "Unknown",
       email: data.email || "",
       avatar: data.avatar || "",
-      role: data.role || "admin",
+      role: data.role || "caller",
       status: "active",
       companyId: undefined,
       createdAt: new Date().toISOString(),
