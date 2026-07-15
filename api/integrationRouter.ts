@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createRouter, superAdminQuery, authedQuery } from "./middleware";
 import { requireCompanyScope, resolveCompanyScope } from "./lib/authz";
-import { listConnections } from "./lib/telnyx";
+import { listConnections, ensureOutboundVoiceProfile, attachVoiceProfileToConnection } from "./lib/telnyx";
 import { getTelnyxConfig, saveTelnyxConfig, maskTelnyxConfig } from "./lib/telnyxConfig";
 import { listPhoneNumbers, addPhoneNumber, updatePhoneNumber, removePhoneNumber, togglePhoneNumber, assignPhoneNumber, numbersForCaller } from "./lib/phoneNumbers";
 
@@ -153,6 +153,56 @@ export const integrationRouter = createRouter({
         })),
       };
     }),
+
+  // One-click fix for SIP 480 "Destination temporarily unavailable": a
+  // connection with no Outbound Voice Profile cannot place outbound calls.
+  // This ensures a profile exists on the account (creating "Salesvora
+  // Outbound" if needed), saves its id in settings, and attaches it to the
+  // configured connection plus every per-caller "Salesvora — …" credential
+  // connection that's missing one.
+  repairVoiceSetup: superAdminQuery.mutation(async ({ ctx }) => {
+    const companyId = companyScope(ctx.user);
+    const cfg = await getTelnyxConfig(companyId);
+    if (!cfg?.apiKey) {
+      return { ok: false as const, message: "Save your Telnyx API key first (Settings → Integration)." };
+    }
+
+    const actions: string[] = [];
+
+    const ensured = await ensureOutboundVoiceProfile(cfg.apiKey);
+    if (!ensured.ok) return { ok: false as const, message: ensured.message, actions };
+    const ovpId = ensured.data;
+    if (cfg.outboundVoiceProfileId !== ovpId) {
+      await saveTelnyxConfig(companyId, { outboundVoiceProfileId: ovpId });
+      actions.push("Saved the outbound voice profile to settings.");
+    }
+
+    const conns = await listConnections(cfg.apiKey);
+    if (!conns.ok) return { ok: false as const, message: conns.message, actions };
+
+    let repaired = 0;
+    const failures: string[] = [];
+    for (const conn of conns.data) {
+      const isCredential = conn.recordType === "credential_connection";
+      const isOurs = conn.id === cfg.connectionId || /salesvora/i.test(conn.connectionName || "");
+      if (!isCredential || !isOurs || conn.outboundVoiceProfileId) continue;
+      const res = await attachVoiceProfileToConnection(cfg.apiKey, conn.id, ovpId);
+      if (res.ok) {
+        repaired++;
+        actions.push(`Attached voice profile to "${conn.connectionName}".`);
+      } else {
+        failures.push(`"${conn.connectionName}": ${res.message}`);
+      }
+    }
+
+    const message =
+      failures.length > 0
+        ? `Could not fix: ${failures.join("; ")}`
+        : repaired > 0
+          ? `Fixed ${repaired} connection(s) that couldn't place outbound calls. Try calling again.`
+          : "All Salesvora connections already have an outbound voice profile. If calls still fail with SIP 480, the from-number may not belong to your Telnyx account — check Settings → Phone Numbers.";
+    return { ok: failures.length === 0, message, actions };
+  }),
 
   // Persist the Telnyx configuration for the caller's company.
   saveTelnyx: superAdminQuery

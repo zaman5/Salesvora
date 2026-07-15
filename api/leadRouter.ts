@@ -1,12 +1,30 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware";
-import { listCompanyScope, resolveCompanyScope } from "./lib/authz";
+import { listCompanyScope, resolveCompanyScope, assertSameCompany } from "./lib/authz";
 import {
   findLeadListsByCompany, findLeadListById, createLeadList, updateLeadList, deleteLeadList,
   findLeadsByList, findLeadById,
   createLead, createLeadsBatch, updateLead, deleteLead, searchLeads,
   assignListToCaller, getAssignedListsForCaller,
 } from "./queries/leads";
+
+// By-id access must verify the record belongs to the requester's company —
+// otherwise any authenticated user could read/modify/delete another company's
+// lead lists and leads by guessing ids.
+async function listInScope(user: { role: string; companyId?: number | null }, id: number) {
+  const list = await findLeadListById(id);
+  if (!list) throw new TRPCError({ code: "NOT_FOUND", message: "Lead list not found." });
+  assertSameCompany(user, (list as { companyId?: number | null }).companyId);
+  return list;
+}
+
+async function leadInScope(user: { role: string; companyId?: number | null }, id: number) {
+  const lead = await findLeadById(id);
+  if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+  assertSameCompany(user, (lead as { companyId?: number | null }).companyId);
+  return lead;
+}
 
 export const leadRouter = createRouter({
   // ─── Lead Lists ───
@@ -18,8 +36,8 @@ export const leadRouter = createRouter({
 
   getList: adminQuery
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return findLeadListById(input.id);
+    .query(async ({ ctx, input }) => {
+      return listInScope(ctx.user, input.id);
     }),
 
   createList: adminQuery
@@ -57,14 +75,16 @@ export const leadRouter = createRouter({
         })).optional(),
       }),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await listInScope(ctx.user, input.id);
       await updateLeadList(input.id, input.data);
       return { success: true };
     }),
 
   deleteList: adminQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await listInScope(ctx.user, input.id);
       await deleteLeadList(input.id);
       return { success: true };
     }),
@@ -76,7 +96,8 @@ export const leadRouter = createRouter({
       page: z.number().optional(),
       limit: z.number().optional(),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await listInScope(ctx.user, input.leadListId);
       if (input.page && input.limit) {
         return findLeadsByList(input.leadListId, input.page, input.limit);
       }
@@ -85,8 +106,8 @@ export const leadRouter = createRouter({
 
   getById: authedQuery
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return findLeadById(input.id);
+    .query(async ({ ctx, input }) => {
+      return leadInScope(ctx.user, input.id);
     }),
 
   create: authedQuery
@@ -110,9 +131,8 @@ export const leadRouter = createRouter({
       priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
       assignedTo: z.number().optional(),
     }))
-    .mutation(async ({ input }) => {
-      const list = await findLeadListById(input.leadListId);
-      if (!list) throw new Error("Lead list not found");
+    .mutation(async ({ ctx, input }) => {
+      const list = await listInScope(ctx.user, input.leadListId);
       const id = await createLead({
         ...input,
         companyId: list.companyId,
@@ -142,10 +162,9 @@ export const leadRouter = createRouter({
         assignedTo: z.number().optional(),
       })),
     }))
-    .mutation(async ({ input }) => {
-      const list = await findLeadListById(input.leadListId);
-      if (!list) throw new Error("Lead list not found");
-      
+    .mutation(async ({ ctx, input }) => {
+      const list = await listInScope(ctx.user, input.leadListId);
+
       const leadData = input.leads.map(l => ({
         ...l,
         leadListId: input.leadListId,
@@ -180,14 +199,16 @@ export const leadRouter = createRouter({
         assignedTo: z.number().optional(),
       }).partial(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await leadInScope(ctx.user, input.id);
       await updateLead(input.id, input.data);
       return { success: true };
     }),
 
   delete: authedQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await leadInScope(ctx.user, input.id);
       await deleteLead(input.id);
       return { success: true };
     }),
@@ -210,6 +231,7 @@ export const leadRouter = createRouter({
       callerId: z.number(),
     }))
     .mutation(async ({ ctx, input }) => {
+      await listInScope(ctx.user, input.leadListId);
       await assignListToCaller({
         ...input,
         assignedBy: ctx.user.id,

@@ -81,6 +81,13 @@ export default function SettingsPage() {
     onSuccess: () => numbersQuery.refetch(),
   });
 
+  // One-click repair for SIP 480 call failures (missing outbound voice profile)
+  const [repairResult, setRepairResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const repairVoiceMutation = trpc.integration.repairVoiceSetup.useMutation({
+    onSuccess: (res) => { setRepairResult(res); telnyxQuery.refetch(); },
+    onError:   (err) => setRepairResult({ ok: false, message: err.message }),
+  });
+
   const [showForm,   setShowForm]   = useState(false);
   // null = new entry | 0 = editing synthetic Telnyx entry | >0 = editing real phoneNumber
   const [editingId,  setEditingId]  = useState<number | null>(null);
@@ -278,6 +285,37 @@ export default function SettingsPage() {
             <span className="w-2 h-2 rounded-full bg-green-400" /> Active
           </span>
         </div>
+      )}
+
+      {/* SIP 480 repair — attaches a Telnyx Outbound Voice Profile to every
+          Salesvora connection that's missing one (the #1 cause of
+          "Destination temporarily unavailable" on outbound calls). */}
+      {isAdmin && telnyxQuery.data?.hasApiKey && (
+        <Card className="bg-gray-900 border-amber-800/40">
+          <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white">Calls failing with SIP 480 "Destination temporarily unavailable"?</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                This usually means a connection has no Outbound Voice Profile. Click to check and fix all Salesvora connections automatically.
+              </p>
+              {repairResult && (
+                <p className={`text-xs mt-2 ${repairResult.ok ? "text-green-400" : "text-red-400"}`}>
+                  {repairResult.ok ? "✓ " : "✗ "}{repairResult.message}
+                </p>
+              )}
+            </div>
+            <Button
+              size="sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+              onClick={() => { setRepairResult(null); repairVoiceMutation.mutate(); }}
+              disabled={repairVoiceMutation.isPending}
+            >
+              {repairVoiceMutation.isPending
+                ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Checking…</>
+                : "Fix Outbound Calling"}
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {!isAdmin ? (

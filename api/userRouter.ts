@@ -3,8 +3,8 @@ import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery, superAdminQuery, authedQuery, callerQuery } from "./middleware";
 import { isSuperAdmin, requireCompanyScope } from "./lib/authz";
-import { getTelnyxConfig } from "./lib/telnyxConfig";
-import { createCredentialConnection } from "./lib/telnyx";
+import { getTelnyxConfig, saveTelnyxConfig } from "./lib/telnyxConfig";
+import { createCredentialConnection, ensureOutboundVoiceProfile } from "./lib/telnyx";
 import {
   findAllUsers, findUsersCreatedBy, findUserById,
   createUser, updateUser, deleteUser, findCallersByAdmin,
@@ -172,13 +172,26 @@ export const userRouter = createRouter({
       const target = await findUserById(input.id);
       if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
 
+      // Resolve an outbound voice profile BEFORE creating the connection — a
+      // credential connection without one can't place outbound calls (every
+      // attempt fails with SIP 480). Persist the resolved id so future
+      // provisions and the repair tool reuse it.
+      let ovpId = telnyx.outboundVoiceProfileId;
+      if (!ovpId) {
+        const ensured = await ensureOutboundVoiceProfile(telnyx.apiKey);
+        if (ensured.ok) {
+          ovpId = ensured.data;
+          await saveTelnyxConfig(companyId, { outboundVoiceProfileId: ovpId });
+        }
+      }
+
       const username = `sv_${companyId}_${input.id}_${nanoid(6)}`.toLowerCase();
       const password = nanoid(20);
       const result = await createCredentialConnection(telnyx.apiKey, {
         connectionName: `Salesvora — ${(target as { name?: string }).name || "agent"} (#${input.id})`,
         username,
         password,
-        outboundVoiceProfileId: telnyx.outboundVoiceProfileId,
+        outboundVoiceProfileId: ovpId,
       });
       if (!result.ok) {
         return { success: false, error: result.message };

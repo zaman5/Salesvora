@@ -162,6 +162,90 @@ export type CreateCredentialResult = { username: string; password: string; conne
  * kicked off / blocked from calling or receiving calls at the same time.
  * POST /v2/credential_connections
  */
+// ─── Outbound Voice Profiles ───
+// A connection WITHOUT an outbound voice profile cannot place outbound calls —
+// Telnyx rejects every attempt with SIP 480 "Temporarily Unavailable". These
+// helpers let the app resolve/create/attach a profile automatically instead of
+// silently creating broken connections.
+
+export type OutboundVoiceProfile = { id: string; name: string };
+
+/** GET /v2/outbound_voice_profiles */
+export async function listOutboundVoiceProfiles(
+  apiKey: string,
+): Promise<TelnyxResult<OutboundVoiceProfile[]>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/outbound_voice_profiles?page[size]=50`, {
+      headers: authHeaders(apiKey),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    const body = (await res.json()) as { data?: Array<Record<string, unknown>> };
+    return {
+      ok: true,
+      data: (body.data ?? []).map((p) => ({ id: String(p.id ?? ""), name: String(p.name ?? "") })),
+    };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error reaching Telnyx." };
+  }
+}
+
+/** POST /v2/outbound_voice_profiles */
+export async function createOutboundVoiceProfile(
+  apiKey: string,
+  name: string,
+): Promise<TelnyxResult<OutboundVoiceProfile>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/outbound_voice_profiles`, {
+      method: "POST",
+      headers: authHeaders(apiKey),
+      body: JSON.stringify({ name, traffic_type: "conversational" }),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    const body = (await res.json()) as { data?: Record<string, unknown> };
+    return { ok: true, data: { id: String(body.data?.id ?? ""), name } };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error reaching Telnyx." };
+  }
+}
+
+/**
+ * Return an outbound voice profile id, creating "Salesvora Outbound" if the
+ * account has none. Without one, outbound calls fail with SIP 480.
+ */
+export async function ensureOutboundVoiceProfile(apiKey: string): Promise<TelnyxResult<string>> {
+  const existing = await listOutboundVoiceProfiles(apiKey);
+  if (!existing.ok) return existing;
+  if (existing.data.length > 0) return { ok: true, data: existing.data[0].id };
+  const created = await createOutboundVoiceProfile(apiKey, "Salesvora Outbound");
+  if (!created.ok) return created;
+  return { ok: true, data: created.data.id };
+}
+
+/**
+ * PATCH /v2/credential_connections/{id} — attach an outbound voice profile to
+ * an existing credential connection so it can place outbound calls.
+ */
+export async function attachVoiceProfileToConnection(
+  apiKey: string,
+  connectionId: string,
+  outboundVoiceProfileId: string,
+): Promise<TelnyxResult<{ connectionId: string }>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/credential_connections/${encodeURIComponent(connectionId)}`, {
+      method: "PATCH",
+      headers: authHeaders(apiKey),
+      body: JSON.stringify({ outbound: { outbound_voice_profile_id: outboundVoiceProfileId } }),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    return { ok: true, data: { connectionId } };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error reaching Telnyx." };
+  }
+}
+
 export async function createCredentialConnection(
   apiKey: string,
   params: { connectionName: string; username: string; password: string; outboundVoiceProfileId?: string | null },
@@ -173,8 +257,17 @@ export async function createCredentialConnection(
       user_name: params.username,
       password: params.password,
     };
-    if (params.outboundVoiceProfileId) {
-      body.outbound = { outbound_voice_profile_id: params.outboundVoiceProfileId };
+    // A credential connection created WITHOUT an outbound voice profile can
+    // receive calls but every outbound attempt fails with SIP 480. If the
+    // caller didn't supply a profile id, resolve one from the account (or
+    // create it) rather than silently provisioning a broken connection.
+    let ovpId = params.outboundVoiceProfileId;
+    if (!ovpId) {
+      const ensured = await ensureOutboundVoiceProfile(apiKey);
+      if (ensured.ok) ovpId = ensured.data;
+    }
+    if (ovpId) {
+      body.outbound = { outbound_voice_profile_id: ovpId };
     }
     const res = await fetch(`${TELNYX_BASE}/credential_connections`, {
       method: "POST",

@@ -215,11 +215,10 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
                 // Provide actionable messages for common SIP error codes
                 let msg = `${c.sipReason || c.cause || "Call failed"}`;
                 if (c.sipCode === 480) {
-                  msg = "Destination temporarily unavailable (SIP 480). Possible causes: " +
-                    "the from-number is not linked to your Telnyx Credential Connection, " +
-                    "or the connection has no outbound voice profile. " +
-                    "Check Settings → Integration → Telnyx and ensure the Caller ID " +
-                    "matches a number on your Telnyx account.";
+                  msg = "Destination temporarily unavailable (SIP 480). Usually the connection " +
+                    "has no Outbound Voice Profile or the from-number isn't on your Telnyx account. " +
+                    "Fix: ask your superadmin to open Settings and click \"Fix Outbound Calling\" — " +
+                    "it attaches a voice profile to every Salesvora connection automatically.";
                 } else if (c.sipCode === 403) {
                   msg = "Call forbidden (SIP 403) — the from-number may not be authorized on this connection.";
                 } else if (c.sipCode === 486) {

@@ -1,11 +1,22 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware";
 import {
   findCampaignsByCompany, findCampaignById, createCampaign, updateCampaign, deleteCampaign,
   addLeadsToCampaign, getCampaignLeads, getNextCampaignLead, updateCampaignLeadStatus, getCampaignProgress,
 } from "./queries/campaigns";
 import { findLeadsByList } from "./queries/leads";
-import { listCompanyScope } from "./lib/authz";
+import { listCompanyScope, assertSameCompany } from "./lib/authz";
+
+// Every by-id endpoint must verify the campaign belongs to the requester's
+// company — without this, any authenticated user could read or modify another
+// company's campaigns just by guessing ids.
+async function campaignInScope(user: { role: string; companyId?: number | null }, id: number) {
+  const campaign = await findCampaignById(id);
+  if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "Campaign not found." });
+  assertSameCompany(user, (campaign as { companyId?: number | null }).companyId);
+  return campaign;
+}
 
 export const campaignRouter = createRouter({
   list: authedQuery.query(async ({ ctx }) => {
@@ -16,8 +27,8 @@ export const campaignRouter = createRouter({
 
   getById: authedQuery
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return findCampaignById(input.id);
+    .query(async ({ ctx, input }) => {
+      return campaignInScope(ctx.user, input.id);
     }),
 
   create: callerQuery
@@ -91,7 +102,8 @@ export const campaignRouter = createRouter({
         settings: z.record(z.string(), z.any()).optional(),
       }).partial(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await campaignInScope(ctx.user, input.id);
       const updateData: any = { ...input.data };
       if (input.data.startDate) updateData.startDate = new Date(input.data.startDate);
       if (input.data.endDate) updateData.endDate = new Date(input.data.endDate);
@@ -101,7 +113,8 @@ export const campaignRouter = createRouter({
 
   delete: adminQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await campaignInScope(ctx.user, input.id);
       await deleteCampaign(input.id);
       return { success: true };
     }),
@@ -111,10 +124,9 @@ export const campaignRouter = createRouter({
     .input(z.object({
       campaignId: z.number(),
     }))
-    .mutation(async ({ input }) => {
-      const campaign = await findCampaignById(input.campaignId);
-      if (!campaign) throw new Error("Campaign not found");
-      
+    .mutation(async ({ ctx, input }) => {
+      const campaign = await campaignInScope(ctx.user, input.campaignId);
+
       const leads = await findLeadsByList(campaign.leadListId);
       if (!leads || !Array.isArray(leads) || leads.length === 0) {
         return { count: 0, success: true };
@@ -136,7 +148,8 @@ export const campaignRouter = createRouter({
       campaignId: z.number(),
       status: z.string().optional(),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await campaignInScope(ctx.user, input.campaignId);
       return getCampaignLeads(input.campaignId, input.status);
     }),
 
@@ -144,7 +157,8 @@ export const campaignRouter = createRouter({
     .input(z.object({
       campaignId: z.number(),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await campaignInScope(ctx.user, input.campaignId);
       // Do not filter by callerId — campaign leads are created without one,
       // so passing the user ID would match nothing and return null forever.
       return getNextCampaignLead(input.campaignId);
@@ -166,20 +180,23 @@ export const campaignRouter = createRouter({
 
   progress: authedQuery
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await campaignInScope(ctx.user, input.id);
       return getCampaignProgress(input.id);
     }),
 
   start: callerQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await campaignInScope(ctx.user, input.id);
       await updateCampaign(input.id, { status: "running" });
       return { success: true };
     }),
 
   pause: callerQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await campaignInScope(ctx.user, input.id);
       await updateCampaign(input.id, { status: "paused" });
       return { success: true };
     }),

@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware";
-import { listCompanyScope } from "./lib/authz";
+import { listCompanyScope, assertSameCompany } from "./lib/authz";
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { sendSMS, toE164 } from "./lib/telnyx";
 import { listPhoneNumbers } from "./lib/phoneNumbers";
@@ -24,6 +25,16 @@ async function assignedNumbersOf(user: { id: number; role: string; companyId?: n
 function ownNumberOf(log: { direction?: string; toNumber?: string; fromNumber?: string }): string | undefined {
   return log.direction === "inbound" ? log.toNumber : log.fromNumber;
 }
+
+// Every by-id endpoint must verify the campaign belongs to the requester's
+// company — otherwise any authenticated user could read or modify another
+// company's SMS campaigns and logs by guessing ids.
+async function smsCampaignInScope(user: { role: string; companyId?: number | null }, id: number) {
+  const campaign = await findSMSCampaignById(id);
+  if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "SMS campaign not found." });
+  assertSameCompany(user, (campaign as { companyId?: number | null }).companyId);
+  return campaign;
+}
 import {
   findSMSCampaignsByCompany, findSMSCampaignById, createSMSCampaign, updateSMSCampaign,
   findSMSLogsByCampaign, createSMSLog, updateSMSLogStatus, incrementSMSStats,
@@ -40,8 +51,8 @@ export const smsRouter = createRouter({
 
   getById: authedQuery
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return findSMSCampaignById(input.id);
+    .query(async ({ ctx, input }) => {
+      return smsCampaignInScope(ctx.user, input.id);
     }),
 
   create: callerQuery
@@ -78,7 +89,8 @@ export const smsRouter = createRouter({
         settings: z.record(z.string(), z.any()).optional(),
       }).partial(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await smsCampaignInScope(ctx.user, input.id);
       const updateData: any = { ...input.data };
       if (input.data.scheduledAt) updateData.scheduledAt = new Date(input.data.scheduledAt);
       await updateSMSCampaign(input.id, updateData);
@@ -88,21 +100,24 @@ export const smsRouter = createRouter({
   // ─── Send / Pause / Resume Campaign ───
   send: callerQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await smsCampaignInScope(ctx.user, input.id);
       await updateSMSCampaign(input.id, { status: "sending" });
       return { success: true, message: "Campaign queued for sending" };
     }),
 
   pause: callerQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await smsCampaignInScope(ctx.user, input.id);
       await updateSMSCampaign(input.id, { status: "paused" });
       return { success: true };
     }),
 
   resume: callerQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await smsCampaignInScope(ctx.user, input.id);
       await updateSMSCampaign(input.id, { status: "sending" });
       return { success: true };
     }),
@@ -166,7 +181,8 @@ export const smsRouter = createRouter({
   // ─── SMS Logs (per campaign) ───
   logs: authedQuery
     .input(z.object({ campaignId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await smsCampaignInScope(ctx.user, input.campaignId);
       return findSMSLogsByCampaign(input.campaignId);
     }),
 
@@ -201,8 +217,8 @@ export const smsRouter = createRouter({
       message: z.string(),
       fromNumber: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
-      const campaign = await findSMSCampaignById(input.campaignId);
+    .mutation(async ({ ctx, input }) => {
+      const campaign = await smsCampaignInScope(ctx.user, input.campaignId);
       const id = await createSMSLog({
         smsCampaignId: input.campaignId,
         leadId: input.leadId,

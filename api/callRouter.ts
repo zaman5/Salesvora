@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware";
-import { resolveCompanyScope } from "./lib/authz";
+import { resolveCompanyScope, assertSameCompany } from "./lib/authz";
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { placeCall } from "./lib/telnyx";
 import {
@@ -9,6 +10,16 @@ import {
   getCallStats, findDispositions, createDisposition, seedDefaultDispositions,
   createRecording, findRecordingsByCall,
 } from "./queries/calls";
+
+// By-id access must verify the call belongs to the requester's company —
+// otherwise any authenticated user could read or modify another company's
+// call records (numbers, notes, recordings) by guessing ids.
+async function callInScope(user: { role: string; companyId?: number | null }, id: number) {
+  const call = await findCallById(id);
+  if (!call) throw new TRPCError({ code: "NOT_FOUND", message: "Call not found." });
+  assertSameCompany(user, (call as { companyId?: number | null }).companyId);
+  return call;
+}
 
 export const callRouter = createRouter({
   // ─── Call CRUD ───
@@ -34,8 +45,8 @@ export const callRouter = createRouter({
 
   getById: authedQuery
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return findCallById(input.id);
+    .query(async ({ ctx, input }) => {
+      return callInScope(ctx.user, input.id);
     }),
 
   getActiveCall: callerQuery.query(async ({ ctx }) => {
@@ -119,7 +130,8 @@ export const callRouter = createRouter({
       id: z.number(),
       status: z.enum(["initiated", "ringing", "connected", "completed", "failed", "no_answer", "busy", "cancelled"]),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await callInScope(ctx.user, input.id);
       const updateData: Record<string, unknown> = { status: input.status };
       if (input.status === "connected") {
         updateData.answeredAt = new Date();
@@ -137,7 +149,8 @@ export const callRouter = createRouter({
   // network) apart from a call that's still actually live.
   heartbeat: callerQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await callInScope(ctx.user, input.id);
       await updateCall(input.id, { lastHeartbeatAt: new Date() });
       return { success: true };
     }),
@@ -153,7 +166,8 @@ export const callRouter = createRouter({
       customFields: z.record(z.string(), z.any()).optional(),
       recordingUrl: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await callInScope(ctx.user, input.id);
       await updateCall(input.id, {
         status: "completed",
         dispositionId: input.dispositionId,
@@ -208,7 +222,8 @@ export const callRouter = createRouter({
   // ─── Recordings ───
   recordings: authedQuery
     .input(z.object({ callId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await callInScope(ctx.user, input.callId);
       return findRecordingsByCall(input.callId);
     }),
 
@@ -220,7 +235,8 @@ export const callRouter = createRouter({
       fileSize: z.number().optional(),
       format: z.string().default("mp3"),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await callInScope(ctx.user, input.callId);
       const id = await createRecording(input);
       return { id, success: true };
     }),
