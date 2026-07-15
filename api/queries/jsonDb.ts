@@ -73,8 +73,13 @@ function resolveDbPath(): string {
   // 3. Production fallback: never keep data inside a folder that a deploy can
   //    replace. The home directory is outside every checkout/build dir, so
   //    ~/salesvora-data/db.json survives git pushes no matter how the server
-  //    process was started or where its cwd points.
-  if (env.isProduction) {
+  //    process was started or where its cwd points. Besides NODE_ENV, treat
+  //    any hosting-style path (public_html / domains) as deployed — a process
+  //    started without NODE_ENV=production must still never store data in a
+  //    folder that the next git push deletes.
+  const looksDeployed =
+    env.isProduction || cwdPosix.includes("/public_html") || cwdPosix.includes("/domains/");
+  if (looksDeployed) {
     const home = os.homedir();
     if (home && home !== "/") {
       const dataDir = path.join(home, "salesvora-data");
@@ -97,6 +102,30 @@ function resolveDbPath(): string {
 }
 
 const DB_PATH_RESOLVED = resolveDbPath();
+
+/**
+ * Diagnostics for the /health endpoint so persistence can be verified from a
+ * browser without SSH: which storage mode is active, where db.json actually
+ * lives, and whether that location is deploy-safe and writable.
+ */
+export function getStorageInfo() {
+  const persistent =
+    Boolean(env.dbJsonPath) || DB_PATH_RESOLVED.replace(/\\/g, "/").includes("salesvora-data");
+  let writable = false;
+  try {
+    fs.accessSync(path.dirname(DB_PATH_RESOLVED), fs.constants.W_OK);
+    writable = true;
+  } catch { /* not writable */ }
+  return {
+    mode: hasDatabase() ? "mysql" : "json",
+    dbPath: DB_PATH_RESOLVED,
+    persistent,
+    exists: fs.existsSync(DB_PATH_RESOLVED),
+    sizeBytes: fs.existsSync(DB_PATH_RESOLVED) ? fs.statSync(DB_PATH_RESOLVED).size : 0,
+    writable,
+    envOverride: Boolean(env.dbJsonPath),
+  };
+}
 
 // Log which storage mode is active once on startup
 let _modeLogged = false;

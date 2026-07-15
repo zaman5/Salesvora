@@ -33,6 +33,42 @@ type AnyCall = {
 
 const REMOTE_AUDIO_ID = "telnyx-remote-audio";
 
+/**
+ * Pull the caller's phone number out of a Telnyx call object. Depending on
+ * SDK version and call state the caller ID lives on the call itself OR on
+ * call.options, and may arrive as a bare number, "+E.164", or a SIP URI like
+ * "sip:+15550001234@sip.telnyx.com". Checking only call.remoteCallerNumber
+ * (the old behavior) showed "Unknown" for most real inbound calls.
+ */
+function extractCallerNumber(call: AnyCall): string | null {
+  const opts = ((call as unknown as { options?: Record<string, unknown> }).options ?? {}) as Record<string, unknown>;
+  const candidates = [
+    call.remoteCallerNumber,
+    opts.remoteCallerNumber,
+    opts.callerNumber,
+    call.remoteCallerName,
+    opts.remoteCallerName,
+    opts.callerName,
+  ];
+  // First pass: anything containing a dialable number wins.
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) {
+      const m = c.match(/\+?\d[\d\s().-]{5,}/);
+      if (m) {
+        const cleaned = m[0].replace(/[^\d+]/g, "");
+        if (cleaned.replace(/\D/g, "").length >= 6) return cleaned;
+      }
+    }
+  }
+  // Second pass: fall back to a display name (better than "Unknown").
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim() && !/^(anonymous|unknown)$/i.test(c.trim())) {
+      return c.trim();
+    }
+  }
+  return null;
+}
+
 // Telnyx sends errors as objects, strings, or Errors. Pull out something useful.
 function describeError(e: unknown): string {
   if (!e) return "Unknown WebRTC error.";
@@ -161,11 +197,17 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
               const dir = note.call.direction === "inbound" ? "inbound" : "outbound";
               setCallDirection(dir);
               if (dir === "inbound") {
-                setIncomingCallerNumber(note.call.remoteCallerNumber || note.call.remoteCallerName || "Unknown");
+                setIncomingCallerNumber(extractCallerNumber(note.call) || "Unknown");
               }
               setCallState("ringing");
             } else if (s === "active") {
               setCallState("active");
+              // Caller ID sometimes only becomes available once the call is
+              // answered — refresh it so the active bar shows the real number.
+              if (note.call.direction === "inbound") {
+                const n = extractCallerNumber(note.call);
+                if (n) setIncomingCallerNumber(n);
+              }
             } else if (["hangup", "destroy", "purge"].includes(s)) {
               const c = note.call;
               const failed = c.sipCode && c.sipCode >= 400;

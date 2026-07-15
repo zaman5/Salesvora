@@ -67,6 +67,39 @@ export default function SMSCampaignsPage() {
   // channel from the server, so this is how new client replies show up.
   const { data: inboxLogs = [] } = trpc.sms.inbox.useQuery(undefined, { refetchInterval: 5000 });
 
+  // ── Conversation viewer: full two-way thread with one number ──
+  const [threadWith, setThreadWith] = useState<string | null>(null);
+  const [replyMsg, setReplyMsg]     = useState("");
+
+  const { data: thread = [], refetch: refetchThread } = trpc.sms.conversation.useQuery(
+    { number: threadWith || "" },
+    { enabled: !!threadWith, refetchInterval: 5000 },
+  );
+
+  const replyMutation = trpc.sms.sendDirect.useMutation({
+    onSuccess: () => { setReplyMsg(""); refetchThread(); },
+  });
+
+  // The company-side number of the thread (used as the reply "from") — taken
+  // from the most recent message, falling back to the first available number.
+  const threadOwnNumber = (() => {
+    const t = thread as any[];
+    for (let i = t.length - 1; i >= 0; i--) {
+      const own = t[i].direction === "inbound" ? t[i].toNumber : t[i].fromNumber;
+      if (own) return own as string;
+    }
+    return fromNumbers[0] || "";
+  })();
+
+  const handleSendReply = () => {
+    if (!threadWith || !replyMsg.trim()) return;
+    replyMutation.mutate({
+      toNumber: threadWith,
+      message: replyMsg,
+      fromNumber: threadOwnNumber || undefined,
+    });
+  };
+
   // Pre-select defaults
   useEffect(() => {
     const list = campaigns as any[];
@@ -621,7 +654,10 @@ export default function SMSCampaignsPage() {
                       const inbound = log.direction === "inbound";
                       const contact = inbound ? log.fromNumber : log.toNumber;
                       return (
-                        <tr key={log.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 ${inbound ? "bg-blue-500/5" : ""}`}>
+                        <tr key={log.id}
+                          onClick={() => contact && setThreadWith(contact)}
+                          title={contact ? "Click to view the full conversation" : undefined}
+                          className={`border-b border-gray-800/50 hover:bg-gray-800/30 ${contact ? "cursor-pointer" : ""} ${inbound ? "bg-blue-500/5" : ""}`}>
                           <td className="px-4 py-3">
                             {inbound ? (
                               <span className="flex items-center gap-1 text-xs text-blue-400">
@@ -634,7 +670,7 @@ export default function SMSCampaignsPage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-white font-mono">{contact || "—"}</td>
-                          <td className="px-4 py-3 text-sm text-gray-300 max-w-sm truncate">{log.message}</td>
+                          <td className="px-4 py-3 text-sm text-gray-300 max-w-sm truncate" title={log.message}>{log.message}</td>
                           <td className="px-4 py-3">
                             <Badge className={
                               log.status === "delivered" || log.status === "received" ? "bg-green-500/20 text-green-400 border-0" :
@@ -664,6 +700,57 @@ export default function SMSCampaignsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* ── Conversation dialog: full thread + reply ── */}
+          <Dialog open={!!threadWith} onOpenChange={(o) => { if (!o) { setThreadWith(null); setReplyMsg(""); } }}>
+            <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-blue-400" />
+                  <span className="font-mono">{threadWith}</span>
+                </DialogTitle>
+              </DialogHeader>
+
+              {/* Full message history — complete text, both directions */}
+              <div className="max-h-[50vh] overflow-y-auto space-y-2 pr-1 mt-2">
+                {(thread as any[]).length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-6">No messages with this number yet.</p>
+                )}
+                {(thread as any[]).map((m) => {
+                  const inbound = m.direction === "inbound";
+                  return (
+                    <div key={m.id} className={`flex ${inbound ? "justify-start" : "justify-end"}`}>
+                      <div className={`max-w-[80%] rounded-2xl px-3 py-2 ${inbound ? "bg-gray-800 text-gray-100" : "bg-blue-600 text-white"}`}>
+                        <p className="text-sm whitespace-pre-wrap break-words">{m.message}</p>
+                        <p className={`text-[10px] mt-1 ${inbound ? "text-gray-500" : "text-blue-200"}`}>
+                          {inbound ? "Received" : "Sent"}
+                          {m.createdAt ? ` · ${new Date(m.createdAt).toLocaleString()}` : ""}
+                          {!inbound && m.status ? ` · ${m.status}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Reply box */}
+              <div className="flex items-end gap-2 pt-3 border-t border-gray-800">
+                <Textarea
+                  value={replyMsg}
+                  onChange={(e) => setReplyMsg(e.target.value)}
+                  placeholder={threadOwnNumber ? `Reply from ${threadOwnNumber}…` : "Type a reply…"}
+                  className="bg-gray-800 border-gray-700 text-white min-h-[44px] max-h-28 flex-1 resize-none"
+                />
+                <Button
+                  className="bg-green-600 hover:bg-green-700 text-white shrink-0 h-10"
+                  onClick={handleSendReply}
+                  disabled={!replyMsg.trim() || replyMutation.isPending}
+                >
+                  {replyMutation.isPending ? <span className="animate-spin">⟳</span> : <Send className="w-4 h-4" />}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
       </Tabs>
     </div>

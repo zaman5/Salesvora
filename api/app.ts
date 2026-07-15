@@ -5,11 +5,14 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { webhooksApp } from "./webhooks";
+import { getStorageInfo } from "./queries/jsonDb";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
-app.get("/health", (c) => c.json({ status: "ok", time: new Date().toISOString() }));
+// storage info lets us verify from a browser that db.json lives at a
+// deploy-safe path (persistent: true) — see api/queries/jsonDb.ts.
+app.get("/health", (c) => c.json({ status: "ok", time: new Date().toISOString(), storage: getStorageInfo() }));
 
 // Inbound Telnyx webhooks (SMS, etc.) — see api/webhooks.ts.
 app.route("/api/webhooks", webhooksApp);
