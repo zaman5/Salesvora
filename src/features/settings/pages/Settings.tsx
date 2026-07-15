@@ -60,7 +60,9 @@ type DisplayEntry = {
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  // Connecting phone numbers to Telnyx/SIP trunking and assigning numbers to
+  // admins/callers is a superadmin-only, platform-level action.
+  const isAdmin = user?.role === "superadmin";
 
   const telnyxQuery   = trpc.integration.getTelnyx.useQuery(undefined, { enabled: isAdmin });
   const numbersQuery  = trpc.integration.listPhoneNumbers.useQuery(undefined, { enabled: isAdmin });
@@ -282,7 +284,7 @@ export default function SettingsPage() {
         <Card className="bg-gray-900 border-gray-800">
           <CardContent className="py-10 text-center text-gray-500">
             <Radio className="w-8 h-8 mx-auto mb-2 opacity-40" />
-            <p className="text-sm">Admin access required to manage SIP trunk settings.</p>
+            <p className="text-sm">Superadmin access required to manage SIP trunk settings.</p>
           </CardContent>
         </Card>
       ) : (

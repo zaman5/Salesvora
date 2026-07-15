@@ -72,7 +72,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const isAdmin = user.role === "admin" || user.role === "superadmin";
-  const navItems = isAdmin ? adminNavItems : callerNavItems;
+  const isSuperAdmin = user.role === "superadmin";
+  // Settings (Telnyx/SIP connection + number assignment) is superadmin-only.
+  const navItems = isAdmin
+    ? adminNavItems.filter((item) => item.path !== "/settings" || isSuperAdmin)
+    : callerNavItems;
 
   return (
     <div className="flex h-screen bg-gray-950 text-gray-100 overflow-hidden">

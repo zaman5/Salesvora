@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
-import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware";
+import { createRouter, adminQuery, superAdminQuery, authedQuery, callerQuery } from "./middleware";
 import { isSuperAdmin, requireCompanyScope } from "./lib/authz";
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { createCredentialConnection } from "./lib/telnyx";
@@ -153,11 +153,10 @@ export const userRouter = createRouter({
   // they register their own independent WebRTC session instead of sharing one
   // SIP credential with every other agent (which is what blocks 2+ agents
   // from dialing/receiving on the same number at the same time).
-  provisionTelnyxCredential: adminQuery
+  provisionTelnyxCredential: superAdminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      await assertUserInScope(ctx, input.id);
-      const companyId = requireCompanyScope(ctx.user);
+      const companyId = requireCompanyScope(ctx.user, ctx.user.companyId ?? undefined);
       const telnyx = await getTelnyxConfig(companyId);
       if (!telnyx?.apiKey) {
         return { success: false, error: "Configure your company's Telnyx API key in Settings first." };

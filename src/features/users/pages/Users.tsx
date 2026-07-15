@@ -67,7 +67,7 @@ export default function UsersPage() {
 
   // ── Data queries ──
   const { data: usersList = [], refetch } = trpc.user.list.useQuery(undefined, { enabled: isAdmin });
-  const { data: phoneNumbers = [] }        = trpc.integration.listPhoneNumbers.useQuery(undefined, { enabled: isAdmin });
+  const { data: phoneNumbers = [] }        = trpc.integration.listPhoneNumbers.useQuery(undefined, { enabled: isSuperAdmin });
   const { data: allLeadLists = [] }        = trpc.lead.listLists.useQuery(undefined, { enabled: isAdmin });
   const phones    = phoneNumbers as PhoneNumber[];
   const leadLists = allLeadLists as LeadList[];
@@ -117,9 +117,11 @@ export default function UsersPage() {
         password: newUser.password || undefined,
       });
       const newId = result.id;
-      if (newUser.role === "caller" && newId) {
+      if (newId && (newUser.role === "caller" || newUser.role === "admin") && isSuperAdmin) {
         for (const phoneId of createPhoneIds)
           await assignPhoneMutation.mutateAsync({ id: phoneId, callerId: newId });
+      }
+      if (newUser.role === "caller" && newId) {
         for (const listId of createListIds)
           await assignListMutation.mutateAsync({ leadListId: listId, callerId: newId });
       }
@@ -190,7 +192,7 @@ export default function UsersPage() {
         },
       });
 
-      if (editUserData.role === "caller") {
+      if ((editUserData.role === "caller" || editUserData.role === "admin") && isSuperAdmin) {
         // Sync phone assignments: unassign removed, assign added
         const prev = phones.filter((p) => p.assignedTo === editingUser.id).map((p) => p.id);
         for (const pid of prev)
@@ -199,6 +201,8 @@ export default function UsersPage() {
         for (const pid of editPhoneIds)
           if (!prev.includes(pid))
             await assignPhoneMutation.mutateAsync({ id: pid, callerId: editingUser.id });
+      }
+      if (editUserData.role === "caller") {
         // Assign new lead lists
         const prevListIds = (editingUserLists as LeadList[]).map((l) => l.id);
         for (const lid of editListIds)
@@ -242,7 +246,11 @@ export default function UsersPage() {
   const PhoneAssignSection = ({
     role, selectedIds, onChange,
   }: { role: string; selectedIds: number[]; onChange: (ids: number[]) => void }) => {
-    if (role !== "caller") return null;
+    // Number-to-person assignment is a superadmin-only action (connecting
+    // phone numbers to Telnyx/SIP trunking), and applies to admins and
+    // callers alike — not just callers.
+    if (role !== "caller" && role !== "admin") return null;
+    if (!isSuperAdmin) return null;
     return (
       <div>
         <Label className="text-gray-300 flex items-center gap-1.5 mb-1">
@@ -542,7 +550,7 @@ export default function UsersPage() {
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">User</th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Role</th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Status</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Assigned Numbers</th>
+                  {isSuperAdmin && <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Assigned Numbers</th>}
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Call Limit</th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Last Login</th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Actions</th>
@@ -573,19 +581,21 @@ export default function UsersPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">{getStatusBadge(u.status)}</td>
-                      <td className="px-4 py-3">
-                        {assignedPhones.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {assignedPhones.map((p) => (
-                              <Badge key={p.id} className="bg-blue-500/10 text-blue-400 border-0 font-mono text-xs">
-                                {p.number}
-                              </Badge>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-600">—</span>
-                        )}
-                      </td>
+                      {isSuperAdmin && (
+                        <td className="px-4 py-3">
+                          {assignedPhones.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {assignedPhones.map((p) => (
+                                <Badge key={p.id} className="bg-blue-500/10 text-blue-400 border-0 font-mono text-xs">
+                                  {p.number}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-600">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-sm text-gray-400">{u.dailyCallLimit}</td>
                       <td className="px-4 py-3 text-sm text-gray-400">
                         {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : "Never"}
