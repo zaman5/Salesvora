@@ -3,6 +3,27 @@ import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware
 import { listCompanyScope } from "./lib/authz";
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { sendSMS, toE164 } from "./lib/telnyx";
+import { listPhoneNumbers } from "./lib/phoneNumbers";
+import { sameNumber } from "./lib/telnyxWebhook";
+
+/**
+ * Numbers explicitly assigned to this user, or null when unrestricted.
+ * Superadmins are never restricted; admins/callers with NO assignment keep
+ * the company-wide view (nothing to scope them to yet). When a user DOES
+ * have assigned numbers, their inbox is limited to messages on those numbers
+ * — they must not read conversations happening on someone else's number.
+ */
+async function assignedNumbersOf(user: { id: number; role: string; companyId?: number | null }): Promise<string[] | null> {
+  if (user.role === "superadmin" || !user.companyId) return null;
+  const phones = await listPhoneNumbers(user.companyId);
+  const mine = phones.filter((p) => p.status !== "inactive" && p.number && p.assignedTo === user.id);
+  return mine.length > 0 ? mine.map((p) => p.number) : null;
+}
+
+/** The company-side number of a log row (our number, not the client's). */
+function ownNumberOf(log: { direction?: string; toNumber?: string; fromNumber?: string }): string | undefined {
+  return log.direction === "inbound" ? log.toNumber : log.fromNumber;
+}
 import {
   findSMSCampaignsByCompany, findSMSCampaignById, createSMSCampaign, updateSMSCampaign,
   findSMSLogsByCampaign, createSMSLog, updateSMSLogStatus, incrementSMSStats,
@@ -149,11 +170,15 @@ export const smsRouter = createRouter({
       return findSMSLogsByCampaign(input.campaignId);
     }),
 
-  // ─── Inbox: every message (sent + received) for the company, newest first ───
+  // ─── Inbox: every message (sent + received) for the company, newest first.
+  // Users with assigned numbers only see messages on their own numbers. ───
   inbox: authedQuery.query(async ({ ctx }) => {
     const companyId = (ctx.user as any).companyId;
     if (!companyId) return [];
-    return findSMSLogsByCompany(companyId);
+    const logs = await findSMSLogsByCompany(companyId);
+    const mine = await assignedNumbersOf(ctx.user as any);
+    if (!mine) return logs;
+    return (logs as any[]).filter((l) => mine.some((n) => sameNumber(n, ownNumberOf(l))));
   }),
 
   // ─── Full two-way thread with one phone number ───
@@ -162,7 +187,10 @@ export const smsRouter = createRouter({
     .query(async ({ ctx, input }) => {
       const companyId = (ctx.user as any).companyId;
       if (!companyId) return [];
-      return findSMSConversation(companyId, toE164(input.number));
+      const logs = await findSMSConversation(companyId, toE164(input.number));
+      const mine = await assignedNumbersOf(ctx.user as any);
+      if (!mine) return logs;
+      return (logs as any[]).filter((l) => mine.some((n) => sameNumber(n, ownNumberOf(l))));
     }),
 
   sendSingle: adminQuery

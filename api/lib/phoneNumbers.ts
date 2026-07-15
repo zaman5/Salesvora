@@ -6,7 +6,7 @@ export type PhoneNumber = {
   number: string;
   label?: string;
   status: "active" | "inactive";
-  assignedTo?: number | null; // caller user id, or null/undefined = unassigned pool
+  assignedTo?: number | null; // user id (admin or caller), or null/undefined = unassigned pool
 };
 
 function settingsOf(company: unknown): Record<string, unknown> {
@@ -89,15 +89,15 @@ export async function assignPhoneNumber(
 }
 
 /**
- * Numbers a caller may dial from.
+ * Numbers a user (admin or caller) may dial/text from.
  *
- * Strict rule: if ANY numbers are explicitly assigned to this caller, return
- * ONLY those — they must not see numbers belonging to other callers or the
+ * Strict rule: if ANY numbers are explicitly assigned to this user, return
+ * ONLY those — they must not see numbers belonging to other users or the
  * global pool.
  *
  * Fallback: if no number is assigned to them yet, return pool numbers
  * (assignedTo = null / undefined) so they can still make calls while the
- * admin hasn't made an explicit assignment yet.
+ * superadmin hasn't made an explicit assignment yet.
  */
 export function numbersForCaller(numbers: PhoneNumber[], userId: number): string[] {
   const mine = numbers.filter(

@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import { hasDatabase } from "./connection";
 import { env } from "../lib/env";
@@ -16,7 +17,12 @@ function ensureDir(dir: string) {
  *  1. DB_JSON_PATH env var (explicit override — always respected)
  *  2. Auto-detect Hostinger: if process.cwd() is inside a .builds/ deployment
  *     directory, store data in ~/salesvora-data/ which survives redeployments.
- *  3. Fallback: process.cwd()/db.json  (local development)
+ *  3. Any production run: ~/salesvora-data/db.json via os.homedir(). The
+ *     .builds heuristic only fires for one specific checkout layout — if the
+ *     server starts Node any other way the old code silently fell back to
+ *     cwd/db.json inside the deploy folder, which is DELETED on every git
+ *     push (this was the "database resets on deploy" bug).
+ *  4. Fallback: process.cwd()/db.json  (local development)
  *
  * Why this matters on Hostinger:
  *   Each git push creates a fresh checkout at
@@ -64,7 +70,29 @@ function resolveDbPath(): string {
     }
   }
 
-  // 3. Local development default
+  // 3. Production fallback: never keep data inside a folder that a deploy can
+  //    replace. The home directory is outside every checkout/build dir, so
+  //    ~/salesvora-data/db.json survives git pushes no matter how the server
+  //    process was started or where its cwd points.
+  if (env.isProduction) {
+    const home = os.homedir();
+    if (home && home !== "/") {
+      const dataDir = path.join(home, "salesvora-data");
+      ensureDir(dataDir);
+      const persistent = path.join(dataDir, "db.json");
+      // One-time migration: adopt data from the deployment folder if the
+      // persistent file doesn't exist yet.
+      if (!fs.existsSync(persistent) && fs.existsSync(cwdDbPath)) {
+        try {
+          fs.copyFileSync(cwdDbPath, persistent);
+          console.log(`[db] Migrated db.json → ${persistent}`);
+        } catch { /* ignore — will start fresh if copy fails */ }
+      }
+      return persistent;
+    }
+  }
+
+  // 4. Local development default
   return cwdDbPath;
 }
 
@@ -229,8 +257,12 @@ export function readJsonDb(): JsonDb {
     } catch { /* fall through */ }
   }
 
-  // Both corrupt — start fresh (preserves whatever was there, just unreadable)
+  // Both corrupt — set the unreadable file aside (never overwrite it: the
+  // data may still be recoverable by hand) and start fresh.
   console.error("[jsonDb] db.json and backup are both corrupt. Starting with empty data.");
+  try {
+    if (fs.existsSync(DB_PATH)) fs.copyFileSync(DB_PATH, `${DB_PATH}.corrupt-${Date.now()}`);
+  } catch { /* non-fatal */ }
   const fresh = EMPTY();
   writeJsonDb(fresh);
   return fresh;

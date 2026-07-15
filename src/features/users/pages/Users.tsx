@@ -111,7 +111,7 @@ export default function UsersPage() {
       const result = await createUserMutation.mutateAsync({
         name: newUser.name, email: newUser.email,
         phone: newUser.phone || undefined,
-        role: newUser.role as "superadmin" | "admin" | "caller" | "viewer",
+        role: newUser.role as "admin" | "caller" | "viewer",
         unionId: newUser.unionId || undefined,
         dailyCallLimit: newUser.dailyCallLimit,
         password: newUser.password || undefined,
@@ -364,7 +364,7 @@ export default function UsersPage() {
                     <SelectItem value="caller">Caller</SelectItem>
                     {isSuperAdmin && <SelectItem value="admin">Admin</SelectItem>}
                     <SelectItem value="viewer">Viewer</SelectItem>
-                    {isSuperAdmin && <SelectItem value="superadmin">Superadmin</SelectItem>}
+                    {/* Superadmin is intentionally not creatable from the app */}
                   </SelectContent>
                 </Select>
               </div>
@@ -424,7 +424,8 @@ export default function UsersPage() {
                     <SelectItem value="caller">Caller</SelectItem>
                     {(isSuperAdmin || editUserData.role === "admin") && <SelectItem value="admin">Admin</SelectItem>}
                     <SelectItem value="viewer">Viewer</SelectItem>
-                    {(isSuperAdmin || editUserData.role === "superadmin") && <SelectItem value="superadmin">Superadmin</SelectItem>}
+                    {/* Shown only so an existing superadmin's current role renders — never offered as a promotion */}
+                    {editUserData.role === "superadmin" && <SelectItem value="superadmin">Superadmin</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>

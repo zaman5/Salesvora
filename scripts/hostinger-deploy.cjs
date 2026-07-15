@@ -69,5 +69,17 @@ if (fs.existsSync(serverSrc)) {
   console.log('[deploy] ✓ dist/boot.js ready at:', serverSrc);
 }
 
+// Stop the previous Node.js server so the next API request starts the NEW
+// build (api-proxy.php only launches Node when port 3000 is not answering —
+// without this, the old process keeps serving stale code after every push).
+// Data is safe: db.json lives in ~/salesvora-data/, outside this checkout.
+try {
+  const { execSync } = require('child_process');
+  execSync('pkill -f "dist/boot.js" || true', { stdio: 'ignore' });
+  console.log('[deploy] ✓ Old Node.js server stopped — will restart on next request.');
+} catch {
+  console.log('[deploy] Note: could not stop old Node.js server (may not be running).');
+}
+
 console.log('[deploy] ✓ Deployment complete!');
 console.log('[deploy] Site is now accessible at your domain.');

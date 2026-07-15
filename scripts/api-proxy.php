@@ -15,6 +15,10 @@ if (isset($_GET['debug'])) {
     $avail    = array_filter($fns, function($f) use ($disabled) {
         return function_exists($f) && !in_array($f, $disabled);
     });
+    $dbPath = null;
+    if ($appDir2 && preg_match('#^(/home/[^/]+)/#', $appDir2, $m2)) {
+        $dbPath = $m2[1] . '/salesvora-data/db.json';
+    }
     echo json_encode([
         'php_version'    => PHP_VERSION,
         'curl_available' => function_exists('curl_init'),
@@ -24,6 +28,10 @@ if (isset($_GET['debug'])) {
         'boot_exists'    => $appDir2 ? file_exists($appDir2 . '/dist/boot.js') : false,
         'server_running' => isServerRunning(),
         'node_paths'     => array_filter(['/usr/local/bin/node','/usr/bin/node','/opt/node/bin/node'], 'file_exists'),
+        // Persistent database — must live OUTSIDE the deploy folder to survive pushes
+        'db_persistent_path'   => $dbPath,
+        'db_persistent_exists' => $dbPath ? file_exists($dbPath) : false,
+        'db_size_bytes'        => ($dbPath && file_exists($dbPath)) ? filesize($dbPath) : 0,
     ], JSON_PRETTY_PRINT);
     exit;
 }
@@ -61,7 +69,18 @@ function startServer($appDir) {
 
     if (empty($available)) return;
 
-    $cmd = 'cd ' . escapeshellarg($appDir) . ' && PORT=3000 NODE_ENV=production nohup ' . escapeshellarg($node) . ' dist/boot.js >> ' . escapeshellarg($logFile) . ' 2>&1 &';
+    // Pin the database to a path deployments never touch. $appDir looks like
+    // /home/<user>/domains/<domain>/public_html/.builds/source/repository —
+    // that whole tree is replaced on every git push, so db.json must live in
+    // /home/<user>/salesvora-data/ instead or all data is lost on deploy.
+    $envVars = 'PORT=3000 NODE_ENV=production';
+    if (preg_match('#^(/home/[^/]+)/#', $appDir, $m)) {
+        $dataDir = $m[1] . '/salesvora-data';
+        if (!is_dir($dataDir)) @mkdir($dataDir, 0755, true);
+        $envVars .= ' DB_JSON_PATH=' . escapeshellarg($dataDir . '/db.json');
+    }
+
+    $cmd = 'cd ' . escapeshellarg($appDir) . ' && ' . $envVars . ' nohup ' . escapeshellarg($node) . ' dist/boot.js >> ' . escapeshellarg($logFile) . ' 2>&1 &';
 
     $fn = reset($available);
     @$fn($cmd);

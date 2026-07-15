@@ -32,22 +32,50 @@ export function verifyTelnyxSignature(
 }
 
 /**
+ * Compare two phone numbers ignoring formatting. Telnyx always delivers full
+ * E.164 ("+15550001234") but numbers saved in Settings may lack the "+" or
+ * even the country code — strict toE164 equality silently dropped every
+ * inbound SMS in that case. Digits-only comparison, tolerating a missing
+ * country-code prefix on the stored side (min 7 digits so short fragments
+ * can't false-match).
+ */
+export function sameNumber(a: string | undefined, b: string | undefined): boolean {
+  const da = (a || "").replace(/[^0-9]/g, "");
+  const db = (b || "").replace(/[^0-9]/g, "");
+  if (!da || !db) return false;
+  if (da === db) return true;
+  const [long, short] = da.length >= db.length ? [da, db] : [db, da];
+  return short.length >= 7 && long.endsWith(short);
+}
+
+/**
  * Find which company owns a phone number (checked against the company's
  * default caller ID, assigned numbers, and phone-number pool). Needed because
  * this app is multi-tenant but a single shared webhook endpoint receives
  * inbound messages/calls for every company's Telnyx numbers.
+ *
+ * If no company lists the number but exactly one company has Telnyx
+ * configured, the message is routed there instead of being dropped — a
+ * single-tenant install shouldn't lose client replies just because the
+ * number was never added under Settings → Phone Numbers.
  */
 export async function findCompanyIdByPhoneNumber(rawNumber: string): Promise<number | null> {
   const target = toE164(rawNumber);
   if (!target) return null;
-  const allCompanies = await findAllCompanies();
-  for (const c of allCompanies as Array<{ id: number; settings?: Record<string, unknown> }>) {
+  const allCompanies = await findAllCompanies() as Array<{ id: number; settings?: Record<string, unknown> }>;
+  for (const c of allCompanies) {
     const settings = c.settings || {};
     const cfg = settings.telnyx as { defaultCallerId?: string; assignedNumbers?: string[] } | undefined;
-    if (cfg?.defaultCallerId && toE164(cfg.defaultCallerId) === target) return c.id;
-    if (Array.isArray(cfg?.assignedNumbers) && cfg.assignedNumbers.some((n) => toE164(n) === target)) return c.id;
+    if (cfg?.defaultCallerId && sameNumber(cfg.defaultCallerId, target)) return c.id;
+    if (Array.isArray(cfg?.assignedNumbers) && cfg.assignedNumbers.some((n) => sameNumber(n, target))) return c.id;
     const phones = settings.phoneNumbers as Array<{ number?: string }> | undefined;
-    if (Array.isArray(phones) && phones.some((p) => p.number && toE164(p.number) === target)) return c.id;
+    if (Array.isArray(phones) && phones.some((p) => sameNumber(p.number, target))) return c.id;
   }
+  const withTelnyx = allCompanies.filter((c) => {
+    const cfg = (c.settings || {}).telnyx as { apiKey?: string } | undefined;
+    return Boolean(cfg?.apiKey);
+  });
+  if (withTelnyx.length === 1) return withTelnyx[0].id;
+  if (allCompanies.length === 1) return allCompanies[0].id;
   return null;
 }

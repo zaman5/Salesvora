@@ -45,7 +45,9 @@ export const userRouter = createRouter({
       name: z.string().min(1),
       email: z.string().email(),
       phone: z.string().optional(),
-      role: z.enum(["superadmin", "admin", "caller", "viewer"]),
+      // Superadmin accounts can never be created from the app — the role is
+      // deliberately absent from this enum (seeded/platform-level only).
+      role: z.enum(["admin", "caller", "viewer"]),
       unionId: z.string().optional(),
       companyId: z.number().optional(),
       extension: z.string().optional(),
@@ -54,7 +56,7 @@ export const userRouter = createRouter({
       password: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if ((input.role === "superadmin" || input.role === "admin") && !isSuperAdmin(ctx.user)) {
+      if (input.role === "admin" && !isSuperAdmin(ctx.user)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can create admin accounts." });
       }
       const { password, ...rest } = input;
@@ -104,8 +106,14 @@ export const userRouter = createRouter({
       // into admin/superadmin. Only block on an actual escalation, not a
       // no-op resubmit of the role the user already has.
       const roleChanging = input.data.role !== undefined && input.data.role !== target.role;
-      if (roleChanging && (input.data.role === "superadmin" || input.data.role === "admin") && !isSuperAdmin(ctx.user)) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can grant the admin or superadmin role." });
+      // Nobody — superadmins included — can promote an account to superadmin
+      // from the app; the role stays in the enum only so a no-op resubmit of
+      // an existing superadmin's profile still validates.
+      if (roleChanging && input.data.role === "superadmin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Superadmin accounts cannot be created from the app." });
+      }
+      if (roleChanging && input.data.role === "admin" && !isSuperAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can grant the admin role." });
       }
       if (target.role === "superadmin" && roleChanging && !isSuperAdmin(ctx.user)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can change a superadmin's role." });

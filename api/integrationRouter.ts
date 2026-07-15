@@ -62,30 +62,30 @@ export const integrationRouter = createRouter({
   getDialerConfig: authedQuery.query(async ({ ctx }) => {
     const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? undefined);
     const cfg = companyId ? await getTelnyxConfig(companyId) : null;
-    const isCaller = ctx.user.role === "caller";
+    const isSuper = ctx.user.role === "superadmin";
     const numbers = new Set<string>();
 
     // Build the visible from-number list.
-    // Admins see every number (global defaults + all phone numbers).
-    // Callers see ONLY their assigned numbers — if none are assigned yet,
-    // they see unassigned pool numbers but NEVER numbers assigned to others
-    // and NEVER the global admin defaults.
-    if (!isCaller) {
+    // Superadmin sees every number (global defaults + all phone numbers).
+    // Admins and callers see ONLY the numbers assigned to them — if none are
+    // assigned yet, they see unassigned pool numbers but NEVER numbers
+    // assigned to someone else and NEVER the global defaults.
+    if (isSuper) {
       if (cfg?.defaultCallerId) numbers.add(cfg.defaultCallerId);
       for (const n of cfg?.assignedNumbers ?? []) numbers.add(n);
     }
 
     if (companyId) {
       const phones = await listPhoneNumbers(companyId);
-      const visible = isCaller
-        ? numbersForCaller(phones, ctx.user.id)       // strict per-caller filtering
-        : phones.filter((p) => p.status !== "inactive" && p.number).map((p) => p.number);
+      const visible = isSuper
+        ? phones.filter((p) => p.status !== "inactive" && p.number).map((p) => p.number)
+        : numbersForCaller(phones, ctx.user.id);      // strict per-user filtering
       for (const n of visible) numbers.add(n);
     }
 
-    // If caller still has no numbers (nothing assigned, no pool) fall back to
-    // the global default so they can at least make calls.
-    if (isCaller && numbers.size === 0 && cfg?.defaultCallerId) {
+    // If a non-superadmin still has no numbers (nothing assigned, no pool)
+    // fall back to the global default so they can at least make calls.
+    if (!isSuper && numbers.size === 0 && cfg?.defaultCallerId) {
       numbers.add(cfg.defaultCallerId);
     }
     // Per-caller SIP credentials — each caller registers independently so
