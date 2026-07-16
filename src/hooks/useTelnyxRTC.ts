@@ -69,6 +69,23 @@ function extractCallerNumber(call: AnyCall): string | null {
   return null;
 }
 
+/**
+ * Force the call's remote audio stream into the hidden <audio> element and
+ * start playback. The SDK is supposed to do this via remoteElement, but on
+ * answered inbound calls the stream sometimes arrives after the element was
+ * wired (or the SDK skips it entirely) — leaving the agent unable to hear
+ * the caller. Safe to call repeatedly; it only reassigns when needed.
+ */
+function attachRemoteAudio(call: AnyCall | null) {
+  if (!call || typeof document === "undefined") return;
+  const el = document.getElementById(REMOTE_AUDIO_ID) as HTMLAudioElement | null;
+  const stream = call.remoteStream;
+  if (!el || !(stream instanceof MediaStream) || stream.getAudioTracks().length === 0) return;
+  if (el.srcObject !== stream) el.srcObject = stream;
+  el.muted = false;
+  el.play().catch(() => { /* autoplay may need the user gesture that answered the call */ });
+}
+
 // Telnyx sends errors as objects, strings, or Errors. Pull out something useful.
 function describeError(e: unknown): string {
   if (!e) return "Unknown WebRTC error.";
@@ -125,6 +142,11 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
         const client = new TelnyxRTC({
           login,
           password,
+          // Route every call's remote audio into our hidden <audio> element.
+          // Outbound calls pass remoteElement per-call in newCall(), but
+          // ANSWERED INBOUND calls rely on this client-level option — without
+          // it the call connects and the agent hears nothing.
+          remoteElement: REMOTE_AUDIO_ID,
           // Relay media through Telnyx TURN to traverse firewalls/NAT.
           forceRelayCandidate: true,
           prefetchIceCandidates: true,
@@ -202,6 +224,14 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
               setCallState("ringing");
             } else if (s === "active") {
               setCallState("active");
+              // Make sure the caller's audio actually reaches the speakers —
+              // the remote stream can lag behind the "active" event, so retry
+              // a few times instead of attaching once and hoping.
+              attachRemoteAudio(note.call);
+              const activeCall = note.call;
+              [300, 1000, 2500].forEach((ms) =>
+                setTimeout(() => { if (callRef.current === activeCall) attachRemoteAudio(activeCall); }, ms),
+              );
               // Caller ID sometimes only becomes available once the call is
               // answered — refresh it so the active bar shows the real number.
               if (note.call.direction === "inbound") {
