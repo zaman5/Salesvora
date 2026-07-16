@@ -605,13 +605,13 @@ export default function UsersPage() {
                         <div className="flex gap-2">
                           <Button variant="ghost" size="sm" onClick={() => handleEditClick(u)}
                             className="text-gray-400 hover:text-white h-8 px-2">Edit</Button>
-                          {u.status === "active" ? (
+                          {u.role !== "superadmin" && (u.status === "active" ? (
                             <Button variant="ghost" size="sm" onClick={() => handleToggleStatus(u.id, u.status)}
                               className="text-amber-400 hover:text-amber-300 h-8 px-2">Suspend</Button>
                           ) : (
                             <Button variant="ghost" size="sm" onClick={() => handleToggleStatus(u.id, u.status)}
                               className="text-green-400 hover:text-green-300 h-8 px-2">Activate</Button>
-                          )}
+                          ))}
                           {u.id !== user?.id && u.role !== "superadmin" && (
                             <Button variant="ghost" size="sm" onClick={() => handleDeleteUser(u.id)}
                               className="text-red-400 hover:text-red-300 h-8 px-2 flex items-center gap-1">

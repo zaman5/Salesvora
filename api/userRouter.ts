@@ -118,6 +118,12 @@ export const userRouter = createRouter({
       if (target.role === "superadmin" && roleChanging && !isSuperAdmin(ctx.user)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only a superadmin can change a superadmin's role." });
       }
+      // A superadmin account must always be able to log in — suspending or
+      // deactivating it would lock the platform operator out with no recovery
+      // path from the app. Nobody can set a superadmin to anything but active.
+      if (target.role === "superadmin" && input.data.status !== undefined && input.data.status !== "active") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Superadmin accounts cannot be suspended or deactivated." });
+      }
       const { sipUsername, sipTelnyxPassword, ...rest } = input.data;
       const updateData: Record<string, unknown> = { ...rest };
 

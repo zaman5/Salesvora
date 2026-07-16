@@ -111,7 +111,9 @@ export async function authenticateRequest(headers: Headers) {
       throw Errors.forbidden("User not found. Please re-login.");
     }
   }
-  if (user.status === "suspended" || user.status === "inactive") {
+  // Superadmins are exempt: the platform operator must never be locked out,
+  // even if the account's status was accidentally flipped to suspended.
+  if (user.role !== "superadmin" && (user.status === "suspended" || user.status === "inactive")) {
     throw Errors.forbidden("Your account is inactive or suspended.");
   }
   return user;

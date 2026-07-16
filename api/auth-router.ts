@@ -4,7 +4,7 @@ import { Session } from "@contracts/constants";
 import { getSessionCookieOptions } from "./lib/cookies";
 import { createRouter, authedQuery, publicQuery } from "./middleware";
 import { signSessionToken } from "./kimi/session";
-import { upsertUser, findUserByEmail } from "./queries/users";
+import { upsertUser, findUserByEmail, updateUser } from "./queries/users";
 import { env } from "./lib/env";
 import { z } from "zod";
 
@@ -73,7 +73,15 @@ export const authRouter = createRouter({
       }
 
       if (user.status === "suspended" || user.status === "inactive") {
-        throw new Error("Your account is inactive or suspended");
+        // A superadmin can never be locked out — if the account was somehow
+        // suspended (e.g. by accident from the users page), self-heal it back
+        // to active on login instead of blocking the platform operator.
+        if ((user as any).role === "superadmin") {
+          await updateUser((user as any).id, { status: "active" });
+          (user as any).status = "active";
+        } else {
+          throw new Error("Your account is inactive or suspended");
+        }
       }
 
       const token = await signSessionToken({
