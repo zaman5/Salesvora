@@ -12,6 +12,7 @@ type AnyClient = {
   connect: () => void;
   disconnect: () => void;
   newCall: (opts: Record<string, unknown>) => AnyCall;
+  remoteElement?: string;
 };
 type AnyCall = {
   hangup: () => void;
@@ -142,15 +143,16 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
         const client = new TelnyxRTC({
           login,
           password,
-          // Route every call's remote audio into our hidden <audio> element.
-          // Outbound calls pass remoteElement per-call in newCall(), but
-          // ANSWERED INBOUND calls rely on this client-level option — without
-          // it the call connects and the agent hears nothing.
-          remoteElement: REMOTE_AUDIO_ID,
           // Relay media through Telnyx TURN to traverse firewalls/NAT.
           forceRelayCandidate: true,
           prefetchIceCandidates: true,
         });
+        // The SDK IGNORES a remoteElement constructor option — its
+        // constructor resets the field to null, and only this property
+        // setter (the way the official docs wire it) registers the element.
+        // Inbound calls inherit it from the client; without it the SDK never
+        // attaches the caller's audio and answered calls are silent.
+        client.remoteElement = REMOTE_AUDIO_ID;
 
         let reconnects = 0;
         let registered = false;
