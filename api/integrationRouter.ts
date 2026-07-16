@@ -5,6 +5,7 @@ import {
   listConnections, ensureOutboundVoiceProfile, attachVoiceProfileToConnection,
   listMessagingProfiles, createMessagingProfile, updateMessagingProfileWebhook,
   listAccountPhoneNumbers, setPhoneNumberConnection, setPhoneNumberMessagingProfile,
+  listCredentialConnections,
 } from "./lib/telnyx";
 import { getTelnyxConfig, saveTelnyxConfig, maskTelnyxConfig } from "./lib/telnyxConfig";
 import { sameNumber } from "./lib/telnyxWebhook";
@@ -281,6 +282,19 @@ export const integrationRouter = createRouter({
         }
       }
 
+      // The browser registers with cfg.sipUsername — inbound calls only ring
+      // it when the number's voice connection is the credential connection
+      // carrying that username. Prefer it over cfg.connectionId, which may be
+      // an IP/FQDN trunk that no browser is ever registered on.
+      let fallbackConn = cfg.connectionId || null;
+      if (cfg.sipUsername) {
+        const creds = await listCredentialConnections(cfg.apiKey);
+        if (creds.ok) {
+          const match = creds.data.find((c) => c.userName === cfg.sipUsername);
+          if (match) fallbackConn = match.id;
+        }
+      }
+
       // 3. Walk the account's real numbers and fix routing on each known one.
       const accountNumbers = await listAccountPhoneNumbers(cfg.apiKey);
       if (!accountNumbers.ok) return { ok: false as const, message: accountNumbers.message, actions };
@@ -298,7 +312,7 @@ export const integrationRouter = createRouter({
         }
 
         const ownerId = assignedTo.get(knownMatch);
-        const wantConn = (ownerId && userConn.get(ownerId)) || cfg.connectionId || null;
+        const wantConn = (ownerId && userConn.get(ownerId)) || fallbackConn;
         if (wantConn && num.connectionId !== wantConn) {
           const res = await setPhoneNumberConnection(cfg.apiKey, num.id, wantConn);
           if (res.ok) actions.push(`${num.phoneNumber}: inbound calls now ring ${ownerId && userConn.get(ownerId) ? `user #${ownerId}'s connection` : "the company connection"}.`);

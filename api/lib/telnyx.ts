@@ -336,7 +336,16 @@ export async function createMessagingProfile(
     const res = await fetch(`${TELNYX_BASE}/messaging_profiles`, {
       method: "POST",
       headers: authHeaders(apiKey),
-      body: JSON.stringify({ name: params.name, enabled: true, webhook_url: params.webhookUrl, webhook_api_version: "2" }),
+      body: JSON.stringify({
+        name: params.name,
+        enabled: true,
+        webhook_url: params.webhookUrl,
+        webhook_api_version: "2",
+        // Telnyx rejects profile creation without a destination whitelist
+        // ("Messaging profile is missing whitelisted destinations"). This only
+        // gates outbound sends on the profile; inbound delivery is unaffected.
+        whitelisted_destinations: ["US", "CA"],
+      }),
     });
     if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
     const body = (await res.json()) as { data?: Record<string, unknown> };
@@ -364,6 +373,37 @@ export async function updateMessagingProfileWebhook(
     });
     if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
     return { ok: true, data: { id: profileId } };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error reaching Telnyx." };
+  }
+}
+
+export type CredentialConnectionInfo = { id: string; name: string; userName: string };
+
+/**
+ * GET /v2/credential_connections — includes each connection's SIP user_name,
+ * which /v2/connections does not return. Needed to find the connection the
+ * browser actually registers on (Settings → SIP username) so inbound calls
+ * can be routed to it.
+ */
+export async function listCredentialConnections(
+  apiKey: string,
+): Promise<TelnyxResult<CredentialConnectionInfo[]>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/credential_connections?page[size]=100`, {
+      headers: authHeaders(apiKey),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    const body = (await res.json()) as { data?: Array<Record<string, unknown>> };
+    return {
+      ok: true,
+      data: (body.data ?? []).map((c) => ({
+        id: String(c.id ?? ""),
+        name: String(c.connection_name ?? ""),
+        userName: String(c.user_name ?? ""),
+      })),
+    };
   } catch (err) {
     return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error reaching Telnyx." };
   }
