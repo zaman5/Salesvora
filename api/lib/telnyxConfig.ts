@@ -14,6 +14,9 @@ export type TelnyxConfig = {
   sipPassword?: string; // SIP credential connection password (stored server-side)
   // Inbound SMS webhook signature verification (Telnyx portal → Public Key)
   webhookPublicKey?: string;
+  // Messaging profile that delivers inbound SMS to /api/webhooks/telnyx
+  // (created/repaired by integration.repairInboundSetup).
+  messagingProfileId?: string | null;
   // SIP trunk details (from the Telnyx portal connection)
   sipHost?: string; // e.g. hbtuutorial.sip.telnyx.com
   ipAddress?: string; // authorized IP for IP-authenticated trunks

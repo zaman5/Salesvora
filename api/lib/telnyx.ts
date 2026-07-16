@@ -293,6 +293,156 @@ export async function createCredentialConnection(
   }
 }
 
+// ─── Messaging Profiles + Phone Number routing ───
+// Inbound SMS only reaches the app when the Telnyx number is attached to a
+// messaging profile whose webhook_url points at /api/webhooks/telnyx, and
+// inbound calls only ring the browser when the number's voice connection is
+// the credential connection the agent's WebRTC client registers on. Neither
+// is configured by buying a number — these helpers let the app repair both.
+
+export type MessagingProfile = { id: string; name: string; webhookUrl?: string | null };
+
+/** GET /v2/messaging_profiles */
+export async function listMessagingProfiles(
+  apiKey: string,
+): Promise<TelnyxResult<MessagingProfile[]>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/messaging_profiles?page[size]=50`, {
+      headers: authHeaders(apiKey),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    const body = (await res.json()) as { data?: Array<Record<string, unknown>> };
+    return {
+      ok: true,
+      data: (body.data ?? []).map((p) => ({
+        id: String(p.id ?? ""),
+        name: String(p.name ?? ""),
+        webhookUrl: (p.webhook_url as string | null) ?? null,
+      })),
+    };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error reaching Telnyx." };
+  }
+}
+
+/** POST /v2/messaging_profiles */
+export async function createMessagingProfile(
+  apiKey: string,
+  params: { name: string; webhookUrl: string },
+): Promise<TelnyxResult<MessagingProfile>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/messaging_profiles`, {
+      method: "POST",
+      headers: authHeaders(apiKey),
+      body: JSON.stringify({ name: params.name, enabled: true, webhook_url: params.webhookUrl, webhook_api_version: "2" }),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    const body = (await res.json()) as { data?: Record<string, unknown> };
+    return {
+      ok: true,
+      data: { id: String(body.data?.id ?? ""), name: params.name, webhookUrl: params.webhookUrl },
+    };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error reaching Telnyx." };
+  }
+}
+
+/** PATCH /v2/messaging_profiles/{id} — point the profile's webhook at us. */
+export async function updateMessagingProfileWebhook(
+  apiKey: string,
+  profileId: string,
+  webhookUrl: string,
+): Promise<TelnyxResult<{ id: string }>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/messaging_profiles/${encodeURIComponent(profileId)}`, {
+      method: "PATCH",
+      headers: authHeaders(apiKey),
+      body: JSON.stringify({ enabled: true, webhook_url: webhookUrl, webhook_api_version: "2" }),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    return { ok: true, data: { id: profileId } };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error reaching Telnyx." };
+  }
+}
+
+export type AccountPhoneNumber = {
+  id: string;
+  phoneNumber: string;
+  connectionId?: string | null;
+  connectionName?: string | null;
+  messagingProfileId?: string | null;
+};
+
+/** GET /v2/phone_numbers — every number owned by the Telnyx account. */
+export async function listAccountPhoneNumbers(
+  apiKey: string,
+): Promise<TelnyxResult<AccountPhoneNumber[]>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/phone_numbers?page[size]=250`, {
+      headers: authHeaders(apiKey),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    const body = (await res.json()) as { data?: Array<Record<string, unknown>> };
+    return {
+      ok: true,
+      data: (body.data ?? []).map((n) => ({
+        id: String(n.id ?? ""),
+        phoneNumber: String(n.phone_number ?? ""),
+        connectionId: (n.connection_id as string | null) ?? null,
+        connectionName: (n.connection_name as string | null) ?? null,
+        messagingProfileId: (n.messaging_profile_id as string | null) ?? null,
+      })),
+    };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error reaching Telnyx." };
+  }
+}
+
+/** PATCH /v2/phone_numbers/{id} — route the number's inbound VOICE to a connection. */
+export async function setPhoneNumberConnection(
+  apiKey: string,
+  phoneNumberId: string,
+  connectionId: string,
+): Promise<TelnyxResult<{ id: string }>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/phone_numbers/${encodeURIComponent(phoneNumberId)}`, {
+      method: "PATCH",
+      headers: authHeaders(apiKey),
+      body: JSON.stringify({ connection_id: connectionId }),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    return { ok: true, data: { id: phoneNumberId } };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error reaching Telnyx." };
+  }
+}
+
+/** PATCH /v2/phone_numbers/{id}/messaging — route the number's inbound SMS to a messaging profile. */
+export async function setPhoneNumberMessagingProfile(
+  apiKey: string,
+  phoneNumberId: string,
+  messagingProfileId: string,
+): Promise<TelnyxResult<{ id: string }>> {
+  if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
+  try {
+    const res = await fetch(`${TELNYX_BASE}/phone_numbers/${encodeURIComponent(phoneNumberId)}/messaging`, {
+      method: "PATCH",
+      headers: authHeaders(apiKey),
+      body: JSON.stringify({ messaging_profile_id: messagingProfileId }),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseError(res) };
+    return { ok: true, data: { id: phoneNumberId } };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error reaching Telnyx." };
+  }
+}
+
 export type PlaceCallResult = {
   callControlId: string;
   callLegId?: string;

@@ -1,8 +1,13 @@
 import { z } from "zod";
 import { createRouter, superAdminQuery, authedQuery } from "./middleware";
 import { requireCompanyScope, resolveCompanyScope } from "./lib/authz";
-import { listConnections, ensureOutboundVoiceProfile, attachVoiceProfileToConnection } from "./lib/telnyx";
+import {
+  listConnections, ensureOutboundVoiceProfile, attachVoiceProfileToConnection,
+  listMessagingProfiles, createMessagingProfile, updateMessagingProfileWebhook,
+  listAccountPhoneNumbers, setPhoneNumberConnection, setPhoneNumberMessagingProfile,
+} from "./lib/telnyx";
 import { getTelnyxConfig, saveTelnyxConfig, maskTelnyxConfig } from "./lib/telnyxConfig";
+import { sameNumber } from "./lib/telnyxWebhook";
 import { listPhoneNumbers, addPhoneNumber, updatePhoneNumber, removePhoneNumber, togglePhoneNumber, assignPhoneNumber, numbersForCaller } from "./lib/phoneNumbers";
 
 // A superadmin isn't tied to one company (they can operate across many), so
@@ -203,6 +208,114 @@ export const integrationRouter = createRouter({
           : "All Salesvora connections already have an outbound voice profile. If calls still fail with SIP 480, the from-number may not belong to your Telnyx account — check Settings → Phone Numbers.";
     return { ok: failures.length === 0, message, actions };
   }),
+
+  // One-click fix for "clients' texts and calls never arrive": buying a number
+  // doesn't route its inbound traffic anywhere. This repairs both directions —
+  //   SMS:   ensures a "Salesvora Inbound" messaging profile whose webhook is
+  //          <origin>/api/webhooks/telnyx and attaches every app-managed
+  //          number to it, so client replies land in the SMS inbox.
+  //   Calls: points each number's voice connection at the credential
+  //          connection its assigned agent registers on (falling back to the
+  //          company's shared connection), so inbound calls ring the browser.
+  // The browser sends its origin because the PHP proxy on Hostinger rewrites
+  // the Host header — the server can't derive the public URL from the request.
+  repairInboundSetup: superAdminQuery
+    .input(z.object({ origin: z.string().url() }))
+    .mutation(async ({ ctx, input }) => {
+      const companyId = companyScope(ctx.user);
+      const cfg = await getTelnyxConfig(companyId);
+      if (!cfg?.apiKey) {
+        return { ok: false as const, message: "Save your Telnyx API key first (Settings → Integration).", actions: [] as string[] };
+      }
+
+      const actions: string[] = [];
+      const failures: string[] = [];
+      const webhookUrl = `${input.origin.replace(/\/+$/, "")}/api/webhooks/telnyx`;
+
+      // 1. Ensure a messaging profile that delivers inbound SMS to us.
+      let profileId = cfg.messagingProfileId ?? null;
+      const profiles = await listMessagingProfiles(cfg.apiKey);
+      if (!profiles.ok) return { ok: false as const, message: profiles.message, actions };
+      const existing =
+        profiles.data.find((p) => p.id === profileId) ??
+        profiles.data.find((p) => p.name === "Salesvora Inbound") ??
+        profiles.data.find((p) => p.webhookUrl === webhookUrl);
+      if (existing) {
+        profileId = existing.id;
+        if (existing.webhookUrl !== webhookUrl) {
+          const upd = await updateMessagingProfileWebhook(cfg.apiKey, existing.id, webhookUrl);
+          if (upd.ok) actions.push(`Pointed messaging profile "${existing.name}" at ${webhookUrl}.`);
+          else failures.push(`Messaging profile webhook: ${upd.message}`);
+        }
+      } else {
+        const created = await createMessagingProfile(cfg.apiKey, { name: "Salesvora Inbound", webhookUrl });
+        if (!created.ok) return { ok: false as const, message: created.message, actions };
+        profileId = created.data.id;
+        actions.push(`Created messaging profile "Salesvora Inbound" → ${webhookUrl}.`);
+      }
+      if (profileId && cfg.messagingProfileId !== profileId) {
+        await saveTelnyxConfig(companyId, { messagingProfileId: profileId });
+      }
+
+      // 2. Collect every number the app knows about, remembering who each
+      //    pool number is assigned to so calls ring the right agent.
+      const pool = await listPhoneNumbers(companyId);
+      const assignedTo = new Map<string, number>();
+      const known: string[] = [];
+      for (const p of pool) {
+        if (p.status === "inactive" || !p.number) continue;
+        known.push(p.number);
+        if (p.assignedTo) assignedTo.set(p.number, p.assignedTo);
+      }
+      if (cfg.defaultCallerId) known.push(cfg.defaultCallerId);
+      for (const n of cfg.assignedNumbers ?? []) known.push(n);
+
+      // Per-agent credential connections are named "Salesvora — <name> (#<userId>)"
+      // by provisionTelnyxCredential — resolve userId → connectionId from that.
+      const conns = await listConnections(cfg.apiKey);
+      const userConn = new Map<number, string>();
+      if (conns.ok) {
+        for (const c of conns.data) {
+          const m = /^Salesvora — .*\(#(\d+)\)$/.exec(c.connectionName || "");
+          if (m) userConn.set(Number(m[1]), c.id);
+        }
+      }
+
+      // 3. Walk the account's real numbers and fix routing on each known one.
+      const accountNumbers = await listAccountPhoneNumbers(cfg.apiKey);
+      if (!accountNumbers.ok) return { ok: false as const, message: accountNumbers.message, actions };
+
+      let matched = 0;
+      for (const num of accountNumbers.data) {
+        const knownMatch = known.find((k) => sameNumber(k, num.phoneNumber));
+        if (!knownMatch) continue;
+        matched++;
+
+        if (profileId && num.messagingProfileId !== profileId) {
+          const res = await setPhoneNumberMessagingProfile(cfg.apiKey, num.id, profileId);
+          if (res.ok) actions.push(`${num.phoneNumber}: inbound SMS now delivered to the app.`);
+          else failures.push(`${num.phoneNumber} (SMS): ${res.message}`);
+        }
+
+        const ownerId = assignedTo.get(knownMatch);
+        const wantConn = (ownerId && userConn.get(ownerId)) || cfg.connectionId || null;
+        if (wantConn && num.connectionId !== wantConn) {
+          const res = await setPhoneNumberConnection(cfg.apiKey, num.id, wantConn);
+          if (res.ok) actions.push(`${num.phoneNumber}: inbound calls now ring ${ownerId && userConn.get(ownerId) ? `user #${ownerId}'s connection` : "the company connection"}.`);
+          else failures.push(`${num.phoneNumber} (calls): ${res.message}`);
+        }
+      }
+
+      const message =
+        failures.length > 0
+          ? `Could not fix: ${failures.join("; ")}`
+          : matched === 0
+            ? "No Telnyx number on the account matches the numbers saved in Settings → Phone Numbers — add your Telnyx number there first, then run this again."
+            : actions.length > 0
+              ? `Fixed inbound routing on ${matched} number(s). Ask a client to text/call again — SMS land in the inbox, calls ring registered agents.`
+              : `All ${matched} number(s) already route inbound SMS and calls to the app. If calls still don't ring, make sure the agent's browser shows "registered" (green) in the dialer.`;
+      return { ok: failures.length === 0, message, actions };
+    }),
 
   // Persist the Telnyx configuration for the caller's company.
   saveTelnyx: superAdminQuery

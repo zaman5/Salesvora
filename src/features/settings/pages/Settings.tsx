@@ -88,6 +88,14 @@ export default function SettingsPage() {
     onError:   (err) => setRepairResult({ ok: false, message: err.message }),
   });
 
+  // One-click repair for "clients' texts and calls never arrive" — routes each
+  // number's inbound SMS to our webhook and inbound voice to the right connection.
+  const [inboundResult, setInboundResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const repairInboundMutation = trpc.integration.repairInboundSetup.useMutation({
+    onSuccess: (res) => { setInboundResult(res); telnyxQuery.refetch(); },
+    onError:   (err) => setInboundResult({ ok: false, message: err.message }),
+  });
+
   const [showForm,   setShowForm]   = useState(false);
   // null = new entry | 0 = editing synthetic Telnyx entry | >0 = editing real phoneNumber
   const [editingId,  setEditingId]  = useState<number | null>(null);
@@ -313,6 +321,38 @@ export default function SettingsPage() {
               {repairVoiceMutation.isPending
                 ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Checking…</>
                 : "Fix Outbound Calling"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Inbound repair — attaches every app number to a messaging profile
+          pointing at /api/webhooks/telnyx (client SMS) and routes each
+          number's voice to the connection its agent registers on (calls). */}
+      {isAdmin && telnyxQuery.data?.hasApiKey && (
+        <Card className="bg-gray-900 border-sky-800/40">
+          <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white">Not receiving client texts or incoming calls?</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Telnyx numbers don't route inbound traffic to Salesvora by default. Click to point every
+                number's SMS webhook and voice connection at this app automatically.
+              </p>
+              {inboundResult && (
+                <p className={`text-xs mt-2 ${inboundResult.ok ? "text-green-400" : "text-red-400"}`}>
+                  {inboundResult.ok ? "✓ " : "✗ "}{inboundResult.message}
+                </p>
+              )}
+            </div>
+            <Button
+              size="sm"
+              className="bg-sky-600 hover:bg-sky-700 text-white shrink-0"
+              onClick={() => { setInboundResult(null); repairInboundMutation.mutate({ origin: window.location.origin }); }}
+              disabled={repairInboundMutation.isPending}
+            >
+              {repairInboundMutation.isPending
+                ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Fixing…</>
+                : "Fix Inbound (SMS + Calls)"}
             </Button>
           </CardContent>
         </Card>
