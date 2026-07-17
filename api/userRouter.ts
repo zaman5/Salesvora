@@ -212,6 +212,19 @@ export const userRouter = createRouter({
     return ctx.user;
   }),
 
+  // Presence heartbeat — every logged-in browser pings this every ~30s so
+  // teammates can see who's online right now and whether they're on a call.
+  // "Online" = lastSeenAt within the last ~90s (survives background-tab
+  // timer throttling); anything older shows as offline / last seen.
+  heartbeat: authedQuery
+    .input(z.object({ activity: z.enum(["online", "on-call"]).default("online") }))
+    .mutation(async ({ ctx, input }) => {
+      await updateUser(ctx.user.id, {
+        presence: { lastSeenAt: new Date().toISOString(), activity: input.activity },
+      });
+      return { success: true };
+    }),
+
   updateMe: authedQuery
     .input(z.object({
       name: z.string().optional(),

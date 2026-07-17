@@ -66,7 +66,27 @@ export default function UsersPage() {
   const [editSipPassword,   setEditSipPassword]   = useState("");
 
   // ── Data queries ──
-  const { data: usersList = [], refetch } = trpc.user.list.useQuery(undefined, { enabled: isAdmin });
+  // Poll so the online/offline presence column stays live.
+  const { data: usersList = [], refetch } = trpc.user.list.useQuery(undefined, { enabled: isAdmin, refetchInterval: 15000 });
+
+  // ── Presence (from the 30s browser heartbeat; fresh = seen within 90s) ──
+  const timeAgo = (t: number) => {
+    const m = Math.floor((Date.now() - t) / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  };
+  const presenceOf = (u: any): { state: "online" | "on-call" | "offline"; label: string } => {
+    const last = u?.presence?.lastSeenAt ? new Date(u.presence.lastSeenAt).getTime() : 0;
+    const fresh = last > 0 && Date.now() - last < 90_000;
+    if (fresh && u.presence?.activity === "on-call") return { state: "on-call", label: "On call" };
+    if (fresh) return { state: "online", label: "Online" };
+    if (last > 0) return { state: "offline", label: `Last seen ${timeAgo(last)}` };
+    return { state: "offline", label: "Offline" };
+  };
+  const onlineCount = (usersList as any[]).filter((u) => presenceOf(u).state !== "offline").length;
   const { data: phoneNumbers = [] }        = trpc.integration.listPhoneNumbers.useQuery(undefined, { enabled: isSuperAdmin });
   const { data: allLeadLists = [] }        = trpc.lead.listLists.useQuery(undefined, { enabled: isAdmin });
   const phones    = phoneNumbers as PhoneNumber[];
@@ -517,7 +537,7 @@ export default function UsersPage() {
           { icon: Users, color: "blue", value: (usersList as any[]).length, label: "Total Users" },
           { icon: Phone, color: "green", value: (usersList as any[]).filter((u: any) => u.role === "caller").length, label: "Callers" },
           { icon: Shield, color: "amber", value: (usersList as any[]).filter((u: any) => u.role === "admin").length, label: "Admins" },
-          { icon: PauseCircle, color: "green", value: (usersList as any[]).filter((u: any) => u.status === "active").length, label: "Active" },
+          { icon: PauseCircle, color: "green", value: onlineCount, label: "Online Now" },
         ].map(({ icon: Icon, color, value, label }) => (
           <Card key={label} className="bg-gray-900 border-gray-800">
             <CardContent className="p-4 flex items-center gap-3">
@@ -549,6 +569,7 @@ export default function UsersPage() {
               <thead>
                 <tr className="border-b border-gray-800">
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">User</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Online</th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Role</th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Status</th>
                   {isSuperAdmin && <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Assigned Numbers</th>}
@@ -560,12 +581,19 @@ export default function UsersPage() {
               <tbody>
                 {filteredUsers.map((u: any) => {
                   const assignedPhones = phones.filter((p) => p.assignedTo === u.id);
+                  const presence = presenceOf(u);
                   return (
                     <tr key={u.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center">
+                          <div className="relative w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center">
                             <UserCircle className="w-5 h-5 text-gray-400" />
+                            {/* Live presence dot on the avatar */}
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-gray-900 ${
+                              presence.state === "on-call" ? "bg-amber-400"
+                              : presence.state === "online" ? "bg-green-500"
+                              : "bg-gray-600"
+                            }`} />
                           </div>
                           <div>
                             <p className="text-sm font-medium text-white">{u.name}</p>
@@ -574,6 +602,21 @@ export default function UsersPage() {
                             </p>
                           </div>
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {presence.state === "on-call" ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400">
+                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" /> On call
+                          </span>
+                        ) : presence.state === "online" ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-400">
+                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" /> Online
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                            <span className="w-2 h-2 rounded-full bg-gray-600" /> {presence.label}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">

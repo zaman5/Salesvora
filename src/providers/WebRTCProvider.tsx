@@ -17,6 +17,23 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
     password: dialerConfig?.webrtc?.password ?? "",
   });
 
+  // Presence heartbeat: tell the server this user is online (and whether
+  // they're on a call) every 30s, so the Users page can show live status.
+  const heartbeatMutation = trpc.user.heartbeat.useMutation();
+  const onCall = rtc.callState === "active";
+  useEffect(() => {
+    const send = () => {
+      heartbeatMutation.mutate(
+        { activity: onCall ? "on-call" : "online" },
+        { onError: () => { /* not logged in yet — ignore */ } },
+      );
+    };
+    send();
+    const timer = setInterval(send, 30_000);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onCall]);
+
   // Global muted state managed here so the ActiveCallBar can control it.
   const [isMuted, setIsMuted] = useState(false);
 
