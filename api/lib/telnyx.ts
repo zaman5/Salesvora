@@ -88,15 +88,21 @@ export async function listConnections(
 }
 
 /**
- * Normalize a phone number to E.164-ish form for Telnyx: keep a leading "+",
- * strip spaces, dashes, parentheses and dots. (e.g. "+1-302-240-3311" -> "+13022403311")
+ * Normalize a phone number to E.164 for Telnyx: keep a leading "+", strip
+ * spaces, dashes, parentheses and dots ("+1-302-240-3311" -> "+13022403311").
+ * Numbers typed WITHOUT a country code default to +1 (NANP), so
+ * "3022403311" and "1 (302) 240-3311" both become "+13022403311" —
+ * without this, sends fail and one client splits into multiple chats.
  */
 export function toE164(raw: string): string {
   if (!raw) return raw;
   const trimmed = raw.trim();
   const hasPlus = trimmed.startsWith("+");
   const digits = trimmed.replace(/[^0-9]/g, "");
-  return hasPlus ? `+${digits}` : digits;
+  if (hasPlus) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return digits;
 }
 
 export type SendSMSResult = { id: string; status: string };

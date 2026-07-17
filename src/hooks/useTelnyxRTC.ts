@@ -301,13 +301,18 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
       return false;
     }
     // Normalize numbers to E.164 — Telnyx WebRTC requires "+countrycode..." format.
-    // Strip spaces, dashes, parens, dots; preserve a leading "+".
+    // Strip spaces, dashes, parens, dots; preserve a leading "+". Numbers
+    // without a country code default to +1 (NANP) so agents can dial
+    // "3022403311" and it goes out as "+13022403311".
     const toE164 = (raw: string) => {
       if (!raw) return raw;
       const trimmed = raw.trim();
       const hasPlus = trimmed.startsWith("+");
       const digits = trimmed.replace(/[^0-9]/g, "");
-      return hasPlus ? `+${digits}` : digits;
+      if (hasPlus) return `+${digits}`;
+      if (digits.length === 10) return `+1${digits}`;
+      if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+      return digits;
     };
     const dest   = toE164(destinationNumber);
     const caller = toE164(callerNumber);   // empty string = Telnyx picks default

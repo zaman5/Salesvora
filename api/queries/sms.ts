@@ -147,12 +147,34 @@ export async function findSMSLogsByCompany(companyId: number, limit = 200) {
 }
 
 /** Full two-way thread with one phone number (matches either side of the conversation). */
+/**
+ * Every plausible stored spelling of a phone number. Logs written before
+ * numbers were normalized may hold "3022403311", "13022403311" or
+ * "+13022403311" for the same client — exact equality split one client's
+ * chat into several and made threads miss messages.
+ */
+function numberVariants(n: string): string[] {
+  const digits = (n || "").replace(/[^0-9]/g, "");
+  const v = new Set<string>([n, digits, `+${digits}`]);
+  if (digits.length === 10) {
+    v.add(`1${digits}`);
+    v.add(`+1${digits}`);
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    const ten = digits.slice(1);
+    v.add(ten);
+    v.add(`+${ten}`);
+  }
+  return [...v].filter(Boolean);
+}
+
 export async function findSMSConversation(companyId: number, otherNumber: string) {
+  const variants = numberVariants(otherNumber);
   try {
     return await getDb().query.smsLogs.findMany({
       where: and(
         eq(smsLogs.companyId, companyId),
-        or(eq(smsLogs.toNumber, otherNumber), eq(smsLogs.fromNumber, otherNumber)),
+        or(...variants.flatMap((v) => [eq(smsLogs.toNumber, v), eq(smsLogs.fromNumber, v)])),
       ),
       orderBy: [smsLogs.createdAt],
     });
@@ -160,7 +182,7 @@ export async function findSMSConversation(companyId: number, otherNumber: string
     console.warn("[findSMSConversation] DB offline, falling back to local JSON store.");
     const data = readJsonDb();
     return (data.smsLogs as any[])
-      .filter((sl) => sl.companyId == companyId && (sl.toNumber === otherNumber || sl.fromNumber === otherNumber))
+      .filter((sl) => sl.companyId == companyId && (variants.includes(sl.toNumber) || variants.includes(sl.fromNumber)))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }
 }

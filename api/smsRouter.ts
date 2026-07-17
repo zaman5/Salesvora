@@ -136,15 +136,21 @@ export const smsRouter = createRouter({
       let error: string | undefined;
       let providerMsgId: string | undefined;
 
+      // Normalize up front so both the Telnyx send AND the stored log use
+      // the same E.164 form — logging the raw input fragmented one client
+      // into several inbox conversations ("3022403311" vs "+13022403311").
+      const to = toE164(input.toNumber);
+      const fromRaw = input.fromNumber || "";
+
       // Attempt real SMS delivery via Telnyx if configured
       try {
         const cfg = companyId ? await getTelnyxConfig(companyId) : null;
         if (cfg?.apiKey && cfg?.enabled) {
-          const from = input.fromNumber || cfg.defaultCallerId || "";
+          const from = fromRaw || cfg.defaultCallerId || "";
           if (from) {
             const result = await sendSMS(cfg.apiKey, {
               from: toE164(from),
-              to:   toE164(input.toNumber),
+              to,
               text: input.message,
             });
             if (result.ok) {
@@ -167,9 +173,9 @@ export const smsRouter = createRouter({
           leadId: null,
           companyId,
           direction: "outbound",
-          toNumber: input.toNumber,
+          toNumber: to,
           message:  input.message,
-          fromNumber: input.fromNumber,
+          fromNumber: fromRaw ? toE164(fromRaw) : fromRaw,
           status: success ? "sent" : "failed",
           twilioSid: providerMsgId,
           sentAt: new Date(),
@@ -241,9 +247,9 @@ export const smsRouter = createRouter({
         leadId: input.leadId,
         companyId: (campaign as any)?.companyId,
         direction: "outbound",
-        toNumber: input.toNumber,
+        toNumber: toE164(input.toNumber),
         message: input.message,
-        fromNumber: input.fromNumber,
+        fromNumber: input.fromNumber ? toE164(input.fromNumber) : input.fromNumber,
         status: "sent",
         sentAt: new Date(),
       });
