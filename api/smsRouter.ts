@@ -4,7 +4,7 @@ import { createRouter, adminQuery, authedQuery, callerQuery, superAdminQuery } f
 import { listCompanyScope, assertSameCompany } from "./lib/authz";
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { sendSMS, toE164 } from "./lib/telnyx";
-import { listPhoneNumbers, numbersForCaller } from "./lib/phoneNumbers";
+import { listPhoneNumbers } from "./lib/phoneNumbers";
 import { sameNumber } from "./lib/telnyxWebhook";
 import { listContacts, setContactName } from "./lib/contacts";
 
@@ -12,17 +12,21 @@ import { listContacts, setContactName } from "./lib/contacts";
  * The numbers whose conversations this user may read, or null when
  * unrestricted (only for accounts with no company scope at all).
  *
- * Every account's inbox is separate — INCLUDING the superadmin's: each user
- * sees only chats on numbers assigned to them (or, if nothing is assigned to
- * them yet, on unassigned pool numbers — never on a number that belongs to
- * someone else). One admin's client conversations must not appear in another
- * account's inbox; the superadmin oversees everything via sms.allRecords
- * instead of reading other people's chats here.
+ * Strict per-account separation, matching the call-routing policy:
+ *   assigned number   → its owner (and ONLY its owner) sees the chats
+ *   unassigned number → ONLY the superadmin sees the chats
+ * One admin's client conversations never appear in another account's inbox;
+ * the superadmin oversees everything via sms.allRecords instead of reading
+ * other people's chats here.
  */
 async function assignedNumbersOf(user: { id: number; role: string; companyId?: number | null }): Promise<string[] | null> {
   if (!user.companyId) return null;
   const phones = await listPhoneNumbers(user.companyId);
-  return numbersForCaller(phones, user.id);
+  const active = phones.filter((p) => p.status !== "inactive" && p.number);
+  if (user.role === "superadmin") {
+    return active.filter((p) => !p.assignedTo || p.assignedTo === user.id).map((p) => p.number);
+  }
+  return active.filter((p) => p.assignedTo === user.id).map((p) => p.number);
 }
 
 /** The company-side number of a log row (our number, not the client's). */

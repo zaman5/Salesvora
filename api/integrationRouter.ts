@@ -1,12 +1,14 @@
 import { z } from "zod";
 import { createRouter, superAdminQuery, authedQuery } from "./middleware";
 import { requireCompanyScope, resolveCompanyScope } from "./lib/authz";
+import { nanoid } from "nanoid";
 import {
   listConnections, ensureOutboundVoiceProfile, attachVoiceProfileToConnection,
   listMessagingProfiles, createMessagingProfile, updateMessagingProfileWebhook,
   listAccountPhoneNumbers, setPhoneNumberConnection, setPhoneNumberMessagingProfile,
-  listCredentialConnections,
+  listCredentialConnections, createCredentialConnection,
 } from "./lib/telnyx";
+import { findAllUsers, updateUser } from "./queries/users";
 import { getTelnyxConfig, saveTelnyxConfig, maskTelnyxConfig } from "./lib/telnyxConfig";
 import { sameNumber } from "./lib/telnyxWebhook";
 import { listPhoneNumbers, addPhoneNumber, updatePhoneNumber, removePhoneNumber, togglePhoneNumber, assignPhoneNumber, numbersForCaller } from "./lib/phoneNumbers";
@@ -215,9 +217,10 @@ export const integrationRouter = createRouter({
   //   SMS:   ensures a "Salesvora Inbound" messaging profile whose webhook is
   //          <origin>/api/webhooks/telnyx and attaches every app-managed
   //          number to it, so client replies land in the SMS inbox.
-  //   Calls: points each number's voice connection at the credential
-  //          connection its assigned agent registers on (falling back to the
-  //          company's shared connection), so inbound calls ring the browser.
+  //   Calls: strict per-person routing — an assigned number's voice
+  //          connection points at its owner's dedicated credential
+  //          connection (provisioned automatically if missing), and
+  //          unassigned numbers route to the superadmin's connection only.
   // The browser sends its origin because the PHP proxy on Hostinger rewrites
   // the Host header — the server can't derive the public URL from the request.
   repairInboundSetup: superAdminQuery
@@ -271,29 +274,61 @@ export const integrationRouter = createRouter({
       if (cfg.defaultCallerId) known.push(cfg.defaultCallerId);
       for (const n of cfg.assignedNumbers ?? []) known.push(n);
 
-      // Per-agent credential connections are named "Salesvora — <name> (#<userId>)"
-      // by provisionTelnyxCredential — resolve userId → connectionId from that.
-      const conns = await listConnections(cfg.apiKey);
+      // ── Strict routing policy ─────────────────────────────────────────
+      //   assigned number   → rings ONLY the assigned person
+      //   unassigned number → rings ONLY the superadmin
+      // Each person needs their own Telnyx credential connection for that;
+      // anyone missing one (including the superadmin) gets it provisioned
+      // here automatically.
+
+      // Resolve each user's dedicated credential connection. The SIP
+      // username stored on the user is authoritative; the legacy
+      // "Salesvora — <name> (#<id>)" connection-name pattern is a fallback.
+      const creds = await listCredentialConnections(cfg.apiKey);
+      const credByUsername = new Map<string, string>();
+      if (creds.ok) for (const c of creds.data) if (c.userName) credByUsername.set(c.userName, c.id);
+
+      const allUsers = (await findAllUsers()) as Array<{
+        id: number; name?: string; role?: string; companyId?: number | null;
+        sipCredentials?: { username?: string; password?: string; domain?: string };
+      }>;
+      const companyUsers = allUsers.filter((u) => u.companyId == companyId || u.role === "superadmin");
       const userConn = new Map<number, string>();
+      for (const u of companyUsers) {
+        const un = u.sipCredentials?.domain === "telnyx" ? u.sipCredentials.username : undefined;
+        if (un && credByUsername.has(un)) userConn.set(u.id, credByUsername.get(un)!);
+      }
+      const conns = await listConnections(cfg.apiKey);
       if (conns.ok) {
         for (const c of conns.data) {
           const m = /^Salesvora — .*\(#(\d+)\)$/.exec(c.connectionName || "");
-          if (m) userConn.set(Number(m[1]), c.id);
+          if (m && !userConn.has(Number(m[1]))) userConn.set(Number(m[1]), c.id);
         }
       }
 
-      // The browser registers with cfg.sipUsername — inbound calls only ring
-      // it when the number's voice connection is the credential connection
-      // carrying that username. Prefer it over cfg.connectionId, which may be
-      // an IP/FQDN trunk that no browser is ever registered on.
-      let fallbackConn = cfg.connectionId || null;
-      if (cfg.sipUsername) {
-        const creds = await listCredentialConnections(cfg.apiKey);
-        if (creds.ok) {
-          const match = creds.data.find((c) => c.userName === cfg.sipUsername);
-          if (match) fallbackConn = match.id;
+      // Create a dedicated credential connection for a user and store the
+      // SIP credential on their account (they pick it up on next refresh).
+      const provisionFor = async (userId: number): Promise<string | null> => {
+        const owner = companyUsers.find((u) => u.id === userId);
+        const username = `sv_${companyId}_${userId}_${nanoid(6)}`.toLowerCase();
+        const password = nanoid(20);
+        const created = await createCredentialConnection(cfg.apiKey, {
+          connectionName: `Salesvora — ${owner?.name || "agent"} (#${userId})`,
+          username,
+          password,
+          outboundVoiceProfileId: cfg.outboundVoiceProfileId,
+        });
+        if (!created.ok) {
+          failures.push(`Could not create a calling credential for ${owner?.name || `user #${userId}`}: ${created.message}`);
+          return null;
         }
-      }
+        await updateUser(userId, { sipCredentials: { username, password, domain: "telnyx" } });
+        userConn.set(userId, created.data.connectionId);
+        actions.push(`Created a dedicated calling credential for ${owner?.name || `user #${userId}`} — they must refresh the app once.`);
+        return created.data.connectionId;
+      };
+
+      const superUser = companyUsers.find((u) => u.role === "superadmin");
 
       // 3. Walk the account's real numbers and fix routing on each known one.
       const accountNumbers = await listAccountPhoneNumbers(cfg.apiKey);
@@ -311,11 +346,20 @@ export const integrationRouter = createRouter({
           else failures.push(`${num.phoneNumber} (SMS): ${res.message}`);
         }
 
-        const ownerId = assignedTo.get(knownMatch);
-        const wantConn = (ownerId && userConn.get(ownerId)) || fallbackConn;
+        // Route the number's voice to its owner (assigned person, or the
+        // superadmin for unassigned numbers), provisioning a credential if
+        // the owner doesn't have one yet.
+        const ownerId = assignedTo.get(knownMatch) ?? superUser?.id;
+        if (!ownerId) {
+          failures.push(`${num.phoneNumber} (calls): no assigned user and no superadmin account found.`);
+          continue;
+        }
+        const wantConn = userConn.get(ownerId) ?? (await provisionFor(ownerId));
+        const ownerName = companyUsers.find((u) => u.id === ownerId)?.name || `user #${ownerId}`;
+        const routeNote = assignedTo.get(knownMatch) ? ownerName : `the superadmin (${ownerName}) — number is unassigned`;
         if (wantConn && num.connectionId !== wantConn) {
           const res = await setPhoneNumberConnection(cfg.apiKey, num.id, wantConn);
-          if (res.ok) actions.push(`${num.phoneNumber}: inbound calls now ring ${ownerId && userConn.get(ownerId) ? `user #${ownerId}'s connection` : "the company connection"}.`);
+          if (res.ok) actions.push(`${num.phoneNumber}: inbound calls now ring ${routeNote}.`);
           else failures.push(`${num.phoneNumber} (calls): ${res.message}`);
         }
       }
