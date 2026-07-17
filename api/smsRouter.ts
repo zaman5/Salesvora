@@ -6,6 +6,7 @@ import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { sendSMS, toE164 } from "./lib/telnyx";
 import { listPhoneNumbers } from "./lib/phoneNumbers";
 import { sameNumber } from "./lib/telnyxWebhook";
+import { listContacts, setContactName } from "./lib/contacts";
 
 /**
  * Numbers explicitly assigned to this user, or null when unrestricted.
@@ -207,6 +208,22 @@ export const smsRouter = createRouter({
       const mine = await assignedNumbersOf(ctx.user as any);
       if (!mine) return logs;
       return (logs as any[]).filter((l) => mine.some((n) => sameNumber(n, ownNumberOf(l))));
+    }),
+
+  // ─── SMS contact names: label a client's number with a real name ───
+  contacts: authedQuery.query(async ({ ctx }) => {
+    const companyId = (ctx.user as any).companyId;
+    if (!companyId) return [];
+    return listContacts(companyId);
+  }),
+
+  setContactName: callerQuery
+    .input(z.object({ number: z.string().min(3), name: z.string().max(80) }))
+    .mutation(async ({ ctx, input }) => {
+      const companyId = (ctx.user as any).companyId;
+      if (!companyId) throw new TRPCError({ code: "FORBIDDEN", message: "No company." });
+      await setContactName(companyId, input.number, input.name);
+      return { success: true };
     }),
 
   sendSingle: adminQuery

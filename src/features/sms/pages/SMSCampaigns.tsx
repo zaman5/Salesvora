@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import {
   MessageSquare, Plus, Send, Pause, Play, Phone, Clock, List,
-  CheckCircle2, XCircle, AlertCircle, Hash, Inbox, PhoneIncoming, PhoneOutgoing,
+  CheckCircle2, XCircle, AlertCircle, Hash, Inbox, PhoneIncoming, PhoneOutgoing, Pencil,
 } from "lucide-react";
 
 const MAX_SMS_CHARS = 160;
@@ -66,6 +66,53 @@ export default function SMSCampaignsPage() {
   // Poll for new messages (including inbound replies) — there's no push
   // channel from the server, so this is how new client replies show up.
   const { data: inboxLogs = [] } = trpc.sms.inbox.useQuery(undefined, { refetchInterval: 5000 });
+
+  // ── Contact names: label a client's number with a real name ──
+  const { data: contacts = [], refetch: refetchContacts } = trpc.sms.contacts.useQuery();
+  const digitsOf = (s: string) => (s || "").replace(/\D/g, "");
+  const contactName = (num: string | null | undefined): string | undefined => {
+    if (!num) return undefined;
+    const d = digitsOf(num);
+    const hit = (contacts as any[]).find((c) => digitsOf(c.number) === d);
+    return hit?.name;
+  };
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft]     = useState("");
+  const setNameMutation = trpc.sms.setContactName.useMutation({
+    onSuccess: () => { refetchContacts(); setEditingName(false); },
+  });
+
+  // ── Group the flat inbox into one conversation per client number ──
+  const conversations = (() => {
+    const map = new Map<string, { contact: string; last: any; count: number }>();
+    for (const log of inboxLogs as any[]) {
+      const contact = log.direction === "inbound" ? log.fromNumber : log.toNumber;
+      if (!contact) continue;
+      const key = digitsOf(contact);
+      const cur = map.get(key);
+      if (!cur) {
+        map.set(key, { contact, last: log, count: 1 });
+      } else {
+        cur.count++;
+        if (new Date(log.createdAt).getTime() > new Date(cur.last.createdAt).getTime()) {
+          cur.last = log;
+          cur.contact = contact;
+        }
+      }
+    }
+    return [...map.values()].sort(
+      (a, b) => new Date(b.last.createdAt).getTime() - new Date(a.last.createdAt).getTime(),
+    );
+  })();
+
+  // Short chat-style timestamp: time for today, date otherwise.
+  const fmtWhen = (iso: string) => {
+    const d = new Date(iso);
+    const now = new Date();
+    return d.toDateString() === now.toDateString()
+      ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : d.toLocaleDateString([], { month: "short", day: "numeric" });
+  };
 
   // ── Conversation viewer: full two-way thread with one number ──
   const [threadWith, setThreadWith] = useState<string | null>(null);
@@ -630,84 +677,115 @@ export default function SMSCampaignsPage() {
           </Card>
         </TabsContent>
 
-        {/* ── Inbox tab: sent + received, newest first ── */}
+        {/* ── Inbox tab: one conversation per client, like a chat app ── */}
         <TabsContent value="inbox" className="mt-4">
           <Card className="bg-gray-900 border-gray-800">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-white text-base">Inbox</CardTitle>
-              <span className="text-xs text-gray-500">{(inboxLogs as any[]).length} messages</span>
+              <CardTitle className="text-white text-base">Conversations</CardTitle>
+              <span className="text-xs text-gray-500">
+                {conversations.length} chat{conversations.length === 1 ? "" : "s"} · {(inboxLogs as any[]).length} messages
+              </span>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-800">
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Direction</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Contact</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Message</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(inboxLogs as any[]).map((log) => {
-                      const inbound = log.direction === "inbound";
-                      const contact = inbound ? log.fromNumber : log.toNumber;
-                      return (
-                        <tr key={log.id}
-                          onClick={() => contact && setThreadWith(contact)}
-                          title={contact ? "Click to view the full conversation" : undefined}
-                          className={`border-b border-gray-800/50 hover:bg-gray-800/30 ${contact ? "cursor-pointer" : ""} ${inbound ? "bg-blue-500/5" : ""}`}>
-                          <td className="px-4 py-3">
-                            {inbound ? (
-                              <span className="flex items-center gap-1 text-xs text-blue-400">
-                                <PhoneIncoming className="w-3.5 h-3.5" /> Received
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 text-xs text-gray-400">
-                                <PhoneOutgoing className="w-3.5 h-3.5" /> Sent
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-white font-mono">{contact || "—"}</td>
-                          <td className="px-4 py-3 text-sm text-gray-300 max-w-sm truncate" title={log.message}>{log.message}</td>
-                          <td className="px-4 py-3">
-                            <Badge className={
-                              log.status === "delivered" || log.status === "received" ? "bg-green-500/20 text-green-400 border-0" :
-                              log.status === "replied"   ? "bg-purple-500/20 text-purple-400 border-0" :
-                              log.status === "sent"      ? "bg-blue-500/20 text-blue-400 border-0" :
-                              "bg-red-500/20 text-red-400 border-0"
-                            }>
-                              {log.status}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">
-                            {new Date(log.createdAt).toLocaleString()}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {(inboxLogs as any[]).length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="text-center py-10 text-gray-500">
-                          <Inbox className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                          No messages yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              <div className="divide-y divide-gray-800/70">
+                {conversations.map((c) => {
+                  const name = contactName(c.contact);
+                  const inbound = c.last.direction === "inbound";
+                  const initials = name
+                    ? name.split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
+                    : null;
+                  return (
+                    <button
+                      key={digitsOf(c.contact)}
+                      onClick={() => setThreadWith(c.contact)}
+                      className="w-full text-left px-4 py-3 hover:bg-gray-800/40 transition-colors flex items-center gap-3"
+                    >
+                      {/* Avatar */}
+                      <div className={`w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-sm font-semibold ${
+                        name ? "bg-blue-500/20 text-blue-300" : "bg-gray-800 text-gray-400"
+                      }`}>
+                        {initials || <MessageSquare className="w-4 h-4" />}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className={`truncate text-sm font-semibold ${name ? "text-white" : "text-white font-mono"}`}>
+                            {name || c.contact}
+                          </span>
+                          <span className="text-[11px] text-gray-500 shrink-0">{fmtWhen(c.last.createdAt)}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {inbound
+                            ? <PhoneIncoming className="w-3 h-3 text-blue-400 shrink-0" />
+                            : <PhoneOutgoing className="w-3 h-3 text-gray-500 shrink-0" />}
+                          <span className="text-xs text-gray-400 truncate">{c.last.message}</span>
+                        </div>
+                        {name && (
+                          <span className="text-[10px] text-gray-600 font-mono">{c.contact}</span>
+                        )}
+                      </div>
+
+                      <Badge className="bg-gray-800 text-gray-400 border-0 shrink-0 text-[10px]">{c.count}</Badge>
+                    </button>
+                  );
+                })}
+                {conversations.length === 0 && (
+                  <div className="text-center py-12 text-gray-500">
+                    <Inbox className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">No conversations yet.</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
 
           {/* ── Conversation dialog: full thread + reply ── */}
-          <Dialog open={!!threadWith} onOpenChange={(o) => { if (!o) { setThreadWith(null); setReplyMsg(""); } }}>
+          <Dialog open={!!threadWith} onOpenChange={(o) => { if (!o) { setThreadWith(null); setReplyMsg(""); setEditingName(false); } }}>
             <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-blue-400" />
-                  <span className="font-mono">{threadWith}</span>
+                  <MessageSquare className="w-5 h-5 text-blue-400 shrink-0" />
+                  {editingName ? (
+                    <span className="flex items-center gap-2 flex-1 min-w-0">
+                      <Input
+                        value={nameDraft}
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        placeholder="Client name"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && threadWith) setNameMutation.mutate({ number: threadWith, name: nameDraft });
+                          if (e.key === "Escape") setEditingName(false);
+                        }}
+                        className="bg-gray-800 border-gray-700 text-white h-8 text-sm flex-1"
+                      />
+                      <Button
+                        size="sm" className="bg-green-600 hover:bg-green-700 text-white h-8 px-2 shrink-0"
+                        disabled={setNameMutation.isPending}
+                        onClick={() => threadWith && setNameMutation.mutate({ number: threadWith, name: nameDraft })}
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                      </Button>
+                    </span>
+                  ) : (
+                    <span className="flex items-baseline gap-2 flex-1 min-w-0">
+                      {contactName(threadWith) ? (
+                        <>
+                          <span className="truncate">{contactName(threadWith)}</span>
+                          <span className="font-mono text-xs text-gray-500 shrink-0">{threadWith}</span>
+                        </>
+                      ) : (
+                        <span className="font-mono truncate">{threadWith}</span>
+                      )}
+                      <Button
+                        variant="ghost" size="sm"
+                        className="text-gray-400 hover:text-white h-7 px-2 shrink-0 text-xs"
+                        title="Name this client"
+                        onClick={() => { setNameDraft(contactName(threadWith) || ""); setEditingName(true); }}
+                      >
+                        <Pencil className="w-3.5 h-3.5 mr-1" /> {contactName(threadWith) ? "Rename" : "Add name"}
+                      </Button>
+                    </span>
+                  )}
                 </DialogTitle>
               </DialogHeader>
 
