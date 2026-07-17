@@ -1,25 +1,28 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware";
+import { createRouter, adminQuery, authedQuery, callerQuery, superAdminQuery } from "./middleware";
 import { listCompanyScope, assertSameCompany } from "./lib/authz";
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { sendSMS, toE164 } from "./lib/telnyx";
-import { listPhoneNumbers } from "./lib/phoneNumbers";
+import { listPhoneNumbers, numbersForCaller } from "./lib/phoneNumbers";
 import { sameNumber } from "./lib/telnyxWebhook";
 import { listContacts, setContactName } from "./lib/contacts";
 
 /**
- * Numbers explicitly assigned to this user, or null when unrestricted.
- * Superadmins are never restricted; admins/callers with NO assignment keep
- * the company-wide view (nothing to scope them to yet). When a user DOES
- * have assigned numbers, their inbox is limited to messages on those numbers
- * — they must not read conversations happening on someone else's number.
+ * The numbers whose conversations this user may read, or null when
+ * unrestricted (only for accounts with no company scope at all).
+ *
+ * Every account's inbox is separate — INCLUDING the superadmin's: each user
+ * sees only chats on numbers assigned to them (or, if nothing is assigned to
+ * them yet, on unassigned pool numbers — never on a number that belongs to
+ * someone else). One admin's client conversations must not appear in another
+ * account's inbox; the superadmin oversees everything via sms.allRecords
+ * instead of reading other people's chats here.
  */
 async function assignedNumbersOf(user: { id: number; role: string; companyId?: number | null }): Promise<string[] | null> {
-  if (user.role === "superadmin" || !user.companyId) return null;
+  if (!user.companyId) return null;
   const phones = await listPhoneNumbers(user.companyId);
-  const mine = phones.filter((p) => p.status !== "inactive" && p.number && p.assignedTo === user.id);
-  return mine.length > 0 ? mine.map((p) => p.number) : null;
+  return numbersForCaller(phones, user.id);
 }
 
 /** The company-side number of a log row (our number, not the client's). */
@@ -215,6 +218,15 @@ export const smsRouter = createRouter({
       if (!mine) return logs;
       return (logs as any[]).filter((l) => mine.some((n) => sameNumber(n, ownNumberOf(l))));
     }),
+
+  // ─── Superadmin oversight: EVERY message in the company as a flat,
+  // read-only record list. The superadmin's own inbox is scoped to their own
+  // numbers like everyone else's — this is where they audit all traffic. ───
+  allRecords: superAdminQuery.query(async ({ ctx }) => {
+    const companyId = (ctx.user as any).companyId;
+    if (!companyId) return [];
+    return findSMSLogsByCompany(companyId);
+  }),
 
   // ─── Mark a client's unread inbound messages as read (clears the badge) ───
   markConversationRead: authedQuery

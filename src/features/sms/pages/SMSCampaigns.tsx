@@ -25,6 +25,7 @@ const MAX_SMS_CHARS = 160;
 export default function SMSCampaignsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  const isSuper = user?.role === "superadmin";
 
   // ── Campaign creation state ──
   const [showCreate, setShowCreate] = useState(false);
@@ -66,6 +67,12 @@ export default function SMSCampaignsPage() {
   // Poll for new messages (including inbound replies) — there's no push
   // channel from the server, so this is how new client replies show up.
   const { data: inboxLogs = [], refetch: refetchInbox } = trpc.sms.inbox.useQuery(undefined, { refetchInterval: 5000 });
+
+  // Superadmin-only oversight: every message in the company, read-only.
+  const { data: allRecords = [] } = trpc.sms.allRecords.useQuery(undefined, {
+    enabled: isSuper,
+    refetchInterval: 10000,
+  });
 
   // ── Contact names: label a client's number with a real name ──
   const { data: contacts = [], refetch: refetchContacts } = trpc.sms.contacts.useQuery();
@@ -396,6 +403,11 @@ export default function SMSCampaignsPage() {
               </span>
             )}
           </TabsTrigger>
+          {isSuper && (
+            <TabsTrigger value="records" className="data-[state=active]:bg-gray-800 text-white">
+              <List className="w-4 h-4 mr-1.5" /> All Records
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ── Campaigns tab ── */}
@@ -861,6 +873,91 @@ export default function SMSCampaignsPage() {
             </DialogContent>
           </Dialog>
         </TabsContent>
+
+        {/* ── All Records tab (superadmin only): read-only audit of every
+            message in the company — chats stay private to their owners. ── */}
+        {isSuper && (
+          <TabsContent value="records" className="mt-4">
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardTitle className="text-white text-base">All Message Records</CardTitle>
+                <span className="text-xs text-gray-500">{(allRecords as any[]).length} records</span>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-800">
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Direction</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Client</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Our Number</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Message</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(allRecords as any[]).map((log) => {
+                        const inbound = log.direction === "inbound";
+                        const client = inbound ? log.fromNumber : log.toNumber;
+                        const ours   = inbound ? log.toNumber : log.fromNumber;
+                        return (
+                          <tr key={log.id} className={`border-b border-gray-800/50 ${inbound ? "bg-blue-500/5" : ""}`}>
+                            <td className="px-4 py-3">
+                              {inbound ? (
+                                <span className="flex items-center gap-1 text-xs text-blue-400">
+                                  <PhoneIncoming className="w-3.5 h-3.5" /> Received
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-xs text-gray-400">
+                                  <PhoneOutgoing className="w-3.5 h-3.5" /> Sent
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-white">
+                              {contactName(client) ? (
+                                <>
+                                  <span>{contactName(client)}</span>
+                                  <span className="block text-[10px] text-gray-600 font-mono">{client}</span>
+                                </>
+                              ) : (
+                                <span className="font-mono">{client || "—"}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-400 font-mono">{ours || "—"}</td>
+                            <td className="px-4 py-3 text-sm text-gray-300 max-w-sm truncate" title={log.message}>{log.message}</td>
+                            <td className="px-4 py-3">
+                              <Badge className={
+                                log.status === "delivered" || log.status === "received" || log.status === "read"
+                                  ? "bg-green-500/20 text-green-400 border-0" :
+                                log.status === "replied" ? "bg-purple-500/20 text-purple-400 border-0" :
+                                log.status === "sent"    ? "bg-blue-500/20 text-blue-400 border-0" :
+                                "bg-red-500/20 text-red-400 border-0"
+                              }>
+                                {log.status}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                              {new Date(log.createdAt).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {(allRecords as any[]).length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="text-center py-10 text-gray-500">
+                            <List className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                            No message records yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
