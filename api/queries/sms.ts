@@ -187,6 +187,37 @@ export async function findSMSConversation(companyId: number, otherNumber: string
   }
 }
 
+/**
+ * Mark every unread inbound message from one client as read. Inbound logs
+ * arrive with status "received" (unread); opening the conversation flips
+ * them to "read" so the inbox unread badge clears. Reuses the status column
+ * — no schema change, works on both the SQL and JSON stores.
+ */
+export async function markConversationRead(companyId: number, otherNumber: string) {
+  const variants = numberVariants(otherNumber);
+  try {
+    await getDb().update(smsLogs)
+      .set({ status: "read" as any })
+      .where(and(
+        eq(smsLogs.companyId, companyId),
+        eq(smsLogs.direction, "inbound" as any),
+        eq(smsLogs.status, "received" as any),
+        or(...variants.map((v) => eq(smsLogs.fromNumber, v))),
+      ));
+  } catch {
+    console.warn("[markConversationRead] DB offline, falling back to local JSON store.");
+    const store = readJsonDb();
+    let changed = false;
+    for (const sl of store.smsLogs as any[]) {
+      if (sl.companyId == companyId && sl.direction === "inbound" && sl.status === "received" && variants.includes(sl.fromNumber)) {
+        sl.status = "read";
+        changed = true;
+      }
+    }
+    if (changed) writeJsonDb(store);
+  }
+}
+
 export async function updateSMSLogStatus(id: number, status: string, twilioSid?: string, error?: string) {
   try {
     const updateData: any = { status: status as any };

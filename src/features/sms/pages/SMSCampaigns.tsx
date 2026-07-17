@@ -65,7 +65,7 @@ export default function SMSCampaignsPage() {
 
   // Poll for new messages (including inbound replies) — there's no push
   // channel from the server, so this is how new client replies show up.
-  const { data: inboxLogs = [] } = trpc.sms.inbox.useQuery(undefined, { refetchInterval: 5000 });
+  const { data: inboxLogs = [], refetch: refetchInbox } = trpc.sms.inbox.useQuery(undefined, { refetchInterval: 5000 });
 
   // ── Contact names: label a client's number with a real name ──
   const { data: contacts = [], refetch: refetchContacts } = trpc.sms.contacts.useQuery();
@@ -83,17 +83,21 @@ export default function SMSCampaignsPage() {
   });
 
   // ── Group the flat inbox into one conversation per client number ──
+  // "unread" = inbound messages still in status "received"; opening the chat
+  // marks them "read" server-side, which clears the badge.
   const conversations = (() => {
-    const map = new Map<string, { contact: string; last: any; count: number }>();
+    const map = new Map<string, { contact: string; last: any; count: number; unread: number }>();
     for (const log of inboxLogs as any[]) {
       const contact = log.direction === "inbound" ? log.fromNumber : log.toNumber;
       if (!contact) continue;
+      const isUnread = log.direction === "inbound" && log.status === "received" ? 1 : 0;
       const key = digitsOf(contact);
       const cur = map.get(key);
       if (!cur) {
-        map.set(key, { contact, last: log, count: 1 });
+        map.set(key, { contact, last: log, count: 1, unread: isUnread });
       } else {
         cur.count++;
+        cur.unread += isUnread;
         if (new Date(log.createdAt).getTime() > new Date(cur.last.createdAt).getTime()) {
           cur.last = log;
           cur.contact = contact;
@@ -104,6 +108,7 @@ export default function SMSCampaignsPage() {
       (a, b) => new Date(b.last.createdAt).getTime() - new Date(a.last.createdAt).getTime(),
     );
   })();
+  const totalUnread = conversations.reduce((s, c) => s + c.unread, 0);
 
   // Short chat-style timestamp: time for today, date otherwise.
   const fmtWhen = (iso: string) => {
@@ -126,6 +131,17 @@ export default function SMSCampaignsPage() {
   const replyMutation = trpc.sms.sendDirect.useMutation({
     onSuccess: () => { setReplyMsg(""); refetchThread(); },
   });
+
+  // Clear the unread badge: opening a chat (and any new inbound message that
+  // arrives while it is open) marks that client's messages read server-side.
+  const markReadMutation = trpc.sms.markConversationRead.useMutation({
+    onSuccess: () => refetchInbox(),
+  });
+  const threadInboundCount = (thread as any[]).filter((m) => m.direction === "inbound").length;
+  useEffect(() => {
+    if (threadWith) markReadMutation.mutate({ number: threadWith });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadWith, threadInboundCount]);
 
   // The company-side number of the thread (used as the reply "from") — taken
   // from the most recent message, falling back to the first available number.
@@ -374,6 +390,11 @@ export default function SMSCampaignsPage() {
           </TabsTrigger>
           <TabsTrigger value="inbox" className="data-[state=active]:bg-gray-800 text-white">
             <Inbox className="w-4 h-4 mr-1.5" /> Inbox
+            {totalUnread > 0 && (
+              <span className="ml-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-green-500 text-white text-[10px] font-bold flex items-center justify-center">
+                {totalUnread > 99 ? "99+" : totalUnread}
+              </span>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -709,23 +730,33 @@ export default function SMSCampaignsPage() {
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline justify-between gap-2">
-                          <span className={`truncate text-sm font-semibold ${name ? "text-white" : "text-white font-mono"}`}>
+                          <span className={`truncate text-sm ${c.unread > 0 ? "font-bold text-white" : "font-semibold text-white"} ${name ? "" : "font-mono"}`}>
                             {name || c.contact}
                           </span>
-                          <span className="text-[11px] text-gray-500 shrink-0">{fmtWhen(c.last.createdAt)}</span>
+                          <span className={`text-[11px] shrink-0 ${c.unread > 0 ? "text-green-400 font-semibold" : "text-gray-500"}`}>
+                            {fmtWhen(c.last.createdAt)}
+                          </span>
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {inbound
-                            ? <PhoneIncoming className="w-3 h-3 text-blue-400 shrink-0" />
+                            ? <PhoneIncoming className={`w-3 h-3 shrink-0 ${c.unread > 0 ? "text-green-400" : "text-blue-400"}`} />
                             : <PhoneOutgoing className="w-3 h-3 text-gray-500 shrink-0" />}
-                          <span className="text-xs text-gray-400 truncate">{c.last.message}</span>
+                          <span className={`text-xs truncate ${c.unread > 0 ? "text-gray-200 font-medium" : "text-gray-400"}`}>
+                            {c.last.message}
+                          </span>
                         </div>
                         {name && (
                           <span className="text-[10px] text-gray-600 font-mono">{c.contact}</span>
                         )}
                       </div>
 
-                      <Badge className="bg-gray-800 text-gray-400 border-0 shrink-0 text-[10px]">{c.count}</Badge>
+                      {c.unread > 0 ? (
+                        <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-green-500 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                          {c.unread > 99 ? "99+" : c.unread}
+                        </span>
+                      ) : (
+                        <Badge className="bg-gray-800 text-gray-400 border-0 shrink-0 text-[10px]">{c.count}</Badge>
+                      )}
                     </button>
                   );
                 })}

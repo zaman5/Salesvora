@@ -39,7 +39,7 @@ async function smsCampaignInScope(user: { role: string; companyId?: number | nul
 import {
   findSMSCampaignsByCompany, findSMSCampaignById, createSMSCampaign, updateSMSCampaign,
   findSMSLogsByCampaign, createSMSLog, updateSMSLogStatus, incrementSMSStats,
-  findSMSLogsByCompany, findSMSConversation,
+  findSMSLogsByCompany, findSMSConversation, markConversationRead,
 } from "./queries/sms";
 
 export const smsRouter = createRouter({
@@ -214,6 +214,16 @@ export const smsRouter = createRouter({
       const mine = await assignedNumbersOf(ctx.user as any);
       if (!mine) return logs;
       return (logs as any[]).filter((l) => mine.some((n) => sameNumber(n, ownNumberOf(l))));
+    }),
+
+  // ─── Mark a client's unread inbound messages as read (clears the badge) ───
+  markConversationRead: authedQuery
+    .input(z.object({ number: z.string().min(3) }))
+    .mutation(async ({ ctx, input }) => {
+      const companyId = (ctx.user as any).companyId;
+      if (!companyId) return { success: false };
+      await markConversationRead(companyId, toE164(input.number));
+      return { success: true };
     }),
 
   // ─── SMS contact names: label a client's number with a real name ───
