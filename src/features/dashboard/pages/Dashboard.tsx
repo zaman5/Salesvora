@@ -15,6 +15,10 @@ import {
   Headphones,
   ArrowRight,
   CalendarDays,
+  MessageSquare,
+  PhoneIncoming,
+  PhoneOutgoing,
+  MailOpen,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -72,6 +76,11 @@ export default function Dashboard() {
     { enabled: isAdmin }
   );
 
+  // Message records for the "Recent Messages" panel — one row per client,
+  // built server-side from every message the company has (never truncated).
+  const { data: conversationRows = [] } = trpc.sms.conversations.useQuery(undefined, { enabled: isAdmin });
+  const recentMessages = (conversationRows as any[]).slice(0, 6);
+
   const displayVolume = callVolume.length > 0 ? callVolume : [
     { date: "Mon", total: 45, connected: 32 },
     { date: "Tue", total: 52, connected: 38 },
@@ -90,6 +99,9 @@ export default function Dashboard() {
     { label: "Active Campaigns", value: isAdmin ? (adminStats?.activeCampaigns?.toLocaleString() ?? "0") : "-", change: "+2", icon: Radio, color: "text-amber-400", bg: "bg-amber-500/10" },
     { label: "Callers", value: isAdmin ? (adminStats?.totalCallers?.toLocaleString() ?? "0") : "-", change: "+3", icon: Users, color: "text-cyan-400", bg: "bg-cyan-500/10" },
     { label: "Today's Calls", value: isAdmin ? (adminStats?.todayCalls?.toLocaleString() ?? "0") : (callerStats?.total?.toLocaleString() ?? "0"), change: "+18%", icon: TrendingUp, color: "text-rose-400", bg: "bg-rose-500/10" },
+    { label: "Messages Sent", value: isAdmin ? (adminStats?.smsSent?.toLocaleString() ?? "0") : "-", change: "", icon: PhoneOutgoing, color: "text-indigo-400", bg: "bg-indigo-500/10" },
+    { label: "Messages Received", value: isAdmin ? (adminStats?.smsReceived?.toLocaleString() ?? "0") : "-", change: "", icon: PhoneIncoming, color: "text-teal-400", bg: "bg-teal-500/10" },
+    { label: "Unread Messages", value: isAdmin ? (adminStats?.smsUnread?.toLocaleString() ?? "0") : "-", change: "", icon: MailOpen, color: "text-orange-400", bg: "bg-orange-500/10" },
   ];
 
   const quickActions = [
@@ -243,6 +255,52 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Messages */}
+      {isAdmin && (
+        <Card className="bg-gray-900 border-gray-800">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-white text-lg">Recent Messages</CardTitle>
+            <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:text-white" onClick={() => navigate("/sms")}>
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Open Inbox
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {recentMessages.length === 0 ? (
+              <p className="text-sm text-gray-500">No messages yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentMessages.map((c: any) => (
+                  <div
+                    key={c.number}
+                    onClick={() => navigate("/sms")}
+                    className="flex items-start gap-3 pb-3 border-b border-gray-800 last:border-0 cursor-pointer hover:bg-gray-800/50 -mx-2 px-2 rounded"
+                  >
+                    {c.lastDirection === "inbound" ? (
+                      <PhoneIncoming className={`w-4 h-4 mt-0.5 flex-shrink-0 ${c.unreadCount > 0 ? "text-green-400" : "text-blue-400"}`} />
+                    ) : (
+                      <PhoneOutgoing className="w-4 h-4 mt-0.5 flex-shrink-0 text-gray-500" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm text-gray-300 font-mono truncate">{c.number}</p>
+                        <p className="text-xs text-gray-500 flex-shrink-0">{new Date(c.lastAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                      </div>
+                      <p className="text-xs text-gray-400 truncate">{c.lastMessage}</p>
+                    </div>
+                    {c.unreadCount > 0 && (
+                      <span className="text-[10px] font-semibold text-green-400 bg-green-500/10 rounded-full px-2 py-0.5 flex-shrink-0">
+                        {c.unreadCount > 99 ? "99+" : c.unreadCount} new
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Performance Chart Placeholder */}
       <Card className="bg-gray-900 border-gray-800">

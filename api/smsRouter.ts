@@ -7,6 +7,7 @@ import { sendSMS, toE164 } from "./lib/telnyx";
 import { listPhoneNumbers } from "./lib/phoneNumbers";
 import { sameNumber } from "./lib/telnyxWebhook";
 import { listContacts, setContactName } from "./lib/contacts";
+import { triggerSMSCampaignTick } from "./lib/smsCampaignWorker";
 
 /**
  * The numbers whose conversations this user may read, or null when
@@ -47,7 +48,9 @@ import {
   findSMSCampaignsByCompany, findSMSCampaignById, createSMSCampaign, updateSMSCampaign,
   findSMSLogsByCampaign, createSMSLog, updateSMSLogStatus, incrementSMSStats,
   findSMSLogsByCompany, findSMSConversation, markConversationRead,
+  findAllSMSLogsByCompany, groupSMSLogsIntoConversations,
 } from "./queries/sms";
+import { findLeadsByList } from "./queries/leads";
 
 export const smsRouter = createRouter({
   // ─── SMS Campaign CRUD ───
@@ -106,11 +109,19 @@ export const smsRouter = createRouter({
     }),
 
   // ─── Send / Pause / Resume Campaign ───
+  // Flipping status here just arms the campaign — api/lib/smsCampaignWorker.ts
+  // is the background loop that actually walks the lead list and sends via
+  // Telnyx (send window / daily limit / random delay all live in
+  // campaign.settings). triggerSMSCampaignTick() kicks an immediate tick so
+  // the first messages go out right away instead of waiting up to 20s.
   send: callerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      await smsCampaignInScope(ctx.user, input.id);
-      await updateSMSCampaign(input.id, { status: "sending" });
+      const campaign = await smsCampaignInScope(ctx.user, input.id) as any;
+      const leads = await findLeadsByList(campaign.leadListId) as any[];
+      const totalMessages = leads.filter((l) => !l.isDeleted && l.status !== "dnc" && l.phone).length;
+      await updateSMSCampaign(input.id, { status: "sending", totalMessages });
+      triggerSMSCampaignTick();
       return { success: true, message: "Campaign queued for sending" };
     }),
 
@@ -127,6 +138,7 @@ export const smsRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       await smsCampaignInScope(ctx.user, input.id);
       await updateSMSCampaign(input.id, { status: "sending" });
+      triggerSMSCampaignTick();
       return { success: true };
     }),
 
@@ -211,6 +223,38 @@ export const smsRouter = createRouter({
     return (logs as any[]).filter((l) => mine.some((n) => sameNumber(n, ownNumberOf(l))));
   }),
 
+  // ─── Conversation list (one row per client), built from EVERY message —
+  // unlike `inbox`, which is capped, a client never drops off this list just
+  // because they have a lot of message history. ───
+  conversations: authedQuery.query(async ({ ctx }) => {
+    const companyId = (ctx.user as any).companyId;
+    if (!companyId) return [];
+    const logs = await findAllSMSLogsByCompany(companyId);
+    const mine = await assignedNumbersOf(ctx.user as any);
+    const scoped = mine ? (logs as any[]).filter((l) => mine.some((n) => sameNumber(n, ownNumberOf(l)))) : logs;
+    return groupSMSLogsIntoConversations(scoped);
+  }),
+
+  // ─── Lightweight poll target for the app-wide "new message" popup — small
+  // payload (not the whole inbox) so it's cheap to poll from every page. ───
+  unreadSummary: authedQuery.query(async ({ ctx }) => {
+    const companyId = (ctx.user as any).companyId;
+    if (!companyId) return { unreadCount: 0, latest: null };
+    const logs = await findAllSMSLogsByCompany(companyId);
+    const mine = await assignedNumbersOf(ctx.user as any);
+    const scoped = mine ? (logs as any[]).filter((l) => mine.some((n) => sameNumber(n, ownNumberOf(l)))) : logs;
+    const unread = scoped.filter((l) => l.direction === "inbound" && l.status === "received");
+    const latestLog = unread.length
+      ? unread.reduce((a, b) => (new Date(a.createdAt).getTime() > new Date(b.createdAt).getTime() ? a : b))
+      : null;
+    return {
+      unreadCount: unread.length,
+      latest: latestLog
+        ? { id: latestLog.id, fromNumber: latestLog.fromNumber, message: latestLog.message, createdAt: latestLog.createdAt }
+        : null,
+    };
+  }),
+
   // ─── Full two-way thread with one phone number ───
   conversation: authedQuery
     .input(z.object({ number: z.string().min(3) }))
@@ -229,7 +273,7 @@ export const smsRouter = createRouter({
   allRecords: superAdminQuery.query(async ({ ctx }) => {
     const companyId = (ctx.user as any).companyId;
     if (!companyId) return [];
-    return findSMSLogsByCompany(companyId);
+    return findAllSMSLogsByCompany(companyId);
   }),
 
   // ─── Mark a client's unread inbound messages as read (clears the badge) ───

@@ -64,10 +64,6 @@ export default function SMSCampaignsPage() {
     { enabled: selectedLogCampaignId !== null },
   );
 
-  // Poll for new messages (including inbound replies) — there's no push
-  // channel from the server, so this is how new client replies show up.
-  const { data: inboxLogs = [], refetch: refetchInbox } = trpc.sms.inbox.useQuery(undefined, { refetchInterval: 5000 });
-
   // Superadmin-only oversight: every message in the company, read-only.
   const { data: allRecords = [] } = trpc.sms.allRecords.useQuery(undefined, {
     enabled: isSuper,
@@ -89,33 +85,21 @@ export default function SMSCampaignsPage() {
     onSuccess: () => { refetchContacts(); setEditingName(false); },
   });
 
-  // ── Group the flat inbox into one conversation per client number ──
-  // "unread" = inbound messages still in status "received"; opening the chat
-  // marks them "read" server-side, which clears the badge.
-  const conversations = (() => {
-    const map = new Map<string, { contact: string; last: any; count: number; unread: number }>();
-    for (const log of inboxLogs as any[]) {
-      const contact = log.direction === "inbound" ? log.fromNumber : log.toNumber;
-      if (!contact) continue;
-      const isUnread = log.direction === "inbound" && log.status === "received" ? 1 : 0;
-      const key = digitsOf(contact);
-      const cur = map.get(key);
-      if (!cur) {
-        map.set(key, { contact, last: log, count: 1, unread: isUnread });
-      } else {
-        cur.count++;
-        cur.unread += isUnread;
-        if (new Date(log.createdAt).getTime() > new Date(cur.last.createdAt).getTime()) {
-          cur.last = log;
-          cur.contact = contact;
-        }
-      }
-    }
-    return [...map.values()].sort(
-      (a, b) => new Date(b.last.createdAt).getTime() - new Date(a.last.createdAt).getTime(),
-    );
-  })();
+  // ── One conversation per client number, built server-side from EVERY
+  // message the company has (not a capped recent-message window), so a
+  // client with older history never drops off this list. Polled every 5s —
+  // there's no push channel from the server, so this is how new replies
+  // show up. "unread" = inbound messages still in status "received";
+  // opening the chat marks them "read" server-side, which clears the badge.
+  const { data: conversationRows = [], refetch: refetchInbox } = trpc.sms.conversations.useQuery(undefined, { refetchInterval: 5000 });
+  const conversations = (conversationRows as any[]).map((c) => ({
+    contact: c.number,
+    last: { message: c.lastMessage, createdAt: c.lastAt, direction: c.lastDirection },
+    count: c.totalCount,
+    unread: c.unreadCount,
+  }));
   const totalUnread = conversations.reduce((s, c) => s + c.unread, 0);
+  const totalMessages = conversations.reduce((s, c) => s + c.count, 0);
 
   // Short chat-style timestamp: time for today, date otherwise.
   const fmtWhen = (iso: string) => {
@@ -716,7 +700,7 @@ export default function SMSCampaignsPage() {
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-white text-base">Conversations</CardTitle>
               <span className="text-xs text-gray-500">
-                {conversations.length} chat{conversations.length === 1 ? "" : "s"} · {(inboxLogs as any[]).length} messages
+                {conversations.length} chat{conversations.length === 1 ? "" : "s"} · {totalMessages} messages
               </span>
             </CardHeader>
             <CardContent className="p-0">

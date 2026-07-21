@@ -1,6 +1,6 @@
 ﻿import { getDb, hasDatabase } from "./connection";
 import { smsCampaigns, smsLogs } from "@db/schema";
-import { eq, desc, sql, and, or } from "drizzle-orm";
+import { eq, desc, sql, and, or, count } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
 
 export async function findSMSCampaignsByCompany(companyId?: number) {
@@ -63,7 +63,7 @@ export async function createSMSCampaign(data: { name: string; companyId: number;
   }
 }
 
-export async function updateSMSCampaign(id: number, data: Partial<{ name: string; messageTemplate: string; fromNumber: string; status: string; scheduledAt: Date; settings: any }>) {
+export async function updateSMSCampaign(id: number, data: Partial<{ name: string; messageTemplate: string; fromNumber: string; status: string; scheduledAt: Date; settings: any; totalMessages: number }>) {
   try {
     await getDb().update(smsCampaigns).set(data as any).where(eq(smsCampaigns.id, id));
   } catch {
@@ -215,6 +215,84 @@ export async function markConversationRead(companyId: number, otherNumber: strin
       }
     }
     if (changed) writeJsonDb(store);
+  }
+}
+
+/** Every SMS log for a company, oldest first, with no limit/slice applied. */
+export async function findAllSMSLogsByCompany(companyId: number) {
+  try {
+    return await getDb().query.smsLogs.findMany({
+      where: eq(smsLogs.companyId, companyId),
+      orderBy: [smsLogs.createdAt],
+    });
+  } catch {
+    console.warn("[findAllSMSLogsByCompany] DB offline, falling back to local JSON store.");
+    const data = readJsonDb();
+    return (data.smsLogs as any[])
+      .filter((sl) => sl.companyId == companyId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+}
+
+/**
+ * One summary row per client phone number, built from EVERY log passed in
+ * (oldest first) — unlike findSMSLogsByCompany's capped feed, a client whose
+ * messages have aged out of that cap still shows up here.
+ */
+export function groupSMSLogsIntoConversations(logs: any[]) {
+  const digitsOf = (s: string) => (s || "").replace(/\D/g, "");
+  const map = new Map<string, { number: string; lastMessage: string; lastDirection: string; lastAt: string; totalCount: number; unreadCount: number }>();
+  for (const log of logs) {
+    const contact = log.direction === "inbound" ? log.fromNumber : log.toNumber;
+    if (!contact) continue;
+    const key = digitsOf(contact);
+    const isUnread = log.direction === "inbound" && log.status === "received" ? 1 : 0;
+    const cur = map.get(key);
+    if (!cur) {
+      map.set(key, {
+        number: contact,
+        lastMessage: log.message,
+        lastDirection: log.direction,
+        lastAt: log.createdAt,
+        totalCount: 1,
+        unreadCount: isUnread,
+      });
+    } else {
+      cur.totalCount++;
+      cur.unreadCount += isUnread;
+      // logs are ordered oldest → newest, so the latest one processed is the most recent
+      cur.number = contact;
+      cur.lastMessage = log.message;
+      cur.lastDirection = log.direction;
+      cur.lastAt = log.createdAt;
+    }
+  }
+  return [...map.values()].sort((a, b) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime());
+}
+
+/** Company-wide sent/received/unread totals — counted over every log, not a capped window. */
+export async function getSMSStats(companyId: number) {
+  try {
+    const [sentR] = await getDb().select({ value: count() })
+      .from(smsLogs).where(and(eq(smsLogs.companyId, companyId), eq(smsLogs.direction, "outbound" as any)));
+    const [receivedR] = await getDb().select({ value: count() })
+      .from(smsLogs).where(and(eq(smsLogs.companyId, companyId), eq(smsLogs.direction, "inbound" as any)));
+    const [unreadR] = await getDb().select({ value: count() })
+      .from(smsLogs).where(and(
+        eq(smsLogs.companyId, companyId),
+        eq(smsLogs.direction, "inbound" as any),
+        eq(smsLogs.status, "received" as any),
+      ));
+    return { totalSent: sentR.value, totalReceived: receivedR.value, unreadCount: unreadR.value };
+  } catch {
+    console.warn("[getSMSStats] DB offline, falling back to local JSON store.");
+    const data = readJsonDb();
+    const companyLogs = (data.smsLogs as any[]).filter((sl) => sl.companyId == companyId);
+    return {
+      totalSent: companyLogs.filter((sl) => sl.direction === "outbound").length,
+      totalReceived: companyLogs.filter((sl) => sl.direction === "inbound").length,
+      unreadCount: companyLogs.filter((sl) => sl.direction === "inbound" && sl.status === "received").length,
+    };
   }
 }
 

@@ -6,8 +6,15 @@ import { appRouter } from "./router";
 import { createContext } from "./context";
 import { webhooksApp } from "./webhooks";
 import { getStorageInfo } from "./queries/jsonDb";
+import { startSMSCampaignWorker } from "./lib/smsCampaignWorker";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
+
+// Background sender for SMS campaigns (send window / daily limit / random
+// delay all live in campaign.settings) — this process is long-lived in both
+// dev (Vite dev-server) and prod (node dist/boot.js), so an in-process
+// interval is a valid fit; skip it under vitest so tests stay hermetic.
+if (!process.env.VITEST) startSMSCampaignWorker();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 // storage info lets us verify from a browser that db.json lives at a

@@ -1,5 +1,5 @@
 import { getDb } from "./connection";
-import { calls, leads, campaigns, users } from "@db/schema";
+import { calls, leads, campaigns, users, smsLogs } from "@db/schema";
 import { eq, and, count, sql, gte, lte } from "drizzle-orm";
 import { readJsonDb } from "./jsonDb";
 
@@ -23,6 +23,19 @@ export async function getDashboardStats(companyId: number, dateFrom?: Date, date
     const rangeCalls = allCalls.filter((c: any) => inRange(c.createdAt));
     const connected = rangeCalls.filter((c: any) => c.status === "connected" || c.status === "completed").length;
     const totalDuration = rangeCalls.reduce((sum: number, c: any) => sum + (c.duration || 0), 0);
+
+    let allSms: any[] = [];
+    try {
+      const db = getDb();
+      allSms = await db.query.smsLogs.findMany({ where: eq(smsLogs.companyId, companyId) });
+    } catch {
+      const data = readJsonDb();
+      allSms = (data.smsLogs || []).filter((s: any) => s.companyId == companyId);
+    }
+    const rangeSms = allSms.filter((s: any) => inRange(s.createdAt));
+    const smsSent = rangeSms.filter((s: any) => s.direction === "outbound").length;
+    const smsReceived = rangeSms.filter((s: any) => s.direction === "inbound").length;
+    const smsUnread = allSms.filter((s: any) => s.direction === "inbound" && s.status === "received").length;
 
     let totalLeads = 0, activeCampaigns = 0, totalCallers = 0;
     try {
@@ -50,6 +63,9 @@ export async function getDashboardStats(companyId: number, dateFrom?: Date, date
       todayCalls,
       totalTalkTime: totalDuration,
       connectionRate: rangeCalls.length > 0 ? Math.round((connected / rangeCalls.length) * 100) : 0,
+      smsSent,
+      smsReceived,
+      smsUnread,
     };
   }
 
@@ -76,7 +92,20 @@ export async function getDashboardStats(companyId: number, dateFrom?: Date, date
     
     const [todayCallsResult] = await db.select({ value: count() })
       .from(calls).where(and(eq(calls.companyId, companyId), gte(calls.createdAt, today)));
-    
+
+    const [smsSentResult] = await db.select({ value: count() })
+      .from(smsLogs).where(and(eq(smsLogs.companyId, companyId), eq(smsLogs.direction, "outbound" as any)));
+
+    const [smsReceivedResult] = await db.select({ value: count() })
+      .from(smsLogs).where(and(eq(smsLogs.companyId, companyId), eq(smsLogs.direction, "inbound" as any)));
+
+    const [smsUnreadResult] = await db.select({ value: count() })
+      .from(smsLogs).where(and(
+        eq(smsLogs.companyId, companyId),
+        eq(smsLogs.direction, "inbound" as any),
+        eq(smsLogs.status, "received" as any),
+      ));
+
     return {
       totalCalls: totalCallsResult.value,
       connectedCalls: connectedCallsResult.value,
@@ -84,9 +113,12 @@ export async function getDashboardStats(companyId: number, dateFrom?: Date, date
       activeCampaigns: activeCampaignsResult.value,
       totalCallers: totalCallersResult.value,
       todayCalls: todayCallsResult.value,
-      connectionRate: totalCallsResult.value > 0 
-        ? Math.round((connectedCallsResult.value / totalCallsResult.value) * 100) 
+      connectionRate: totalCallsResult.value > 0
+        ? Math.round((connectedCallsResult.value / totalCallsResult.value) * 100)
         : 0,
+      smsSent: smsSentResult.value,
+      smsReceived: smsReceivedResult.value,
+      smsUnread: smsUnreadResult.value,
     };
   } catch {
     console.warn("[getDashboardStats] DB offline, falling back to local JSON store.");
@@ -94,15 +126,20 @@ export async function getDashboardStats(companyId: number, dateFrom?: Date, date
     const companyCalls = data.calls.filter((c: any) => c.companyId == companyId);
     const totalCalls = companyCalls.length;
     const connectedCalls = companyCalls.filter((c: any) => c.status === "connected" || c.status === "completed").length;
-    
+
     const totalLeads = data.leads.filter((l: any) => l.companyId == companyId && l.isDeleted !== true).length;
     const activeCampaigns = data.campaigns.filter((c: any) => c.companyId == companyId && c.status === "running").length;
     const totalCallers = data.users.filter((u: any) => u.companyId == companyId && u.role === "caller").length;
-    
+
+    const companySms = (data.smsLogs || []).filter((s: any) => s.companyId == companyId);
+    const smsSent = companySms.filter((s: any) => s.direction === "outbound").length;
+    const smsReceived = companySms.filter((s: any) => s.direction === "inbound").length;
+    const smsUnread = companySms.filter((s: any) => s.direction === "inbound" && s.status === "received").length;
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayCalls = companyCalls.filter((c: any) => new Date(c.createdAt).getTime() >= today.getTime()).length;
-    
+
     return {
       totalCalls,
       connectedCalls,
@@ -110,6 +147,9 @@ export async function getDashboardStats(companyId: number, dateFrom?: Date, date
       activeCampaigns,
       totalCallers,
       todayCalls,
+      smsSent,
+      smsReceived,
+      smsUnread,
       connectionRate: totalCalls > 0 ? Math.round((connectedCalls / totalCalls) * 100) : 0,
     };
   }

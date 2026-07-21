@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import {
   LayoutDashboard,
   Users,
@@ -57,6 +58,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       window.location.reload();
     },
   });
+
+  // App-wide new-message popup: poll a small unread summary (not the whole
+  // inbox) from every page — there's no push channel from the server.
+  const { data: unreadSummary } = trpc.sms.unreadSummary.useQuery(undefined, {
+    enabled: !!user,
+    refetchInterval: 5000,
+  });
+  const lastSeenIdRef = useRef<number | null>(null);
+  const sawFirstLoadRef = useRef(false);
+  useEffect(() => {
+    if (!unreadSummary) return;
+    const latestId = unreadSummary.latest?.id ?? null;
+    // Don't toast for messages that were already unread before this tab opened.
+    if (!sawFirstLoadRef.current) {
+      sawFirstLoadRef.current = true;
+      lastSeenIdRef.current = latestId;
+      return;
+    }
+    if (latestId !== null && latestId !== lastSeenIdRef.current) {
+      lastSeenIdRef.current = latestId;
+      const msg = unreadSummary.latest!.message || "";
+      toast(`New message from ${unreadSummary.latest!.fromNumber}`, {
+        description: msg.length > 80 ? `${msg.slice(0, 80)}…` : msg,
+        action: { label: "Open", onClick: () => navigate("/sms") },
+      });
+    }
+  }, [unreadSummary, navigate]);
 
   if (isLoading) {
     return (
@@ -118,19 +146,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 overflow-y-auto scrollbar-none py-4 px-3 space-y-1">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
+            const unreadBadge = item.path === "/sms" && unreadSummary?.unreadCount ? unreadSummary.unreadCount : 0;
             return (
               <Link
                 key={item.path}
                 to={item.path}
                 onClick={() => setMobileOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-blue-600/20 text-blue-400 border border-blue-600/30"
                     : "text-gray-400 hover:text-white hover:bg-gray-800"
                 } ${!sidebarOpen && "justify-center"}`}
               >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
+                <span className="relative flex-shrink-0">
+                  <item.icon className="w-5 h-5" />
+                  {!sidebarOpen && unreadBadge > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-green-500 text-[10px] font-semibold text-white flex items-center justify-center">
+                      {unreadBadge > 9 ? "9+" : unreadBadge}
+                    </span>
+                  )}
+                </span>
                 {sidebarOpen && <span>{item.label}</span>}
+                {sidebarOpen && unreadBadge > 0 && (
+                  <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-green-500 text-[10px] font-semibold text-white flex items-center justify-center">
+                    {unreadBadge > 99 ? "99+" : unreadBadge}
+                  </span>
+                )}
               </Link>
             );
           })}
