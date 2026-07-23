@@ -52,12 +52,12 @@ export function TogglePill({
       onClick={onToggle}
       className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
         on
-          ? "bg-white/5 border-white/10 text-white"
-          : "bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200"
+          ? "bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10 text-gray-900 dark:text-white"
+          : "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
       }`}
     >
       <span>{label}</span>
-      <div className={`relative w-9 h-5 rounded-full transition-colors ${on ? activeColor : "bg-gray-600"}`}>
+      <div className={`relative w-9 h-5 rounded-full transition-colors ${on ? activeColor : "bg-gray-300 dark:bg-gray-600"}`}>
         <div
           className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
             on ? "translate-x-4" : "translate-x-0.5"

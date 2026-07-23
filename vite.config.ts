@@ -14,6 +14,36 @@ export default defineConfig(async ({ command }) => {
         exclude: [/^(?!\/api\/).*/],
       }),
     );
+
+    // Mail Sender's Express sub-app can't go through the Hono dev-server
+    // plugin above (it needs raw Node req/res, not a Fetch Response), so it's
+    // mounted directly on Vite's own middleware stack instead — registered
+    // first so it claims /api/mail/* before the Hono plugin ever sees it.
+    // Loaded through Vite's own SSR module loader (not a static/dynamic TS
+    // import) so it gets TS transpilation + extensionless resolution, and so
+    // tsconfig.node.json — which only type-checks this config file in
+    // isolation — never pulls the whole backend's type graph into its scope.
+    plugins.unshift({
+      name: "mailsender-express-bridge",
+      configureServer(server) {
+        let mailAppPromise: Promise<(req: unknown, res: unknown, next: unknown) => void> | undefined;
+        const invalidate = (file: string) => {
+          if (file.replace(/\\/g, "/").includes("/api/")) mailAppPromise = undefined;
+        };
+        server.watcher.on("change", invalidate);
+        server.watcher.on("add", invalidate);
+        server.watcher.on("unlink", invalidate);
+
+        server.middlewares.use(async (req, res, next) => {
+          if (!req.url?.startsWith("/api/mail")) return next();
+          mailAppPromise ??= server
+            .ssrLoadModule("/api/mailsender/app.ts")
+            .then((mod) => mod.default as (req: unknown, res: unknown, next: unknown) => void);
+          const mailApp = await mailAppPromise;
+          mailApp(req, res, next);
+        });
+      },
+    });
   }
 
   return {

@@ -28,6 +28,8 @@ dist-ssr
 .env.*.local
 # Database
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 db/migrations/*.sql
@@ -35,6 +37,17 @@ db/migrations/*.sql
 db.json
 db.json.bak
 db.json.tmp
+# Original standalone Mailsender app (881MB incl. node_modules). Its code now
+# lives merged in api/mailsender/ and src/features/mailsender/, so the folder is
+# a local reference copy only — committing it would bloat the repo.
+# Leading slash anchors this to the repo root — an unanchored "Mailsender/"
+# also matches api/mailsender/ and src/features/mailsender/ on case-insensitive
+# filesystems (Windows/macOS), which would silently drop the merged app.
+/Mailsender/
+
+# Local Claude Code settings (machine-specific)
+.claude/settings.local.json
+
 # TypeScript cache
 *.tsbuildinfo
 # Build outputs

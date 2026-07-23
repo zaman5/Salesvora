@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware";
-import { resolveCompanyScope, assertSameCompany } from "./lib/authz";
+import { resolveCompanyScope, requireCompanyScope, assertSameCompany } from "./lib/authz";
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { placeCall } from "./lib/telnyx";
 import {
@@ -65,7 +65,16 @@ export const callRouter = createRouter({
       customFields: z.record(z.string(), z.any()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const companyId = resolveCompanyScope(ctx.user, input.companyId) ?? input.companyId;
+      // NEVER fall back to the client-supplied companyId: doing so let a user
+      // with no company of their own place real, billed calls on another
+      // tenant's Telnyx account.
+      const companyId = resolveCompanyScope(ctx.user, input.companyId);
+      if (companyId == null) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Your account is not linked to a company, so it cannot place calls.",
+        });
+      }
 
       // If this company has Telnyx SIP trunking configured and enabled, place a
       // real outbound call through Telnyx Call Control and use the returned
@@ -196,8 +205,12 @@ export const callRouter = createRouter({
   // ─── Dispositions ───
   dispositions: authedQuery
     .input(z.object({ companyId: z.number().optional() }))
-    .query(async ({ input }) => {
-      return findDispositions(input.companyId);
+    .query(async ({ ctx, input }) => {
+      // Ignore any client-supplied companyId for non-superadmins so one tenant
+      // can't enumerate another tenant's custom dispositions. Users with no
+      // company still get the global (companyId IS NULL) defaults.
+      const companyId = resolveCompanyScope(ctx.user, input.companyId);
+      return findDispositions(companyId ?? undefined);
     }),
 
   createDisposition: adminQuery
@@ -209,8 +222,11 @@ export const callRouter = createRouter({
       color: z.string().optional(),
       order: z.number().optional(),
     }))
-    .mutation(async ({ input }) => {
-      const id = await createDisposition(input);
+    .mutation(async ({ ctx, input }) => {
+      // The new disposition always lands in the caller's own company; only a
+      // superadmin may direct it elsewhere via input.companyId.
+      const companyId = requireCompanyScope(ctx.user, input.companyId ?? ctx.user.companyId ?? undefined);
+      const id = await createDisposition({ ...input, companyId });
       return { id, success: true };
     }),
 

@@ -16,8 +16,10 @@ if (isset($_GET['debug'])) {
         return function_exists($f) && !in_array($f, $disabled);
     });
     $dbPath = null;
+    $mailDbPath = null;
     if ($appDir2 && preg_match('#^(/home/[^/]+)/#', $appDir2, $m2)) {
         $dbPath = $m2[1] . '/salesvora-data/db.json';
+        $mailDbPath = $m2[1] . '/salesvora-data/mailsender.db';
     }
     echo json_encode([
         'php_version'    => PHP_VERSION,
@@ -28,10 +30,13 @@ if (isset($_GET['debug'])) {
         'boot_exists'    => $appDir2 ? file_exists($appDir2 . '/dist/boot.js') : false,
         'server_running' => isServerRunning(),
         'node_paths'     => array_filter(['/usr/local/bin/node','/usr/bin/node','/opt/node/bin/node'], 'file_exists'),
-        // Persistent database — must live OUTSIDE the deploy folder to survive pushes
+        // Persistent databases — must live OUTSIDE the deploy folder to survive pushes
         'db_persistent_path'   => $dbPath,
         'db_persistent_exists' => $dbPath ? file_exists($dbPath) : false,
         'db_size_bytes'        => ($dbPath && file_exists($dbPath)) ? filesize($dbPath) : 0,
+        'mail_db_persistent_path'   => $mailDbPath,
+        'mail_db_persistent_exists' => $mailDbPath ? file_exists($mailDbPath) : false,
+        'mail_db_size_bytes'        => ($mailDbPath && file_exists($mailDbPath)) ? filesize($mailDbPath) : 0,
     ], JSON_PRETTY_PRINT);
     exit;
 }
@@ -78,6 +83,9 @@ function startServer($appDir) {
         $dataDir = $m[1] . '/salesvora-data';
         if (!is_dir($dataDir)) @mkdir($dataDir, 0755, true);
         $envVars .= ' DB_JSON_PATH=' . escapeshellarg($dataDir . '/db.json');
+        // Mail Sender's SQLite file must live here too — this whole checkout
+        // is replaced on every git push, so anywhere inside it loses data on deploy.
+        $envVars .= ' MAIL_DB_PATH=' . escapeshellarg($dataDir . '/mailsender.db');
     }
 
     $cmd = 'cd ' . escapeshellarg($appDir) . ' && ' . $envVars . ' nohup ' . escapeshellarg($node) . ' dist/boot.js >> ' . escapeshellarg($logFile) . ' 2>&1 &';

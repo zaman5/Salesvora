@@ -56,6 +56,12 @@ export default function LeadsPage() {
   const [selectedUploadListId, setSelectedUploadListId] = useState<string>("create-new");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
+  // Inline error messages so a failed mutation is visible in the dialog
+  // instead of only reaching the console.
+  const [uploadError, setUploadError] = useState("");
+  const [listError, setListError] = useState("");
+  const [leadError, setLeadError] = useState("");
+
   // CSV Import States
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [csvLines, setCsvLines] = useState<string[]>([]);
@@ -206,8 +212,15 @@ export default function LeadsPage() {
     },
   });
 
+  const errMessage = (err: unknown, fallback: string) =>
+    err instanceof Error && err.message ? err.message : fallback;
+
   const handleCreateList = async () => {
-    if (!newListName.trim()) return;
+    if (!newListName.trim()) {
+      setListError("Please enter a list name.");
+      return;
+    }
+    setListError("");
     try {
       await createListMutation.mutateAsync({
         name: newListName,
@@ -215,6 +228,7 @@ export default function LeadsPage() {
       });
     } catch (err) {
       console.error("Failed to create lead list:", err);
+      setListError(errMessage(err, "Failed to create lead list."));
     }
   };
 
@@ -224,6 +238,7 @@ export default function LeadsPage() {
       await deleteListMutation.mutateAsync({ id });
     } catch (err) {
       console.error("Failed to delete lead list:", err);
+      alert(errMessage(err, "Failed to delete lead list."));
     }
   };
 
@@ -248,6 +263,7 @@ export default function LeadsPage() {
 
   const handleEditLeadClick = (lead: any) => {
     setEditingLead(lead);
+    setLeadError("");
     setLeadFormData({
       firstName: lead.firstName || "",
       lastName: lead.lastName || "",
@@ -268,7 +284,15 @@ export default function LeadsPage() {
   };
 
   const handleAddLead = async () => {
-    if (!selectedListId || !leadFormData.phone) return;
+    if (!selectedListId) {
+      setLeadError("Select a lead list first.");
+      return;
+    }
+    if (!leadFormData.phone.trim()) {
+      setLeadError("Phone number is required.");
+      return;
+    }
+    setLeadError("");
     try {
       await createLeadMutation.mutateAsync({
         leadListId: selectedListId,
@@ -276,11 +300,13 @@ export default function LeadsPage() {
       });
     } catch (err) {
       console.error("Failed to add lead:", err);
+      setLeadError(errMessage(err, "Failed to add lead."));
     }
   };
 
   const handleUpdateLead = async () => {
     if (!editingLead) return;
+    setLeadError("");
     try {
       await updateLeadMutation.mutateAsync({
         id: editingLead.id,
@@ -288,6 +314,7 @@ export default function LeadsPage() {
       });
     } catch (err) {
       console.error("Failed to update lead:", err);
+      setLeadError(errMessage(err, "Failed to update lead."));
     }
   };
 
@@ -297,6 +324,7 @@ export default function LeadsPage() {
       await deleteLeadMutation.mutateAsync({ id });
     } catch (err) {
       console.error("Failed to delete lead:", err);
+      alert(errMessage(err, "Failed to delete lead."));
     }
   };
 
@@ -358,6 +386,7 @@ export default function LeadsPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     setUploadFile(file);
+    setUploadError("");
     if (!file) {
       setCsvHeaders([]);
       setCsvLines([]);
@@ -390,45 +419,36 @@ export default function LeadsPage() {
   };
 
   const handleUploadLeads = async () => {
+    setUploadError("");
+
+    // Validate everything BEFORE any mutation runs — creating a list (or worse,
+    // seeding placeholder leads the auto-dialer would then call) must never be
+    // a side effect of clicking Upload with nothing selected.
+    if (!uploadFile || csvLines.length <= 1) {
+      setUploadError("Please choose a CSV file first.");
+      return;
+    }
+    if (!columnMapping.phone) {
+      setUploadError("You must map the Phone Number field.");
+      return;
+    }
+    if (csvHeaders.indexOf(columnMapping.phone) === -1) {
+      setUploadError("Invalid phone column mapping.");
+      return;
+    }
+
     try {
       let targetListId = selectedUploadListId === "create-new" ? null : parseInt(selectedUploadListId);
       if (!targetListId && !isAdmin) {
-        alert("You don't have a lead list assigned yet. Ask your admin to assign one before uploading leads.");
+        setUploadError("You don't have a lead list assigned yet. Ask your admin to assign one before uploading leads.");
         return;
       }
       if (!targetListId) {
-        const listName = uploadFile
-          ? `Imported: ${uploadFile.name.replace(/\.[^/.]+$/, "")}`
-          : `Mock List ${new Date().toLocaleDateString()}`;
         const listIdResult = await createListMutation.mutateAsync({
-          name: listName,
-          description: uploadFile ? `Uploaded from file ${uploadFile.name}` : "Seeded mock data list",
+          name: `Imported: ${uploadFile.name.replace(/\.[^/.]+$/, "")}`,
+          description: `Uploaded from file ${uploadFile.name}`,
         });
         targetListId = listIdResult.id;
-      }
-
-      if (!uploadFile || csvLines.length <= 1) {
-        // Fallback simulation for easy testing if no file is chosen
-        await createBatchMutation.mutateAsync({
-          leadListId: targetListId!,
-          leads: [
-            { companyName: "Google", firstName: "Sundar", lastName: "Pichai", phone: "+1-555-1010", email: "sundar@google.com", designation: "CEO", city: "Mountain View" },
-            { companyName: "Microsoft", firstName: "Satya", lastName: "Nadella", phone: "+1-555-2020", email: "satya@microsoft.com", designation: "CEO", city: "Redmond" },
-            { companyName: "Apple", firstName: "Tim", lastName: "Cook", phone: "+1-555-3030", email: "tim@apple.com", designation: "CEO", city: "Cupertino" },
-          ],
-        });
-        return;
-      }
-
-      if (!columnMapping.phone) {
-        alert("You must map the Phone Number field.");
-        return;
-      }
-
-      const phoneIdx = csvHeaders.indexOf(columnMapping.phone);
-      if (phoneIdx === -1) {
-        alert("Invalid phone column mapping.");
-        return;
       }
 
       type LeadUpload = { phone: string; firstName?: string; lastName?: string; companyName?: string; email?: string; designation?: string; address?: string; city?: string; state?: string; country?: string; zipCode?: string; notes?: string };
@@ -453,7 +473,7 @@ export default function LeadsPage() {
       }
 
       if (leadsToUpload.length === 0) {
-        alert("No valid leads containing phone numbers were found in the CSV based on your mapping.");
+        setUploadError("No valid leads containing phone numbers were found in the CSV based on your mapping.");
         return;
       }
 
@@ -469,6 +489,7 @@ export default function LeadsPage() {
       setMappingStep("file");
     } catch (err) {
       console.error("Failed to upload leads:", err);
+      setUploadError(errMessage(err, "Failed to upload leads."));
     }
   };
 
@@ -485,45 +506,48 @@ export default function LeadsPage() {
 
   const getStatusBadge = (status: string) => {
     const colors: Record<string, string> = {
-      new: "bg-blue-500/20 text-blue-400",
-      contacted: "bg-amber-500/20 text-amber-400",
-      qualified: "bg-green-500/20 text-green-400",
-      converted: "bg-emerald-500/20 text-emerald-400",
-      unqualified: "bg-gray-500/20 text-gray-400",
-      callback: "bg-purple-500/20 text-purple-400",
-      dnc: "bg-red-500/20 text-red-400",
+      // Light pair first, original dark values behind `dark:` — the bare
+      // `bg-*-500/20 text-*-400` combos were dark-only and became unreadable
+      // (~1.4-2.1:1) against the light theme's white background.
+      new: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+      contacted: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+      qualified: "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
+      converted: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+      unqualified: "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400",
+      callback: "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400",
+      dnc: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
     };
     return <Badge className={`${colors[status] || "bg-gray-500/20"} border-0 capitalize`}>{status}</Badge>;
   };
 
   const getPriorityBadge = (priority: string) => {
     const colors: Record<string, string> = {
-      low: "text-gray-400",
+      low: "text-gray-500 dark:text-gray-400",
       medium: "text-blue-400",
       high: "text-amber-400",
       urgent: "text-red-400",
     };
-    return <span className={`text-xs font-medium ${colors[priority] || "text-gray-400"}`}>{priority}</span>;
+    return <span className={`text-xs font-medium ${colors[priority] || "text-gray-500 dark:text-gray-400"}`}>{priority}</span>;
   };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Lead Management</h1>
-          <p className="text-gray-400 mt-1">Manage lead lists and individual leads</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Lead Management</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Manage lead lists and individual leads</p>
         </div>
         <div className="flex gap-2">
           {/* Assign-to-caller dialog (opened programmatically from card) */}
           <Dialog open={showAssign} onOpenChange={setShowAssign}>
-            <DialogContent className="bg-gray-900 border-gray-800 text-white">
+            <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white">
               <DialogHeader><DialogTitle>Assign List to Caller</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4">
-                <p className="text-sm text-gray-400">Select a caller to give them access to this lead list.</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Select a caller to give them access to this lead list.</p>
                 <select
                   value={assignCallerId}
                   onChange={(e) => setAssignCallerId(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white text-sm"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 text-gray-900 dark:text-white text-sm"
                 >
                   <option value="">— Select caller —</option>
                   {callerUsers.map((u: any) => (
@@ -543,32 +567,32 @@ export default function LeadsPage() {
 
           <Dialog open={showUpload} onOpenChange={setShowUpload}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800"
+              <Button variant="outline" className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
                 disabled={!isAdmin && leadLists.length === 0}>
                 <Upload className="w-4 h-4 mr-2" />Upload
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-gray-900 border-gray-800 text-white">
+            <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white">
               <DialogHeader><DialogTitle>Upload Leads</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4 text-left">
                 {!isAdmin && leadLists.length === 0 ? (
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     You don't have any lead lists assigned yet. Ask your admin to assign one before uploading leads.
                   </p>
                 ) : (
                   <>
                     {mappingStep === "file" ? (
-                      <div className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center">
+                      <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-8 text-center">
                         <FileSpreadsheet className="w-12 h-12 text-gray-500 mx-auto mb-3" />
-                        <p className="text-gray-300 font-medium">Drop CSV file here or click to browse</p>
+                        <p className="text-gray-600 dark:text-gray-300 font-medium">Drop CSV file here or click to browse</p>
                         <p className="text-gray-500 text-sm mt-1">Supports CSV files up to 10MB</p>
                         <Input type="file" accept=".csv" onChange={handleFileChange}
-                          className="mt-4 bg-gray-800 border-gray-700 text-white" />
+                          className="mt-4 bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white" />
                       </div>
                     ) : (
                       <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Map CSV Columns to Database Fields:</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Map CSV Columns to Database Fields:</p>
                           <Button variant="ghost" size="sm"
                             onClick={() => { setUploadFile(null); setCsvHeaders([]); setCsvLines([]); setColumnMapping({}); setMappingStep("file"); }}
                             className="text-xs text-blue-400 hover:text-blue-300 h-6 px-1">
@@ -577,13 +601,13 @@ export default function LeadsPage() {
                         </div>
                         {leadFields.map((field) => (
                           <div key={field.key} className="grid grid-cols-3 items-center gap-2">
-                            <Label className="text-xs text-gray-300 col-span-1">
+                            <Label className="text-xs text-gray-600 dark:text-gray-300 col-span-1">
                               {field.label} {field.required && <span className="text-red-500">*</span>}
                             </Label>
                             <select
                               value={columnMapping[field.key] || ""}
                               onChange={(e) => setColumnMapping({ ...columnMapping, [field.key]: e.target.value })}
-                              className="bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs text-white col-span-2 focus:ring-1 focus:ring-blue-500"
+                              className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 text-xs text-gray-900 dark:text-white col-span-2 focus:ring-1 focus:ring-blue-500"
                             >
                               <option value="" className="text-gray-950 bg-white">-- None / Skip --</option>
                               {csvHeaders.map((header) => (
@@ -595,15 +619,19 @@ export default function LeadsPage() {
                       </div>
                     )}
                     <div>
-                      <Label className="text-gray-300">Target List</Label>
+                      <Label className="text-gray-600 dark:text-gray-300">Target List</Label>
                       <select value={selectedUploadListId} onChange={(e) => setSelectedUploadListId(e.target.value)}
-                        className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white text-sm">
+                        className="w-full mt-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 text-gray-900 dark:text-white text-sm">
                         {isAdmin && <option value="create-new" className="text-gray-950 bg-white">Create new list</option>}
                         {leadLists.map((l: any) => <option key={l.id} value={l.id} className="text-gray-950 bg-white">{l.name}</option>)}
                       </select>
                     </div>
-                    <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleUploadLeads}>
-                      Upload &amp; Import
+                    {uploadError && (
+                      <p className="text-sm text-red-500 dark:text-red-400">{uploadError}</p>
+                    )}
+                    <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleUploadLeads}
+                      disabled={createBatchMutation.isPending || createListMutation.isPending}>
+                      {createBatchMutation.isPending || createListMutation.isPending ? "Importing…" : "Upload & Import"}
                     </Button>
                   </>
                 )}
@@ -618,21 +646,25 @@ export default function LeadsPage() {
                   <Plus className="w-4 h-4 mr-2" />New List
                 </Button>
               </DialogTrigger>
-              <DialogContent className="bg-gray-900 border-gray-800 text-white">
+              <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white">
                 <DialogHeader><DialogTitle>Create Lead List</DialogTitle></DialogHeader>
                 <div className="space-y-4 mt-4">
                   <div>
-                    <Label className="text-gray-300">List Name</Label>
+                    <Label className="text-gray-600 dark:text-gray-300">List Name</Label>
                     <Input value={newListName} onChange={(e) => setNewListName(e.target.value)}
-                      placeholder="Enter list name" className="bg-gray-800 border-gray-700 text-white mt-1" />
+                      placeholder="Enter list name" className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
                   </div>
                   <div>
-                    <Label className="text-gray-300">Description</Label>
+                    <Label className="text-gray-600 dark:text-gray-300">Description</Label>
                     <Textarea value={newListDesc} onChange={(e) => setNewListDesc(e.target.value)}
-                      placeholder="Optional description" className="bg-gray-800 border-gray-700 text-white mt-1" />
+                      placeholder="Optional description" className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
                   </div>
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleCreateList}>
-                    Create List
+                  {listError && (
+                    <p className="text-sm text-red-500 dark:text-red-400">{listError}</p>
+                  )}
+                  <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleCreateList}
+                    disabled={createListMutation.isPending}>
+                    {createListMutation.isPending ? "Creating…" : "Create List"}
                   </Button>
                 </div>
               </DialogContent>
@@ -642,37 +674,37 @@ export default function LeadsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-gray-900 border border-gray-800">
-          <TabsTrigger value="lists" className="data-[state=active]:bg-gray-800">Lead Lists</TabsTrigger>
-          <TabsTrigger value="leads" className="data-[state=active]:bg-gray-800">All Leads</TabsTrigger>
+        <TabsList className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+          <TabsTrigger value="lists" className="data-[state=active]:bg-gray-100 dark:data-[state=active]:bg-gray-800">Lead Lists</TabsTrigger>
+          <TabsTrigger value="leads" className="data-[state=active]:bg-gray-100 dark:data-[state=active]:bg-gray-800">All Leads</TabsTrigger>
         </TabsList>
 
         <TabsContent value="lists" className="mt-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {leadLists.map((list: any) => (
-              <Card key={list.id} className="bg-gray-900 border-gray-800 hover:border-gray-700 transition-colors">
+              <Card key={list.id} className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 transition-colors">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-4">
                     <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
                       <List className="w-5 h-5 text-blue-400" />
                     </div>
-                    <Badge className={list.status === "active" ? "bg-green-500/20 text-green-400 animate-pulse" : "bg-gray-500/20 text-gray-400"}>
+                    <Badge className={list.status === "active" ? "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 animate-pulse" : "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400"}>
                       {list.status}
                     </Badge>
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-1">{list.name}</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">{list.name}</h3>
                   <p className="text-xs text-gray-500 mb-4">Created {new Date(list.createdAt).toLocaleDateString()}</p>
                   <div className="flex items-center gap-4 text-sm mb-4">
-                    <span className="text-gray-400">
+                    <span className="text-gray-500 dark:text-gray-400">
                       <Users className="w-4 h-4 inline mr-1" />
                       {(list.totalLeads ?? 0).toLocaleString()} leads
                     </span>
-                    <span className="text-gray-400">
+                    <span className="text-gray-500 dark:text-gray-400">
                       <Phone className="w-4 h-4 inline mr-1" />
                       {(list.calledLeads ?? 0).toLocaleString()} called
                     </span>
                   </div>
-                  <div className="w-full bg-gray-800 rounded-full h-2 mb-4">
+                  <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2 mb-4">
                     <div
                       className="bg-blue-600 h-2 rounded-full transition-all"
                       style={{ width: `${(list.totalLeads ?? 0) > 0 ? ((list.calledLeads || 0) / list.totalLeads) * 100 : 0}%` }}
@@ -682,7 +714,7 @@ export default function LeadsPage() {
                     <Button
                       variant="ghost" size="sm"
                       onClick={() => { setSelectedListId(list.id); setActiveTab("leads"); }}
-                      className="text-gray-400 hover:text-white h-8 px-2"
+                      className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white h-8 px-2"
                     >
                       <Eye className="w-4 h-4 mr-1" /> View
                     </Button>
@@ -699,7 +731,7 @@ export default function LeadsPage() {
                       <Button
                         variant="ghost" size="sm"
                         onClick={() => handleDeleteList(list.id)}
-                        className="text-gray-400 hover:text-red-400 h-8 px-2 ml-auto"
+                        className="text-gray-500 dark:text-gray-400 hover:text-red-400 h-8 px-2 ml-auto"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -719,49 +751,49 @@ export default function LeadsPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search leads..."
-                className="pl-10 bg-gray-900 border-gray-800 text-white"
+                className="pl-10 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white"
               />
             </div>
             <select
               value={selectedListId || ""}
               onChange={(e) => setSelectedListId(parseInt(e.target.value) || null)}
-              className="bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-white text-sm animate-none"
+              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md px-3 py-2 text-gray-900 dark:text-white text-sm animate-none"
             >
               {leadLists.map((l: any) => <option key={l.id} value={l.id} className="text-gray-950 bg-white">{l.name}</option>)}
             </select>
             {selectedListId && (
-              <Button onClick={() => { resetLeadForm(); setShowAddLead(true); }} className="bg-blue-600 hover:bg-blue-700">
+              <Button onClick={() => { resetLeadForm(); setLeadError(""); setShowAddLead(true); }} className="bg-blue-600 hover:bg-blue-700">
                 <Plus className="w-4 h-4 mr-2" /> Add Lead
               </Button>
             )}
           </div>
-          <Card className="bg-gray-900 border-gray-800">
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-800">
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Lead</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Contact</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Designation</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Location</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Status</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Priority</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Actions</th>
+                    <tr className="border-b border-gray-200 dark:border-gray-800">
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Lead</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Contact</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Designation</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Location</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Status</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Priority</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredLeads.map((lead: any) => (
-                      <tr key={lead.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                      <tr key={lead.id} className="border-b border-gray-200/50 dark:border-gray-800/50 hover:bg-gray-100/30 dark:hover:bg-gray-800/30">
                         <td className="px-4 py-3">
                           <div>
-                            <p className="text-sm font-medium text-white">{lead.firstName} {lead.lastName}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{lead.firstName} {lead.lastName}</p>
                             <p className="text-xs text-gray-500">{lead.companyName}</p>
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           <div className="space-y-1">
-                            <p className="text-sm text-gray-300 flex items-center gap-1">
+                            <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-1">
                               <Phone className="w-3 h-3" /> {lead.phone}
                             </p>
                             <p className="text-xs text-gray-500 flex items-center gap-1">
@@ -769,12 +801,12 @@ export default function LeadsPage() {
                             </p>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-400">
+                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                           <span className="flex items-center gap-1">
                             <Briefcase className="w-3 h-3" /> {lead.designation}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-400">
+                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                           <span className="flex items-center gap-1">
                             <MapPin className="w-3 h-3" /> {lead.city}
                           </span>
@@ -787,7 +819,7 @@ export default function LeadsPage() {
                               variant="ghost" 
                               size="sm" 
                               onClick={() => handleEditLeadClick(lead)}
-                              className="text-gray-400 hover:text-white h-8 px-2"
+                              className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white h-8 px-2"
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </Button>
@@ -795,7 +827,7 @@ export default function LeadsPage() {
                               variant="ghost" 
                               size="sm" 
                               onClick={() => handleDeleteLead(lead.id)}
-                              className="text-gray-400 hover:text-red-400 h-8 px-2"
+                              className="text-gray-500 dark:text-gray-400 hover:text-red-400 h-8 px-2"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
@@ -820,116 +852,116 @@ export default function LeadsPage() {
 
       {/* Manual Add Lead Dialog */}
       <Dialog open={showAddLead} onOpenChange={setShowAddLead}>
-        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Lead</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 mt-4 text-left">
             <div>
-              <Label className="text-gray-300">First Name</Label>
+              <Label className="text-gray-600 dark:text-gray-300">First Name</Label>
               <Input 
                 value={leadFormData.firstName}
                 onChange={(e) => setLeadFormData({ ...leadFormData, firstName: e.target.value })}
                 placeholder="John" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Last Name</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Last Name</Label>
               <Input 
                 value={leadFormData.lastName}
                 onChange={(e) => setLeadFormData({ ...leadFormData, lastName: e.target.value })}
                 placeholder="Doe" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Phone <span className="text-red-500">*</span></Label>
+              <Label className="text-gray-600 dark:text-gray-300">Phone <span className="text-red-500">*</span></Label>
               <Input 
                 value={leadFormData.phone}
                 onChange={(e) => setLeadFormData({ ...leadFormData, phone: e.target.value })}
                 placeholder="+1-555-1234" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Email</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Email</Label>
               <Input 
                 value={leadFormData.email}
                 onChange={(e) => setLeadFormData({ ...leadFormData, email: e.target.value })}
                 placeholder="john.doe@example.com" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Company Name</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Company Name</Label>
               <Input 
                 value={leadFormData.companyName}
                 onChange={(e) => setLeadFormData({ ...leadFormData, companyName: e.target.value })}
                 placeholder="Acme Corp" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Designation</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Designation</Label>
               <Input 
                 value={leadFormData.designation}
                 onChange={(e) => setLeadFormData({ ...leadFormData, designation: e.target.value })}
                 placeholder="Sales Manager" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div className="col-span-2">
-              <Label className="text-gray-300">Address</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Address</Label>
               <Input 
                 value={leadFormData.address}
                 onChange={(e) => setLeadFormData({ ...leadFormData, address: e.target.value })}
                 placeholder="123 Main St" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">City</Label>
+              <Label className="text-gray-600 dark:text-gray-300">City</Label>
               <Input 
                 value={leadFormData.city}
                 onChange={(e) => setLeadFormData({ ...leadFormData, city: e.target.value })}
                 placeholder="New York" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">State</Label>
+              <Label className="text-gray-600 dark:text-gray-300">State</Label>
               <Input 
                 value={leadFormData.state}
                 onChange={(e) => setLeadFormData({ ...leadFormData, state: e.target.value })}
                 placeholder="NY" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Country</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Country</Label>
               <Input 
                 value={leadFormData.country}
                 onChange={(e) => setLeadFormData({ ...leadFormData, country: e.target.value })}
                 placeholder="USA" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Zip Code</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Zip Code</Label>
               <Input 
                 value={leadFormData.zipCode}
                 onChange={(e) => setLeadFormData({ ...leadFormData, zipCode: e.target.value })}
                 placeholder="10001" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Priority</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Priority</Label>
               <select
                 value={leadFormData.priority}
                 onChange={(e) => setLeadFormData({ ...leadFormData, priority: e.target.value as "low" | "medium" | "high" | "urgent" })}
-                className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white text-sm"
+                className="w-full mt-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 text-gray-900 dark:text-white text-sm"
               >
                 <option value="low" className="text-gray-950 bg-white">Low</option>
                 <option value="medium" className="text-gray-950 bg-white">Medium</option>
@@ -938,11 +970,11 @@ export default function LeadsPage() {
               </select>
             </div>
             <div>
-              <Label className="text-gray-300">Status</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Status</Label>
               <select
                 value={leadFormData.status}
                 onChange={(e) => setLeadFormData({ ...leadFormData, status: e.target.value as "new" | "contacted" | "qualified" | "converted" | "unqualified" | "callback" | "dnc" })}
-                className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white text-sm"
+                className="w-full mt-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 text-gray-900 dark:text-white text-sm"
               >
                 <option value="new" className="text-gray-950 bg-white">New</option>
                 <option value="contacted" className="text-gray-950 bg-white">Contacted</option>
@@ -954,16 +986,20 @@ export default function LeadsPage() {
               </select>
             </div>
             <div className="col-span-2">
-              <Label className="text-gray-300">Notes</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Notes</Label>
               <Textarea 
                 value={leadFormData.notes}
                 onChange={(e) => setLeadFormData({ ...leadFormData, notes: e.target.value })}
                 placeholder="Enter comments about the lead" 
-                className="bg-gray-800 border-gray-700 text-white mt-1 h-20" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 h-20" 
               />
             </div>
-            <Button className="w-full col-span-2 bg-blue-600 hover:bg-blue-700 mt-2" onClick={handleAddLead}>
-              Create Lead
+            {leadError && (
+              <p className="col-span-2 text-sm text-red-500 dark:text-red-400">{leadError}</p>
+            )}
+            <Button className="w-full col-span-2 bg-blue-600 hover:bg-blue-700 mt-2" onClick={handleAddLead}
+              disabled={createLeadMutation.isPending}>
+              {createLeadMutation.isPending ? "Creating…" : "Create Lead"}
             </Button>
           </div>
         </DialogContent>
@@ -971,116 +1007,116 @@ export default function LeadsPage() {
 
       {/* Manual Edit Lead Dialog */}
       <Dialog open={showEditLead} onOpenChange={setShowEditLead}>
-        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Lead</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 mt-4 text-left">
             <div>
-              <Label className="text-gray-300">First Name</Label>
+              <Label className="text-gray-600 dark:text-gray-300">First Name</Label>
               <Input 
                 value={leadFormData.firstName}
                 onChange={(e) => setLeadFormData({ ...leadFormData, firstName: e.target.value })}
                 placeholder="John" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Last Name</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Last Name</Label>
               <Input 
                 value={leadFormData.lastName}
                 onChange={(e) => setLeadFormData({ ...leadFormData, lastName: e.target.value })}
                 placeholder="Doe" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Phone <span className="text-red-500">*</span></Label>
+              <Label className="text-gray-600 dark:text-gray-300">Phone <span className="text-red-500">*</span></Label>
               <Input 
                 value={leadFormData.phone}
                 onChange={(e) => setLeadFormData({ ...leadFormData, phone: e.target.value })}
                 placeholder="+1-555-1234" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Email</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Email</Label>
               <Input 
                 value={leadFormData.email}
                 onChange={(e) => setLeadFormData({ ...leadFormData, email: e.target.value })}
                 placeholder="john.doe@example.com" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Company Name</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Company Name</Label>
               <Input 
                 value={leadFormData.companyName}
                 onChange={(e) => setLeadFormData({ ...leadFormData, companyName: e.target.value })}
                 placeholder="Acme Corp" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Designation</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Designation</Label>
               <Input 
                 value={leadFormData.designation}
                 onChange={(e) => setLeadFormData({ ...leadFormData, designation: e.target.value })}
                 placeholder="Sales Manager" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div className="col-span-2">
-              <Label className="text-gray-300">Address</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Address</Label>
               <Input 
                 value={leadFormData.address}
                 onChange={(e) => setLeadFormData({ ...leadFormData, address: e.target.value })}
                 placeholder="123 Main St" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">City</Label>
+              <Label className="text-gray-600 dark:text-gray-300">City</Label>
               <Input 
                 value={leadFormData.city}
                 onChange={(e) => setLeadFormData({ ...leadFormData, city: e.target.value })}
                 placeholder="New York" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">State</Label>
+              <Label className="text-gray-600 dark:text-gray-300">State</Label>
               <Input 
                 value={leadFormData.state}
                 onChange={(e) => setLeadFormData({ ...leadFormData, state: e.target.value })}
                 placeholder="NY" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Country</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Country</Label>
               <Input 
                 value={leadFormData.country}
                 onChange={(e) => setLeadFormData({ ...leadFormData, country: e.target.value })}
                 placeholder="USA" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Zip Code</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Zip Code</Label>
               <Input 
                 value={leadFormData.zipCode}
                 onChange={(e) => setLeadFormData({ ...leadFormData, zipCode: e.target.value })}
                 placeholder="10001" 
-                className="bg-gray-800 border-gray-700 text-white mt-1" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
               />
             </div>
             <div>
-              <Label className="text-gray-300">Priority</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Priority</Label>
               <select
                 value={leadFormData.priority}
                 onChange={(e) => setLeadFormData({ ...leadFormData, priority: e.target.value as "low" | "medium" | "high" | "urgent" })}
-                className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white text-sm"
+                className="w-full mt-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 text-gray-900 dark:text-white text-sm"
               >
                 <option value="low" className="text-gray-950 bg-white">Low</option>
                 <option value="medium" className="text-gray-950 bg-white">Medium</option>
@@ -1089,11 +1125,11 @@ export default function LeadsPage() {
               </select>
             </div>
             <div>
-              <Label className="text-gray-300">Status</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Status</Label>
               <select
                 value={leadFormData.status}
                 onChange={(e) => setLeadFormData({ ...leadFormData, status: e.target.value as "new" | "contacted" | "qualified" | "converted" | "unqualified" | "callback" | "dnc" })}
-                className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white text-sm"
+                className="w-full mt-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 text-gray-900 dark:text-white text-sm"
               >
                 <option value="new" className="text-gray-950 bg-white">New</option>
                 <option value="contacted" className="text-gray-950 bg-white">Contacted</option>
@@ -1105,16 +1141,20 @@ export default function LeadsPage() {
               </select>
             </div>
             <div className="col-span-2">
-              <Label className="text-gray-300">Notes</Label>
+              <Label className="text-gray-600 dark:text-gray-300">Notes</Label>
               <Textarea 
                 value={leadFormData.notes}
                 onChange={(e) => setLeadFormData({ ...leadFormData, notes: e.target.value })}
                 placeholder="Enter comments about the lead" 
-                className="bg-gray-800 border-gray-700 text-white mt-1 h-20" 
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 h-20" 
               />
             </div>
-            <Button className="w-full col-span-2 bg-blue-600 hover:bg-blue-700 mt-2" onClick={handleUpdateLead}>
-              Save Changes
+            {leadError && (
+              <p className="col-span-2 text-sm text-red-500 dark:text-red-400">{leadError}</p>
+            )}
+            <Button className="w-full col-span-2 bg-blue-600 hover:bg-blue-700 mt-2" onClick={handleUpdateLead}
+              disabled={updateLeadMutation.isPending}>
+              {updateLeadMutation.isPending ? "Saving…" : "Save Changes"}
             </Button>
           </div>
         </DialogContent>

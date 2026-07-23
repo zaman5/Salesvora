@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/StatusBadge";
 import {
   Dialog,
   DialogContent,
@@ -252,14 +253,15 @@ export default function UsersPage() {
     if (role === "superadmin") return <Shield className="w-4 h-4 text-purple-400" />;
     if (role === "admin")  return <Shield className="w-4 h-4 text-amber-400" />;
     if (role === "caller") return <Phone  className="w-4 h-4 text-blue-400" />;
-    if (role === "viewer") return <Eye    className="w-4 h-4 text-gray-400" />;
+    if (role === "viewer") return <Eye    className="w-4 h-4 text-gray-500 dark:text-gray-400" />;
     return <UserCircle className="w-4 h-4" />;
   };
 
+  // Palette lives in the shared StatusBadge so light/dark stay in one place.
   const getStatusBadge = (status: string) => {
-    if (status === "active")    return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Active</Badge>;
-    if (status === "suspended") return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Suspended</Badge>;
-    return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">Inactive</Badge>;
+    if (status === "active")    return <StatusBadge status="active" label="Active" bordered />;
+    if (status === "suspended") return <StatusBadge status="suspended" label="Suspended" bordered />;
+    return <StatusBadge status="inactive" label="Inactive" bordered />;
   };
 
   // ── Shared assignment UI blocks ──
@@ -273,15 +275,15 @@ export default function UsersPage() {
     if (!isSuperAdmin) return null;
     return (
       <div>
-        <Label className="text-gray-300 flex items-center gap-1.5 mb-1">
+        <Label className="text-gray-600 dark:text-gray-300 flex items-center gap-1.5 mb-1">
           <PhoneCall className="w-3.5 h-3.5 text-blue-400" /> Assign Phone Numbers
         </Label>
-        <div className="space-y-1 max-h-32 overflow-y-auto bg-gray-800 rounded-lg p-2 border border-gray-700">
+        <div className="space-y-1 max-h-32 overflow-y-auto bg-gray-100 dark:bg-gray-800 rounded-lg p-2 border border-gray-300 dark:border-gray-700">
           {phones.filter((p) => p.status !== "inactive").length === 0 && (
             <p className="text-xs text-gray-500 px-1">No active numbers — configure in Settings.</p>
           )}
           {phones.filter((p) => p.status !== "inactive").map((p) => (
-            <label key={p.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-700 cursor-pointer text-sm text-white">
+            <label key={p.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer text-sm text-gray-900 dark:text-white">
               <input
                 type="checkbox"
                 className="accent-blue-500 w-4 h-4"
@@ -289,9 +291,9 @@ export default function UsersPage() {
                 onChange={() => onChange(toggleId(selectedIds, p.id))}
               />
               <span className="font-mono text-sm">{p.number}</span>
-              {p.label && <span className="text-gray-400 text-xs">({p.label})</span>}
+              {p.label && <span className="text-gray-500 dark:text-gray-400 text-xs">({p.label})</span>}
               {p.assignedTo && !selectedIds.includes(p.id) && (
-                <Badge className="ml-auto text-[10px] bg-amber-500/10 text-amber-400 border-0">In use</Badge>
+                <Badge className="ml-auto text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border-0">In use</Badge>
               )}
             </label>
           ))}
@@ -306,15 +308,15 @@ export default function UsersPage() {
     if (role !== "caller") return null;
     return (
       <div>
-        <Label className="text-gray-300 flex items-center gap-1.5 mb-1">
+        <Label className="text-gray-600 dark:text-gray-300 flex items-center gap-1.5 mb-1">
           <List className="w-3.5 h-3.5 text-green-400" /> Assign Lead Lists
         </Label>
-        <div className="space-y-1 max-h-32 overflow-y-auto bg-gray-800 rounded-lg p-2 border border-gray-700">
+        <div className="space-y-1 max-h-32 overflow-y-auto bg-gray-100 dark:bg-gray-800 rounded-lg p-2 border border-gray-300 dark:border-gray-700">
           {leadLists.length === 0 && (
             <p className="text-xs text-gray-500 px-1">No lead lists created yet.</p>
           )}
           {leadLists.map((l) => (
-            <label key={l.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-700 cursor-pointer text-sm text-white">
+            <label key={l.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer text-sm text-gray-900 dark:text-white">
               <input
                 type="checkbox"
                 className="accent-green-500 w-4 h-4"
@@ -323,7 +325,7 @@ export default function UsersPage() {
               />
               <span>{l.name}</span>
               {l.totalLeads != null && (
-                <span className="ml-auto text-xs text-gray-400">{l.totalLeads} leads</span>
+                <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">{l.totalLeads} leads</span>
               )}
             </label>
           ))}
@@ -335,7 +337,7 @@ export default function UsersPage() {
   if (!isAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-gray-400">You don't have permission to view this page.</p>
+        <p className="text-gray-500 dark:text-gray-400">You don't have permission to view this page.</p>
       </div>
     );
   }
@@ -345,8 +347,8 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">User Management</h1>
-          <p className="text-gray-400 mt-1">Manage your team of callers and admins</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">User Management</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Manage your team of callers and admins</p>
         </div>
 
         {/* ── Create dialog ── */}
@@ -356,31 +358,31 @@ export default function UsersPage() {
               <Plus className="w-4 h-4 mr-2" /> Add User
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-gray-900 border-gray-800 text-white max-h-[90vh] overflow-y-auto">
+          <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New User</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>
-                <Label className="text-gray-300">Full Name</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Full Name</Label>
                 <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                  placeholder="Enter full name" className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  placeholder="Enter full name" className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
               <div>
-                <Label className="text-gray-300">Email</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Email</Label>
                 <Input value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  placeholder="Enter email" className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  placeholder="Enter email" className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
               <div>
-                <Label className="text-gray-300">Phone</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Phone</Label>
                 <Input value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
-                  placeholder="Enter phone number" className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  placeholder="Enter phone number" className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
               <div>
-                <Label className="text-gray-300">Role</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Role</Label>
                 <Select value={newUser.role} onValueChange={(v) => { setNewUser({ ...newUser, role: v }); setCreatePhoneIds([]); setCreateListIds([]); }}>
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
+                  <SelectTrigger className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700">
                     <SelectItem value="caller">Caller</SelectItem>
                     {isSuperAdmin && <SelectItem value="admin">Admin</SelectItem>}
                     <SelectItem value="viewer">Viewer</SelectItem>
@@ -389,16 +391,16 @@ export default function UsersPage() {
                 </Select>
               </div>
               <div>
-                <Label className="text-gray-300">Daily Call Limit</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Daily Call Limit</Label>
                 <Input type="number" value={newUser.dailyCallLimit}
                   onChange={(e) => setNewUser({ ...newUser, dailyCallLimit: parseInt(e.target.value) || 0 })}
-                  className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
               <div>
-                <Label className="text-gray-300">Password</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Password</Label>
                 <Input type="password" value={newUser.password}
                   onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  placeholder="Enter temporary password" className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  placeholder="Enter temporary password" className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
 
               {/* Phone + Lead List assignment — only for caller role */}
@@ -415,32 +417,32 @@ export default function UsersPage() {
 
         {/* ── Edit dialog ── */}
         <Dialog open={showEdit} onOpenChange={(o) => { setShowEdit(o); if (!o) { setEditingUser(null); setEditPhoneIds([]); setEditListIds([]); } }}>
-          <DialogContent className="bg-gray-900 border-gray-800 text-white max-h-[90vh] overflow-y-auto">
+          <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit User — {editingUser?.name}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>
-                <Label className="text-gray-300">Full Name</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Full Name</Label>
                 <Input value={editUserData.name} onChange={(e) => setEditUserData({ ...editUserData, name: e.target.value })}
-                  className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
               <div>
-                <Label className="text-gray-300">Email</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Email</Label>
                 <Input value={editUserData.email} onChange={(e) => setEditUserData({ ...editUserData, email: e.target.value })}
-                  className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
               <div>
-                <Label className="text-gray-300">Phone</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Phone</Label>
                 <Input value={editUserData.phone} onChange={(e) => setEditUserData({ ...editUserData, phone: e.target.value })}
-                  className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
               <div>
-                <Label className="text-gray-300">Role</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Role</Label>
                 <Select value={editUserData.role} onValueChange={(v) => setEditUserData({ ...editUserData, role: v })}
                   disabled={!isSuperAdmin && (editUserData.role === "admin" || editUserData.role === "superadmin")}>
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
+                  <SelectTrigger className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700">
                     <SelectItem value="caller">Caller</SelectItem>
                     {(isSuperAdmin || editUserData.role === "admin") && <SelectItem value="admin">Admin</SelectItem>}
                     <SelectItem value="viewer">Viewer</SelectItem>
@@ -450,17 +452,17 @@ export default function UsersPage() {
                 </Select>
               </div>
               <div>
-                <Label className="text-gray-300">Daily Call Limit</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Daily Call Limit</Label>
                 <Input type="number" value={editUserData.dailyCallLimit}
                   onChange={(e) => setEditUserData({ ...editUserData, dailyCallLimit: parseInt(e.target.value) || 0 })}
-                  className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
               <div>
-                <Label className="text-gray-300">Password (leave blank to keep)</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Password (leave blank to keep)</Label>
                 <Input type="password" value={editUserData.password}
                   onChange={(e) => setEditUserData({ ...editUserData, password: e.target.value })}
                   placeholder="Leave blank to keep current password"
-                  className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
 
               {/* ── Telnyx SIP Credentials (caller-only, for concurrent WebRTC calling) ── */}
@@ -492,22 +494,22 @@ export default function UsersPage() {
                     </p>
                   )}
                   <div>
-                    <Label className="text-gray-300 text-xs">Telnyx SIP Username</Label>
+                    <Label className="text-gray-600 dark:text-gray-300 text-xs">Telnyx SIP Username</Label>
                     <Input
                       value={editSipUsername}
                       onChange={(e) => setEditSipUsername(e.target.value)}
                       placeholder="e.g. caller1@yourcompany.sip.telnyx.com"
-                      className="bg-gray-800 border-gray-700 text-white mt-1 text-sm font-mono"
+                      className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm font-mono"
                     />
                   </div>
                   <div>
-                    <Label className="text-gray-300 text-xs">Telnyx SIP Password</Label>
+                    <Label className="text-gray-600 dark:text-gray-300 text-xs">Telnyx SIP Password</Label>
                     <Input
                       type="password"
                       value={editSipPassword}
                       onChange={(e) => setEditSipPassword(e.target.value)}
                       placeholder="Leave blank to keep existing"
-                      className="bg-gray-800 border-gray-700 text-white mt-1 text-sm"
+                      className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm"
                     />
                   </div>
                   {editingUser?.sipCredentials?.domain === "telnyx" && !editSipUsername && (
@@ -539,14 +541,14 @@ export default function UsersPage() {
           { icon: Shield, color: "amber", value: (usersList as any[]).filter((u: any) => u.role === "admin").length, label: "Admins" },
           { icon: PauseCircle, color: "green", value: onlineCount, label: "Online Now" },
         ].map(({ icon: Icon, color, value, label }) => (
-          <Card key={label} className="bg-gray-900 border-gray-800">
+          <Card key={label} className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
             <CardContent className="p-4 flex items-center gap-3">
               <div className={`w-10 h-10 rounded-lg bg-${color}-500/10 flex items-center justify-center`}>
                 <Icon className={`w-5 h-5 text-${color}-400`} />
               </div>
               <div>
-                <p className="text-2xl font-bold text-white">{value}</p>
-                <p className="text-sm text-gray-400">{label}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
               </div>
             </CardContent>
           </Card>
@@ -558,24 +560,24 @@ export default function UsersPage() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
         <Input value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Search users by name or email..."
-          className="pl-10 bg-gray-900 border-gray-800 text-white" />
+          className="pl-10 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white" />
       </div>
 
       {/* Users Table */}
-      <Card className="bg-gray-900 border-gray-800">
+      <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-800">
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">User</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Online</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Role</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Status</th>
-                  {isSuperAdmin && <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Assigned Numbers</th>}
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Call Limit</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Last Login</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Actions</th>
+                <tr className="border-b border-gray-200 dark:border-gray-800">
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">User</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Online</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Role</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Status</th>
+                  {isSuperAdmin && <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Assigned Numbers</th>}
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Call Limit</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Last Login</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -583,20 +585,20 @@ export default function UsersPage() {
                   const assignedPhones = phones.filter((p) => p.assignedTo === u.id);
                   const presence = presenceOf(u);
                   return (
-                    <tr key={u.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                    <tr key={u.id} className="border-b border-gray-200/50 dark:border-gray-800/50 hover:bg-gray-100/30 dark:hover:bg-gray-800/30">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="relative w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center">
-                            <UserCircle className="w-5 h-5 text-gray-400" />
+                          <div className="relative w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                            <UserCircle className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                             {/* Live presence dot on the avatar */}
-                            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-gray-900 ${
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-gray-200 dark:border-gray-900 ${
                               presence.state === "on-call" ? "bg-amber-400"
                               : presence.state === "online" ? "bg-green-500"
                               : "bg-gray-600"
                             }`} />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-white">{u.name}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{u.name}</p>
                             <p className="text-xs text-gray-500 flex items-center gap-1">
                               <Mail className="w-3 h-3" />{u.email}
                             </p>
@@ -621,7 +623,7 @@ export default function UsersPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           {getRoleIcon(u.role)}
-                          <span className="text-sm text-gray-300 capitalize">{u.role}</span>
+                          <span className="text-sm text-gray-600 dark:text-gray-300 capitalize">{u.role}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3">{getStatusBadge(u.status)}</td>
@@ -630,24 +632,24 @@ export default function UsersPage() {
                           {assignedPhones.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {assignedPhones.map((p) => (
-                                <Badge key={p.id} className="bg-blue-500/10 text-blue-400 border-0 font-mono text-xs">
+                                <Badge key={p.id} className="bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-0 font-mono text-xs">
                                   {p.number}
                                 </Badge>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-xs text-gray-600">—</span>
+                            <span className="text-xs text-gray-600 dark:text-gray-400">—</span>
                           )}
                         </td>
                       )}
-                      <td className="px-4 py-3 text-sm text-gray-400">{u.dailyCallLimit}</td>
-                      <td className="px-4 py-3 text-sm text-gray-400">
+                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{u.dailyCallLimit}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                         {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : "Never"}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <Button variant="ghost" size="sm" onClick={() => handleEditClick(u)}
-                            className="text-gray-400 hover:text-white h-8 px-2">Edit</Button>
+                            className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white h-8 px-2">Edit</Button>
                           {u.role !== "superadmin" && (u.status === "active" ? (
                             <Button variant="ghost" size="sm" onClick={() => handleToggleStatus(u.id, u.status)}
                               className="text-amber-400 hover:text-amber-300 h-8 px-2">Suspend</Button>

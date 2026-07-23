@@ -8,6 +8,7 @@ import {
   createLead, createLeadsBatch, updateLead, deleteLead, searchLeads,
   assignListToCaller, getAssignedListsForCaller,
 } from "./queries/leads";
+import { findUserById } from "./queries/users";
 
 // By-id access must verify the record belongs to the requester's company —
 // otherwise any authenticated user could read/modify/delete another company's
@@ -110,7 +111,10 @@ export const leadRouter = createRouter({
       return leadInScope(ctx.user, input.id);
     }),
 
-  create: authedQuery
+  // Writing leads is a management action: authedQuery allowed even a read-only
+  // "viewer" to create/replace lead data. Creation and deletion live on the
+  // admin-only Leads page (alongside createList/deleteList, already adminQuery).
+  create: adminQuery
     .input(z.object({
       leadListId: z.number(),
       companyName: z.string().optional(),
@@ -140,7 +144,7 @@ export const leadRouter = createRouter({
       return { id, success: true };
     }),
 
-  createBatch: authedQuery
+  createBatch: adminQuery
     .input(z.object({
       leadListId: z.number(),
       leads: z.array(z.object({
@@ -175,7 +179,9 @@ export const leadRouter = createRouter({
       return { ids, count: ids.length, success: true };
     }),
 
-  update: authedQuery
+  // Callers legitimately update lead details/status from the dialer, so this
+  // one is callerQuery rather than adminQuery — but never a viewer.
+  update: callerQuery
     .input(z.object({
       id: z.number(),
       data: z.object({
@@ -205,7 +211,7 @@ export const leadRouter = createRouter({
       return { success: true };
     }),
 
-  delete: authedQuery
+  delete: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       await leadInScope(ctx.user, input.id);
@@ -232,6 +238,11 @@ export const leadRouter = createRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await listInScope(ctx.user, input.leadListId);
+      // The assignee must also be in the caller's company — otherwise an admin
+      // could hand their lead list to a user in another tenant.
+      const target = await findUserById(input.callerId);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      assertSameCompany(ctx.user, (target as { companyId?: number | null }).companyId);
       await assignListToCaller({
         ...input,
         assignedBy: ctx.user.id,

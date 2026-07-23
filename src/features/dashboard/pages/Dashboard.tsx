@@ -93,15 +93,15 @@ export default function Dashboard() {
 
   // Stats display mapping
   const stats = [
-    { label: rangePreset === "today" ? "Calls Today" : "Total Calls (Range)", value: isAdmin ? (adminStats?.totalCalls?.toLocaleString() ?? "0") : (callerStats?.total?.toLocaleString() ?? "0"), change: "+12%", icon: Phone, color: "text-blue-400", bg: "bg-blue-500/10" },
-    { label: "Connected", value: isAdmin ? (adminStats?.connectedCalls?.toLocaleString() ?? "0") : (callerStats?.connected?.toLocaleString() ?? "0"), change: "+8%", icon: PhoneCall, color: "text-green-400", bg: "bg-green-500/10" },
-    { label: "Total Leads", value: isAdmin ? (adminStats?.totalLeads?.toLocaleString() ?? "0") : "-", change: "+24%", icon: List, color: "text-purple-400", bg: "bg-purple-500/10" },
-    { label: "Active Campaigns", value: isAdmin ? (adminStats?.activeCampaigns?.toLocaleString() ?? "0") : "-", change: "+2", icon: Radio, color: "text-amber-400", bg: "bg-amber-500/10" },
-    { label: "Callers", value: isAdmin ? (adminStats?.totalCallers?.toLocaleString() ?? "0") : "-", change: "+3", icon: Users, color: "text-cyan-400", bg: "bg-cyan-500/10" },
-    { label: "Today's Calls", value: isAdmin ? (adminStats?.todayCalls?.toLocaleString() ?? "0") : (callerStats?.total?.toLocaleString() ?? "0"), change: "+18%", icon: TrendingUp, color: "text-rose-400", bg: "bg-rose-500/10" },
-    { label: "Messages Sent", value: isAdmin ? (adminStats?.smsSent?.toLocaleString() ?? "0") : "-", change: "", icon: PhoneOutgoing, color: "text-indigo-400", bg: "bg-indigo-500/10" },
-    { label: "Messages Received", value: isAdmin ? (adminStats?.smsReceived?.toLocaleString() ?? "0") : "-", change: "", icon: PhoneIncoming, color: "text-teal-400", bg: "bg-teal-500/10" },
-    { label: "Unread Messages", value: isAdmin ? (adminStats?.smsUnread?.toLocaleString() ?? "0") : "-", change: "", icon: MailOpen, color: "text-orange-400", bg: "bg-orange-500/10" },
+    { label: rangePreset === "today" ? "Calls Today" : "Total Calls (Range)", value: isAdmin ? (adminStats?.totalCalls?.toLocaleString() ?? "0") : (callerStats?.total?.toLocaleString() ?? "0"), change: "+12%", icon: Phone, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-100 dark:bg-blue-500/10" },
+    { label: "Connected", value: isAdmin ? (adminStats?.connectedCalls?.toLocaleString() ?? "0") : (callerStats?.connected?.toLocaleString() ?? "0"), change: "+8%", icon: PhoneCall, color: "text-green-600 dark:text-green-400", bg: "bg-green-100 dark:bg-green-500/10" },
+    { label: "Total Leads", value: isAdmin ? (adminStats?.totalLeads?.toLocaleString() ?? "0") : "-", change: "+24%", icon: List, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-100 dark:bg-purple-500/10" },
+    { label: "Active Campaigns", value: isAdmin ? (adminStats?.activeCampaigns?.toLocaleString() ?? "0") : "-", change: "+2", icon: Radio, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-100 dark:bg-amber-500/10" },
+    { label: "Callers", value: isAdmin ? (adminStats?.totalCallers?.toLocaleString() ?? "0") : "-", change: "+3", icon: Users, color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-100 dark:bg-cyan-500/10" },
+    { label: "Today's Calls", value: isAdmin ? (adminStats?.todayCalls?.toLocaleString() ?? "0") : (callerStats?.total?.toLocaleString() ?? "0"), change: "+18%", icon: TrendingUp, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-100 dark:bg-rose-500/10" },
+    { label: "Messages Sent", value: isAdmin ? (adminStats?.smsSent?.toLocaleString() ?? "0") : "-", change: "", icon: PhoneOutgoing, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-100 dark:bg-indigo-500/10" },
+    { label: "Messages Received", value: isAdmin ? (adminStats?.smsReceived?.toLocaleString() ?? "0") : "-", change: "", icon: PhoneIncoming, color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-100 dark:bg-teal-500/10" },
+    { label: "Unread Messages", value: isAdmin ? (adminStats?.smsUnread?.toLocaleString() ?? "0") : "-", change: "", icon: MailOpen, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-100 dark:bg-orange-500/10" },
   ];
 
   const quickActions = [
@@ -125,8 +125,8 @@ export default function Dashboard() {
       {/* Welcome */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Welcome back, {user?.name || "Admin"}</h1>
-          <p className="text-gray-400 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Welcome back, {user?.name || "Admin"}</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">
             {isAdmin
               ? "Here's what's happening with your dialer today"
               : "Ready to make some calls today?"}
@@ -134,7 +134,7 @@ export default function Dashboard() {
         </div>
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
           {isAdmin && (
-            <div className="flex items-center gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
+            <div className="flex items-center gap-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-1">
               <CalendarDays className="w-4 h-4 text-gray-500 ml-2 mr-1" />
               {([
                 { key: "today", label: "Today" },
@@ -146,7 +146,7 @@ export default function Dashboard() {
                   key={r.key}
                   onClick={() => setRangePreset(r.key)}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    rangePreset === r.key ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
+                    rangePreset === r.key ? "bg-blue-600 text-white" : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                   }`}
                 >
                   {r.label}
@@ -171,14 +171,14 @@ export default function Dashboard() {
             type="date"
             value={customFrom}
             onChange={(e) => setCustomFrom(e.target.value)}
-            className="bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-sm text-white"
+            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-white"
           />
           <span className="text-gray-500 text-sm">to</span>
           <input
             type="date"
             value={customTo}
             onChange={(e) => setCustomTo(e.target.value)}
-            className="bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-sm text-white"
+            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-white"
           />
         </div>
       )}
@@ -186,7 +186,7 @@ export default function Dashboard() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {stats.map((stat) => (
-          <Card key={stat.label} className="bg-gray-900 border-gray-800">
+          <Card key={stat.label} className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className={`w-10 h-10 rounded-lg ${stat.bg} flex items-center justify-center`}>
@@ -194,8 +194,8 @@ export default function Dashboard() {
                 </div>
                 <span className="text-xs font-medium text-green-400">{stat.change}</span>
               </div>
-              <p className="text-2xl font-bold text-white mt-3">{stat.value}</p>
-              <p className="text-sm text-gray-400">{stat.label}</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stat.value}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{stat.label}</p>
             </CardContent>
           </Card>
         ))}
@@ -203,9 +203,9 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Quick Actions */}
-        <Card className="bg-gray-900 border-gray-800 lg:col-span-2">
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-white text-lg">Quick Actions</CardTitle>
+            <CardTitle className="text-gray-900 dark:text-white text-lg">Quick Actions</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -214,14 +214,14 @@ export default function Dashboard() {
                   key={action.label}
                   variant="outline"
                   onClick={() => navigate(action.path)}
-                  className="h-auto p-4 bg-gray-800 border-gray-600 hover:bg-gray-700 hover:border-gray-500 justify-start text-left"
+                  className="h-auto p-4 bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-500 justify-start text-left"
                 >
-                  <div className={`w-10 h-10 rounded-lg bg-gray-700 flex items-center justify-center mr-3 flex-shrink-0`}>
+                  <div className={`w-10 h-10 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center mr-3 flex-shrink-0`}>
                     <action.icon className="w-5 h-5 text-blue-400" />
                   </div>
                   <div>
-                    <p className="text-white font-medium">{action.label}</p>
-                    <p className="text-gray-400 text-xs">{action.desc}</p>
+                    <p className="text-gray-900 dark:text-white font-medium">{action.label}</p>
+                    <p className="text-gray-500 dark:text-gray-400 text-xs">{action.desc}</p>
                   </div>
                   <ArrowRight className="w-4 h-4 text-gray-500 ml-auto" />
                 </Button>
@@ -231,14 +231,14 @@ export default function Dashboard() {
         </Card>
 
         {/* Recent Activity */}
-        <Card className="bg-gray-900 border-gray-800">
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
           <CardHeader>
-            <CardTitle className="text-white text-lg">Recent Activity</CardTitle>
+            <CardTitle className="text-gray-900 dark:text-white text-lg">Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               {recentActivity.map((activity, i) => (
-                <div key={i} className="flex items-start gap-3 pb-3 border-b border-gray-800 last:border-0">
+                <div key={i} className="flex items-start gap-3 pb-3 border-b border-gray-200 dark:border-gray-800 last:border-0">
                   <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
                     activity.status === "success" ? "bg-green-500" :
                     activity.status === "warning" ? "bg-amber-500" :
@@ -246,7 +246,7 @@ export default function Dashboard() {
                     "bg-blue-500"
                   }`} />
                   <div className="min-w-0">
-                    <p className="text-sm text-gray-300 truncate">{activity.message}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{activity.message}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{activity.time}</p>
                   </div>
                 </div>
@@ -258,10 +258,10 @@ export default function Dashboard() {
 
       {/* Recent Messages */}
       {isAdmin && (
-        <Card className="bg-gray-900 border-gray-800">
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-white text-lg">Recent Messages</CardTitle>
-            <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:text-white" onClick={() => navigate("/sms")}>
+            <CardTitle className="text-gray-900 dark:text-white text-lg">Recent Messages</CardTitle>
+            <Button variant="outline" size="sm" className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white" onClick={() => navigate("/sms")}>
               <MessageSquare className="w-4 h-4 mr-2" />
               Open Inbox
             </Button>
@@ -275,7 +275,7 @@ export default function Dashboard() {
                   <div
                     key={c.number}
                     onClick={() => navigate("/sms")}
-                    className="flex items-start gap-3 pb-3 border-b border-gray-800 last:border-0 cursor-pointer hover:bg-gray-800/50 -mx-2 px-2 rounded"
+                    className="flex items-start gap-3 pb-3 border-b border-gray-200 dark:border-gray-800 last:border-0 cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-800/50 -mx-2 px-2 rounded"
                   >
                     {c.lastDirection === "inbound" ? (
                       <PhoneIncoming className={`w-4 h-4 mt-0.5 flex-shrink-0 ${c.unreadCount > 0 ? "text-green-400" : "text-blue-400"}`} />
@@ -284,10 +284,10 @@ export default function Dashboard() {
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm text-gray-300 font-mono truncate">{c.number}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 font-mono truncate">{c.number}</p>
                         <p className="text-xs text-gray-500 flex-shrink-0">{new Date(c.lastAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
                       </div>
-                      <p className="text-xs text-gray-400 truncate">{c.lastMessage}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.lastMessage}</p>
                     </div>
                     {c.unreadCount > 0 && (
                       <span className="text-[10px] font-semibold text-green-400 bg-green-500/10 rounded-full px-2 py-0.5 flex-shrink-0">
@@ -303,10 +303,10 @@ export default function Dashboard() {
       )}
 
       {/* Performance Chart Placeholder */}
-      <Card className="bg-gray-900 border-gray-800">
+      <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-white text-lg">Call Performance</CardTitle>
-          <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:text-white" onClick={() => navigate("/reports")}>
+          <CardTitle className="text-gray-900 dark:text-white text-lg">Call Performance</CardTitle>
+          <Button variant="outline" size="sm" className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white" onClick={() => navigate("/reports")}>
             <BarChart3 className="w-4 h-4 mr-2" />
             View Reports
           </Button>

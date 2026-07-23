@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery, authedQuery, callerQuery, superAdminQuery } from "./middleware";
-import { listCompanyScope, assertSameCompany } from "./lib/authz";
+import { listCompanyScope, assertSameCompany, isSuperAdmin } from "./lib/authz";
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { sendSMS, toE164 } from "./lib/telnyx";
 import { listPhoneNumbers } from "./lib/phoneNumbers";
@@ -43,6 +43,21 @@ async function smsCampaignInScope(user: { role: string; companyId?: number | nul
   if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "SMS campaign not found." });
   assertSameCompany(user, (campaign as { companyId?: number | null }).companyId);
   return campaign;
+}
+
+// An SMS log may only be mutated by someone in the company that owns it —
+// otherwise any admin could rewrite another tenant's delivery records by id.
+// Logs are looked up through the company-scoped listing (there is no
+// findSMSLogById); superadmins keep their existing cross-company access.
+async function smsLogInScope(user: { role: string; companyId?: number | null }, logId: number) {
+  if (isSuperAdmin(user)) return;
+  if (!user.companyId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this resource." });
+  }
+  const logs = (await findAllSMSLogsByCompany(user.companyId)) as Array<{ id: number }>;
+  if (!logs.some((l) => l.id === logId)) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "SMS log not found." });
+  }
 }
 import {
   findSMSCampaignsByCompany, findSMSCampaignById, createSMSCampaign, updateSMSCampaign,
@@ -334,7 +349,8 @@ export const smsRouter = createRouter({
       twilioSid: z.string().optional(),
       errorMessage: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await smsLogInScope(ctx.user as any, input.logId);
       await updateSMSLogStatus(input.logId, input.status, input.twilioSid, input.errorMessage);
       return { success: true };
     }),

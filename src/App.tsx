@@ -4,7 +4,7 @@ import { WebRTCProvider } from "@/providers/WebRTCProvider";
 
 // ── Feature pages ────────────────────────────────────────────────────────────
 import { LoginPage } from "@/features/auth";
-import { AuthGuard, AdminGuard } from "@/features/auth";
+import { AuthGuard, AdminGuard, SuperAdminGuard } from "@/features/auth";
 import { DashboardPage } from "@/features/dashboard";
 import { UsersPage } from "@/features/users";
 import { LeadsPage } from "@/features/leads";
@@ -16,6 +16,7 @@ import { AIAgentsPage } from "@/features/ai-agents";
 import { SMSCampaignsPage } from "@/features/sms";
 import { CallLogsPage } from "@/features/call-logs";
 import { SettingsPage } from "@/features/settings";
+import { MailsenderApp } from "@/features/mailsender";
 import NotFound from "./pages/NotFound";
 
 function Layout({ children }: { children: React.ReactNode }) {
@@ -34,6 +35,14 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function SuperAdminLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <SuperAdminGuard>
+      <AppLayout>{children}</AppLayout>
+    </SuperAdminGuard>
+  );
+}
+
 export default function App() {
   return (
     <WebRTCProvider>
@@ -47,7 +56,10 @@ export default function App() {
         <Route path="/campaigns" element={<Layout><CampaignsPage /></Layout>} />
         <Route path="/dialer"    element={<Layout><DialerPage /></Layout>} />
         <Route path="/call-logs" element={<Layout><CallLogsPage /></Layout>} />
-        <Route path="/settings"  element={<Layout><SettingsPage /></Layout>} />
+        {/* Telnyx SIP trunk config — the server gates every one of this page's
+            procedures on superadmin, so match that here rather than rendering
+            a page that can only produce FORBIDDEN errors. */}
+        <Route path="/settings"  element={<SuperAdminLayout><SettingsPage /></SuperAdminLayout>} />
 
         <Route path="/auto-dialer" element={<Layout><AutoDialerPage /></Layout>} />
         {/* Callers can send/receive SMS and see their own campaigns too — the
@@ -59,6 +71,7 @@ export default function App() {
         <Route path="/monitoring"  element={<AdminLayout><MonitoringPage /></AdminLayout>} />
         <Route path="/reports"     element={<AdminLayout><ReportsPage /></AdminLayout>} />
         <Route path="/ai-agents"   element={<AdminLayout><AIAgentsPage /></AdminLayout>} />
+        <Route path="/mailsender"  element={<AdminLayout><MailsenderApp /></AdminLayout>} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>

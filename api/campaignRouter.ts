@@ -18,6 +18,22 @@ async function campaignInScope(user: { role: string; companyId?: number | null }
   return campaign;
 }
 
+// A campaignLead row carries no companyId, so ownership is resolved through
+// its parent campaign: the row must belong to a campaign inside the caller's
+// company scope (superadmin => every company).
+async function campaignLeadInScope(user: { role: string; companyId?: number | null }, campaignLeadId: number) {
+  const scope = listCompanyScope(user);
+  if (scope === null) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this resource." });
+  }
+  const campaigns = (await findCampaignsByCompany(scope)) as Array<{ id: number }>;
+  for (const campaign of campaigns) {
+    const leads = (await getCampaignLeads(campaign.id)) as Array<{ id: number }>;
+    if (leads.some((l) => l.id === campaignLeadId)) return campaign;
+  }
+  throw new TRPCError({ code: "NOT_FOUND", message: "Campaign lead not found." });
+}
+
 export const campaignRouter = createRouter({
   list: authedQuery.query(async ({ ctx }) => {
     const scope = listCompanyScope(ctx.user);
@@ -168,11 +184,14 @@ export const campaignRouter = createRouter({
     .input(z.object({
       campaignLeadId: z.number(),
       status: z.enum(["pending", "in_progress", "completed", "failed", "skipped", "callback"]),
+      // Accepted for backwards compatibility with older clients but ignored —
+      // the attributed caller is always the authenticated user.
       callerId: z.number().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await campaignLeadInScope(ctx.user, input.campaignLeadId);
       await updateCampaignLeadStatus(input.campaignLeadId, input.status, {
-        callerId: input.callerId,
+        callerId: ctx.user.id,
         completedAt: input.status === "completed" || input.status === "failed" || input.status === "skipped" ? new Date() : undefined,
       });
       return { success: true };

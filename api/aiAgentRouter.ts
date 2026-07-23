@@ -1,10 +1,40 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware";
-import { listCompanyScope } from "./lib/authz";
+import { listCompanyScope, assertSameCompany } from "./lib/authz";
 import {
   findAIAgentsByCompany, findAIAgentById, createAIAgent, updateAIAgent, deleteAIAgent,
   findConversationsByAgent, createAIConversation, updateConversationTranscript,
 } from "./queries/aiAgents";
+
+type ScopedUser = { role: string; companyId?: number | null };
+
+// Every by-id endpoint must verify the agent belongs to the requester's
+// company — without this, any authenticated user could read, reconfigure or
+// delete another company's AI agents (and read their call transcripts) just
+// by guessing ids.
+async function agentInScope(user: ScopedUser, id: number) {
+  const agent = await findAIAgentById(id);
+  if (!agent) throw new TRPCError({ code: "NOT_FOUND", message: "AI agent not found." });
+  assertSameCompany(user, (agent as { companyId?: number | null }).companyId);
+  return agent;
+}
+
+// Conversations carry no companyId of their own, so ownership is resolved
+// through their parent agent: the conversation must belong to one of the
+// agents visible in the caller's company scope (superadmin => all companies).
+async function conversationInScope(user: ScopedUser, conversationId: number) {
+  const scope = listCompanyScope(user);
+  if (scope === null) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this resource." });
+  }
+  const agents = (await findAIAgentsByCompany(scope)) as Array<{ id: number }>;
+  for (const agent of agents) {
+    const conversations = (await findConversationsByAgent(agent.id)) as Array<{ id: number }>;
+    if (conversations.some((c) => c.id === conversationId)) return agent;
+  }
+  throw new TRPCError({ code: "NOT_FOUND", message: "Conversation not found." });
+}
 
 export const aiAgentRouter = createRouter({
   // ─── AI Agent CRUD ───
@@ -16,8 +46,8 @@ export const aiAgentRouter = createRouter({
 
   getById: authedQuery
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return findAIAgentById(input.id);
+    .query(async ({ ctx, input }) => {
+      return agentInScope(ctx.user, input.id);
     }),
 
   create: adminQuery
@@ -90,14 +120,16 @@ export const aiAgentRouter = createRouter({
         isActive: z.boolean().optional(),
       }).partial(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await agentInScope(ctx.user, input.id);
       await updateAIAgent(input.id, input.data);
       return { success: true };
     }),
 
   delete: adminQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await agentInScope(ctx.user, input.id);
       await deleteAIAgent(input.id);
       return { success: true };
     }),
@@ -105,7 +137,8 @@ export const aiAgentRouter = createRouter({
   // ─── Conversations ───
   conversations: authedQuery
     .input(z.object({ agentId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await agentInScope(ctx.user, input.agentId);
       return findConversationsByAgent(input.agentId);
     }),
 
@@ -116,7 +149,9 @@ export const aiAgentRouter = createRouter({
       campaignId: z.number().optional(),
       callId: z.number().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      // A call may only be started on an agent owned by the caller's company.
+      await agentInScope(ctx.user, input.agentId);
       const id = await createAIConversation({
         ...input,
         transcript: [],
@@ -136,7 +171,10 @@ export const aiAgentRouter = createRouter({
       sentiment: z.enum(["positive", "neutral", "negative"]).optional(),
       outcome: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      // Conversation → agent → company: prevents rewriting another tenant's
+      // call transcripts by guessing a conversation id.
+      await conversationInScope(ctx.user, input.conversationId);
       await updateConversationTranscript(
         input.conversationId,
         input.transcript,
@@ -154,7 +192,9 @@ export const aiAgentRouter = createRouter({
       leadPhone: z.string(),
       leadName: z.string(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      // Same ownership rule as startCall — no simulating on someone else's agent.
+      await agentInScope(ctx.user, input.agentId);
       // Simulated AI call response
       const mockTranscript = [
         { speaker: "ai" as const, text: `Hello, this is an AI assistant calling. May I speak with ${input.leadName}?`, timestamp: new Date().toISOString() },

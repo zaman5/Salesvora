@@ -1,0 +1,876 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap');
+
+/* ==================== CSS VARIABLES ==================== */
+.mailsender-app {
+  --bg-primary: #070710;
+  --bg-secondary: #0d0d1a;
+  --bg-tertiary: #141428;
+  --bg-card: rgba(20, 20, 40, 0.7);
+  --accent-primary: #6366f1;
+  --accent-secondary: #8b5cf6;
+  --accent-cyan: #06b6d4;
+  --accent-pink: #ec4899;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  /* #475569 on --bg-primary was only 2.65:1 — lifted to the same slate-400
+     the secondary text uses, which clears AA on this background. */
+  --text-muted: #94a3b8;
+  --border-color: rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(99, 102, 241, 0.4);
+  /* --*-light are the 15% tints used as BACKGROUNDS; --*-text is the colour
+     that goes on top of them (and on the page background). On this dark
+     palette the saturated hue is already legible, so text == base here and
+     only the light theme below overrides it. */
+  --success: #10b981;
+  --success-light: rgba(16, 185, 129, 0.15);
+  --success-text: #10b981;
+  --warning: #f59e0b;
+  --warning-light: rgba(245, 158, 11, 0.15);
+  --warning-text: #f59e0b;
+  --danger: #ef4444;
+  --danger-light: rgba(239, 68, 68, 0.15);
+  --danger-text: #ef4444;
+  --info: #06b6d4;
+  --info-light: rgba(6, 182, 212, 0.15);
+  --info-text: #06b6d4;
+  --purple-text: #a78bfa;
+  --sidebar-width: 265px;
+  --header-height: 68px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.4);
+  --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.2);
+  /* Hover/scrollbar tints — white-based overlays read correctly on this
+     dark palette; the light palette below swaps these to black-based so
+     the same rgba() usages throughout this file stay correct in both themes. */
+  --overlay-1: rgba(255,255,255,0.02);
+  --overlay-2: rgba(255,255,255,0.025);
+  --overlay-3: rgba(255,255,255,0.03);
+  --overlay-4: rgba(255,255,255,0.04);
+  --overlay-5: rgba(255,255,255,0.05);
+  --overlay-7: rgba(255,255,255,0.07);
+  --overlay-8: rgba(255,255,255,0.08);
+  --overlay-10: rgba(255,255,255,0.1);
+  --overlay-12: rgba(255,255,255,0.12);
+  --overlay-15: rgba(255,255,255,0.15);
+  --overlay-20: rgba(255,255,255,0.2);
+  --sidebar-gradient-end: #0a0a18;
+  --header-bg: rgba(7, 7, 16, 0.85);
+}
+
+/* Light theme — activated by the app-wide theme toggle, which sets/removes
+   the `dark` class on <html> (see src/hooks/useTheme.tsx). Mail Sender used
+   to be dark-only, so every dark value above needs a light counterpart here. */
+html:not(.dark) .mailsender-app {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  /* #94a3b8 on white was 2.56:1 — slate-500 clears AA. */
+  --text-muted: #64748b;
+  /* Semantic hues stay as-is for backgrounds/dots/gradients; text switches to
+     the 700 shade, since the raw 500-ish hue on its own 15% tint ran
+     1.9-3.1:1 on white. */
+  --success-text: #047857;
+  --warning-text: #b45309;
+  --danger-text: #b91c1c;
+  --info-text: #0e7490;
+  --purple-text: #6d28d9;
+  --border-color: rgba(15, 23, 42, 0.1);
+  --border-hover: rgba(99, 102, 241, 0.5);
+  --shadow-sm: 0 2px 8px rgba(15,23,42,0.06);
+  --shadow-md: 0 8px 24px rgba(15,23,42,0.1);
+  --overlay-1: rgba(15,23,42,0.02);
+  --overlay-2: rgba(15,23,42,0.03);
+  --overlay-3: rgba(15,23,42,0.035);
+  --overlay-4: rgba(15,23,42,0.045);
+  --overlay-5: rgba(15,23,42,0.055);
+  --overlay-7: rgba(15,23,42,0.07);
+  --overlay-8: rgba(15,23,42,0.08);
+  --overlay-10: rgba(15,23,42,0.1);
+  --overlay-12: rgba(15,23,42,0.12);
+  --overlay-15: rgba(15,23,42,0.15);
+  --overlay-20: rgba(15,23,42,0.2);
+  --sidebar-gradient-end: #eef0f7;
+  --header-bg: rgba(255, 255, 255, 0.85);
+}
+
+/* ==================== RESET ==================== */
+.mailsender-app *, .mailsender-app *::before, .mailsender-app *::after { margin: 0; padding: 0; box-sizing: border-box; }
+.mailsender-app {
+  scroll-behavior: smooth;
+  /* Embedded inside Salesvora's own layout, not the whole viewport — fill
+     the content pane AppLayout hands us instead of assuming 100vh. */
+  height: 100%;
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+.mailsender-app h1, .mailsender-app h2, .mailsender-app h3, .mailsender-app h4, .mailsender-app h5, .mailsender-app h6 { font-family: 'Outfit', sans-serif; line-height: 1.2; }
+.mailsender-app a { color: inherit; text-decoration: none; }
+.mailsender-app button { font-family: 'Inter', sans-serif; cursor: pointer; }
+.mailsender-app input, .mailsender-app select, .mailsender-app textarea { font-family: 'Inter', sans-serif; }
+
+/* ==================== LAYOUT ==================== */
+.mailsender-app .app-container {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+/* ==================== SIDEBAR ==================== */
+.mailsender-app .sidebar {
+  width: var(--sidebar-width);
+  background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--sidebar-gradient-end) 100%);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex-shrink: 0;
+  z-index: 20;
+}
+.mailsender-app .sidebar::-webkit-scrollbar { width: 4px; }
+.mailsender-app .sidebar::-webkit-scrollbar-track { background: transparent; }
+.mailsender-app .sidebar::-webkit-scrollbar-thumb { background: var(--overlay-10); border-radius: 4px; }
+
+.mailsender-app .sidebar-logo {
+  padding: 1.5rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.mailsender-app .logo-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 1rem; color: white;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+  font-family: 'Outfit', sans-serif;
+}
+.mailsender-app .logo-text { font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 700; letter-spacing: -0.025em; }
+.mailsender-app .logo-text span { background: linear-gradient(135deg, #818cf8, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+.mailsender-app .sidebar-section { padding: 1.25rem 1rem 0.5rem; }
+.mailsender-app .sidebar-section-label { font-size: 0.65rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0.5rem; margin-bottom: 0.5rem; }
+
+.mailsender-app .nav-item {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: none; background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.875rem; font-weight: 400;
+  text-align: left; width: 100%;
+  transition: all 0.2s ease;
+  position: relative;
+}
+.mailsender-app .nav-item:hover { background: var(--overlay-5); color: var(--text-primary); }
+.mailsender-app .nav-item.active {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.mailsender-app .nav-item.active::before {
+  content: '';
+  position: absolute; left: 0; top: 20%; bottom: 20%;
+  width: 3px; border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--accent-primary), var(--accent-secondary));
+}
+.mailsender-app .nav-icon { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+.mailsender-app .nav-badge {
+  margin-left: auto;
+  background: var(--accent-primary);
+  color: white; font-size: 0.6rem; font-weight: 600;
+  padding: 0.1rem 0.4rem; border-radius: 99px; min-width: 18px; text-align: center;
+}
+.mailsender-app .nav-badge.green { background: var(--success); }
+.mailsender-app .nav-badge.orange { background: var(--warning); }
+
+.mailsender-app .sidebar-footer {
+  padding: 1rem;
+  border-top: 1px solid var(--border-color);
+  margin-top: auto;
+}
+.mailsender-app .warmup-widget {
+  background: rgba(16, 185, 129, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+.mailsender-app .warmup-widget-title { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+.mailsender-app .warmup-score { font-size: 1.5rem; font-weight: 700; color: var(--success-text); font-family: 'Outfit', sans-serif; margin-bottom: 0.5rem; }
+.mailsender-app .progress-bar { height: 5px; background: var(--overlay-10); border-radius: 3px; overflow: hidden; }
+.mailsender-app .progress-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+.mailsender-app .progress-fill.green { background: linear-gradient(90deg, #10b981, #34d399); }
+.mailsender-app .progress-fill.orange { background: linear-gradient(90deg, #f59e0b, #fcd34d); }
+.mailsender-app .progress-fill.red { background: linear-gradient(90deg, #ef4444, #f87171); }
+.mailsender-app .progress-fill.blue { background: linear-gradient(90deg, var(--accent-primary), #818cf8); }
+
+/* ==================== MAIN CONTENT ==================== */
+.mailsender-app .main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 10% 0%, rgba(99, 102, 241, 0.06) 0%, transparent 50%),
+              radial-gradient(ellipse at 90% 100%, rgba(139, 92, 246, 0.05) 0%, transparent 50%),
+              var(--bg-primary);
+}
+
+.mailsender-app .main-header {
+  height: var(--header-height);
+  border-bottom: 1px solid var(--border-color);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 2rem;
+  background: var(--header-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  flex-shrink: 0;
+  z-index: 10;
+}
+.mailsender-app .page-title { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.02em; }
+.mailsender-app .header-actions { display: flex; align-items: center; gap: 0.75rem; }
+
+.mailsender-app .header-icon-btn {
+  width: 38px; height: 38px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s;
+  color: var(--text-secondary); font-size: 1rem;
+  position: relative;
+}
+.mailsender-app .header-icon-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
+.mailsender-app .notif-dot {
+  position: absolute; top: 6px; right: 6px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--danger); border: 2px solid var(--bg-primary);
+}
+
+.mailsender-app .avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 0.85rem; cursor: pointer;
+  border: 2px solid var(--border-color);
+}
+
+.mailsender-app .page-content {
+  flex: 1;
+  overflow: hidden;          /* children handle their own scroll */
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.mailsender-app .page-content::-webkit-scrollbar { width: 6px; }
+.mailsender-app .page-content::-webkit-scrollbar-track { background: transparent; }
+.mailsender-app .page-content::-webkit-scrollbar-thumb { background: var(--overlay-10); border-radius: 4px; }
+
+/* Every page component fills the content area */
+.mailsender-app .page-block {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;   /* pages with lots of content scroll within the block */
+  overflow-x: hidden;
+}
+.mailsender-app .page-block::-webkit-scrollbar { width: 5px; }
+.mailsender-app .page-block::-webkit-scrollbar-track { background: transparent; }
+.mailsender-app .page-block::-webkit-scrollbar-thumb { background: var(--overlay-8); border-radius: 4px; }
+.mailsender-app .fade-up { animation: fadeUp 0.25s ease both; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+
+/* ==================== BUTTONS ==================== */
+.mailsender-app .btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem; font-weight: 500;
+  border: none; cursor: pointer;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+}
+.mailsender-app .btn-primary {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: white;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25);
+}
+.mailsender-app .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4); }
+.mailsender-app .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); }
+.mailsender-app .btn-secondary:hover { border-color: var(--border-hover); background: rgba(99,102,241,0.08); }
+.mailsender-app .btn-ghost { background: transparent; color: var(--text-secondary); }
+.mailsender-app .btn-ghost:hover { background: var(--overlay-5); color: var(--text-primary); }
+.mailsender-app .btn-danger { background: var(--danger-light); color: var(--danger-text); border: 1px solid rgba(239,68,68,0.2); }
+.mailsender-app .btn-success { background: var(--success-light); color: var(--success-text); border: 1px solid rgba(16,185,129,0.2); }
+.mailsender-app .btn-sm { padding: 0.4rem 0.85rem; font-size: 0.8rem; }
+.mailsender-app .btn-icon { padding: 0.5rem; }
+
+/* ==================== GLASS CARDS ==================== */
+.mailsender-app .card {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.mailsender-app .card:hover { border-color: var(--overlay-12); }
+.mailsender-app .card-p { padding: 1.5rem; }
+.mailsender-app .card-sm { border-radius: var(--radius-md); }
+
+/* ==================== BADGES / PILLS ==================== */
+.mailsender-app .badge {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 99px;
+  font-size: 0.75rem; font-weight: 500;
+}
+.mailsender-app .badge-success { background: var(--success-light); color: var(--success-text); }
+.mailsender-app .badge-warning { background: var(--warning-light); color: var(--warning-text); }
+.mailsender-app .badge-danger { background: var(--danger-light); color: var(--danger-text); }
+.mailsender-app .badge-info { background: var(--info-light); color: var(--info-text); }
+.mailsender-app .badge-purple { background: rgba(139, 92, 246, 0.15); color: var(--purple-text); }
+.mailsender-app .badge-default { background: var(--overlay-7); color: var(--text-secondary); }
+
+.mailsender-app .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.mailsender-app .dot-success { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.mailsender-app .dot-warning { background: var(--warning); box-shadow: 0 0 8px var(--warning); }
+.mailsender-app .dot-danger { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+.mailsender-app .dot-info { background: var(--info); }
+.mailsender-app .dot-muted { background: var(--text-muted); }
+
+/* ==================== STAT CARDS ==================== */
+.mailsender-app .stat-card {
+  padding: 1.5rem;
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+.mailsender-app .stat-label { font-size: 0.8rem; color: var(--text-secondary); font-weight: 500; }
+.mailsender-app .stat-value { font-family: 'Outfit', sans-serif; font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+.mailsender-app .stat-trend { font-size: 0.75rem; display: flex; align-items: center; gap: 0.25rem; margin-top: 0.25rem; }
+.mailsender-app .stat-trend.up { color: var(--success-text); }
+.mailsender-app .stat-trend.down { color: var(--danger-text); }
+.mailsender-app .stat-trend.neutral { color: var(--text-muted); }
+.mailsender-app .stat-icon {
+  width: 42px; height: 42px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; margin-bottom: 0.5rem;
+}
+
+/* ==================== TABLES ==================== */
+.mailsender-app .data-table { width: 100%; border-collapse: collapse; }
+.mailsender-app .data-table th {
+  text-align: left;
+  font-size: 0.7rem; font-weight: 600;
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--overlay-1);
+}
+.mailsender-app .data-table td {
+  padding: 0.875rem 1rem;
+  font-size: 0.875rem;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+}
+.mailsender-app .data-table tr:last-child td { border-bottom: none; }
+.mailsender-app .data-table tr:hover td { background: var(--overlay-2); }
+.mailsender-app .data-table .col-num { font-family: 'Outfit', sans-serif; font-weight: 600; color: var(--text-primary); }
+
+/* ==================== FORM ELEMENTS ==================== */
+.mailsender-app .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
+.mailsender-app .form-label { font-size: 0.8rem; font-weight: 500; color: var(--text-secondary); }
+.mailsender-app .form-input {
+  background: var(--overlay-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.875rem;
+  color: var(--text-primary); font-size: 0.875rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none; width: 100%;
+}
+.mailsender-app .form-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+.mailsender-app .form-input::placeholder { color: var(--text-muted); }
+.mailsender-app .form-select {
+  background: var(--overlay-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.875rem;
+  color: var(--text-primary); font-size: 0.875rem;
+  cursor: pointer; width: 100%;
+}
+.mailsender-app .form-select option { background: var(--bg-tertiary); }
+.mailsender-app .form-toggle {
+  display: flex; align-items: center; gap: 0.75rem;
+  cursor: pointer; user-select: none;
+}
+.mailsender-app .toggle-track {
+  width: 42px; height: 24px;
+  border-radius: 99px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  position: relative; transition: background 0.2s;
+}
+.mailsender-app .toggle-track.on { background: var(--accent-primary); border-color: var(--accent-primary); }
+.mailsender-app .toggle-thumb {
+  position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: white; transition: left 0.2s;
+}
+.mailsender-app .toggle-track.on .toggle-thumb { left: 21px; }
+
+/* ==================== CHARTS (CSS-only) ==================== */
+.mailsender-app .bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 100%; }
+.mailsender-app .bar-chart-bar { flex: 1; border-radius: 5px 5px 0 0; transition: height 1.2s cubic-bezier(.16,1,.3,1); position: relative; }
+.mailsender-app .bar-chart-bar:hover::after {
+  content: attr(data-value);
+  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+  background: var(--bg-card); border: 1px solid var(--border-color);
+  padding: 0.25rem 0.5rem; border-radius: 4px;
+  font-size: 0.7rem; color: var(--text-primary); white-space: nowrap;
+}
+
+.mailsender-app .donut-container { position: relative; width: 100%; padding-top: 100%; }
+.mailsender-app .donut-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+
+/* ==================== TIMELINE / STEPS ==================== */
+.mailsender-app .step-list { display: flex; flex-direction: column; gap: 0; }
+.mailsender-app .step-item { display: flex; gap: 1rem; position: relative; padding-bottom: 1.5rem; }
+.mailsender-app .step-item:last-child { padding-bottom: 0; }
+.mailsender-app .step-item:not(:last-child)::after {
+  content: '';
+  position: absolute; left: 15px; top: 32px; bottom: 0;
+  width: 2px; background: var(--border-color);
+}
+.mailsender-app .step-icon {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; flex-shrink: 0;
+  border: 2px solid var(--border-color);
+  background: var(--bg-tertiary);
+  z-index: 1; position: relative;
+}
+.mailsender-app .step-icon.sent { background: var(--success-light); border-color: var(--success); color: var(--success-text); }
+.mailsender-app .step-icon.opened { background: var(--info-light); border-color: var(--info); color: var(--info-text); }
+.mailsender-app .step-icon.replied { background: var(--warning-light); border-color: var(--warning); color: var(--warning-text); }
+.mailsender-app .step-icon.bounced { background: var(--danger-light); border-color: var(--danger); color: var(--danger-text); }
+
+/* ==================== INBOX ==================== */
+.mailsender-app .inbox-layout { display: flex; gap: 0; height: 100%; min-height: 0; }
+.mailsender-app .inbox-list { width: 340px; flex-shrink: 0; border-right: 1px solid var(--border-color); overflow-y: auto; }
+.mailsender-app .inbox-list::-webkit-scrollbar { width: 4px; }
+.mailsender-app .inbox-list::-webkit-scrollbar-thumb { background: var(--overlay-10); border-radius: 4px; }
+.mailsender-app .inbox-item {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer; transition: background 0.15s;
+}
+.mailsender-app .inbox-item:hover { background: var(--overlay-3); }
+.mailsender-app .inbox-item.active { background: rgba(99, 102, 241, 0.08); border-left: 3px solid var(--accent-primary); }
+.mailsender-app .inbox-detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.mailsender-app .inbox-thread { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+.mailsender-app .inbox-reply-bar { padding: 1rem; border-top: 1px solid var(--border-color); }
+
+.mailsender-app .msg-bubble {
+  max-width: 75%;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem; line-height: 1.6;
+}
+.mailsender-app .msg-bubble.inbound {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  align-self: flex-start;
+  border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 4px;
+}
+.mailsender-app .msg-bubble.outbound {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  align-self: flex-end;
+  border-radius: var(--radius-md) var(--radius-md) 4px var(--radius-md);
+}
+
+/* ==================== WARMUP METER ==================== */
+.mailsender-app .warmup-gauge {
+  position: relative;
+  width: 140px; height: 70px;
+  margin: 0 auto;
+}
+.mailsender-app .account-card {
+  padding: 1.25rem;
+  display: flex; flex-direction: column; gap: 1rem;
+}
+
+/* ==================== TABS ==================== */
+.mailsender-app .tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border-color); }
+.mailsender-app .tab-item {
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem; font-weight: 500;
+  color: var(--text-secondary);
+  border: none; background: transparent;
+  cursor: pointer; transition: color 0.2s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.mailsender-app .tab-item:hover { color: var(--text-primary); }
+.mailsender-app .tab-item.active { color: var(--text-primary); border-bottom-color: var(--accent-primary); }
+
+/* ==================== SEARCH ==================== */
+.mailsender-app .search-box {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: var(--overlay-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.875rem;
+}
+.mailsender-app .search-box input {
+  background: none; border: none;
+  color: var(--text-primary); font-size: 0.875rem; flex: 1;
+  font-family: 'Inter', sans-serif;
+}
+.mailsender-app .search-box input::placeholder { color: var(--text-muted); }
+
+/* ==================== MISC ==================== */
+.mailsender-app .text-gradient {
+  background: linear-gradient(135deg, #818cf8, #a78bfa);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.mailsender-app .divider { height: 1px; background: var(--border-color); margin: 1rem 0; }
+.mailsender-app .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.mailsender-app .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+.mailsender-app .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+.mailsender-app .flex-row { display: flex; align-items: center; gap: 1rem; }
+.mailsender-app .flex-col { display: flex; flex-direction: column; gap: 0.5rem; }
+.mailsender-app .flex-between { display: flex; align-items: center; justify-content: space-between; }
+.mailsender-app .ml-auto { margin-left: auto; }
+.mailsender-app .page-block { display: flex; flex-direction: column; gap: 1.5rem; }
+
+/* Scrollable inner panels */
+.mailsender-app .inner-scroll { overflow-y: auto; flex: 1; min-height: 0; }
+.mailsender-app .inner-scroll::-webkit-scrollbar { width: 4px; }
+.mailsender-app .inner-scroll::-webkit-scrollbar-thumb { background: var(--overlay-8); border-radius: 4px; }
+
+/* ==================== ANIMATIONS ==================== */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { 0% { background-position: -1000px 0; } 100% { background-position: 1000px 0; } }
+.mailsender-app .fade-up { animation: fadeUp 0.5s cubic-bezier(.16,1,.3,1) forwards; }
+.mailsender-app .pulse { animation: pulse 2s ease-in-out infinite; }
+.mailsender-app .spin { animation: spin 1s linear infinite; }
+
+
+/* Stagger delays */
+.mailsender-app .d-1 { animation-delay: 0.05s; opacity: 0; }
+.mailsender-app .d-2 { animation-delay: 0.1s; opacity: 0; }
+.mailsender-app .d-3 { animation-delay: 0.15s; opacity: 0; }
+.mailsender-app .d-4 { animation-delay: 0.2s; opacity: 0; }
+.mailsender-app .d-5 { animation-delay: 0.25s; opacity: 0; }
+.mailsender-app .d-6 { animation-delay: 0.3s; opacity: 0; }
+
+/* Color text utilities */
+.mailsender-app .text-success { color: var(--success-text); }
+.mailsender-app .text-danger { color: var(--danger-text); }
+.mailsender-app .text-warning { color: var(--warning-text); }
+.mailsender-app .text-info { color: var(--info-text); }
+.mailsender-app .text-muted { color: var(--text-muted); }
+.mailsender-app .text-secondary { color: var(--text-secondary); }
+.mailsender-app .fw-600 { font-weight: 600; }
+.mailsender-app .fw-700 { font-weight: 700; }
+.mailsender-app .fs-sm { font-size: 0.8rem; }
+.mailsender-app .fs-xs { font-size: 0.7rem; }
+
+/* ==================== HAMBURGER BUTTON ==================== */
+.mailsender-app .hamburger-btn {
+  display: none;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  width: 38px; height: 38px;
+  align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-primary);
+  font-size: 1.2rem; flex-shrink: 0;
+  transition: background 0.2s;
+}
+.mailsender-app .hamburger-btn:hover { background: rgba(99,102,241,0.12); }
+
+/* Sidebar overlay backdrop */
+.mailsender-app .sidebar-backdrop {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.65);
+  z-index: 19;
+}
+
+/* ==================== RESPONSIVE TABLE WRAPPER ==================== */
+.mailsender-app .table-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ==================== MODAL RESPONSIVE ==================== */
+.mailsender-app .modal-responsive {
+  width: 90vw !important;
+  max-width: 520px !important;
+}
+
+/* ==================== MOBILE BREAKPOINT (≤ 768px) ==================== */
+@media (max-width: 768px) {
+  /* Allow body scroll on mobile */
+  .mailsender-app { overflow: auto; }
+
+  .mailsender-app .app-container { overflow: auto; }
+
+  /* Show hamburger */
+  .mailsender-app .hamburger-btn { display: flex; }
+
+  /* Sidebar becomes fixed overlay */
+  .mailsender-app .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(.16,1,.3,1);
+    z-index: 20;
+    box-shadow: var(--shadow-md);
+  }
+  .mailsender-app .sidebar.open { transform: translateX(0); }
+  .mailsender-app .sidebar-backdrop.open { display: block; }
+
+  /* Main content takes full width */
+  .mailsender-app .main-content { width: 100%; min-width: 0; }
+
+  /* Header adjustments */
+  .mailsender-app .main-header { padding: 0 1rem; gap: 0.5rem; }
+  .mailsender-app .header-search-box { display: none; }
+  .mailsender-app .page-title { font-size: 0.95rem; }
+  .mailsender-app .header-actions { gap: 0.4rem; }
+
+  /* Page content padding */
+  .mailsender-app .page-content { padding: 1rem; }
+
+  /* Grids collapse to 1 or 2 columns */
+  .mailsender-app .grid-2 { grid-template-columns: 1fr; gap: 1rem; }
+  .mailsender-app .grid-3 { grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .mailsender-app .grid-4 { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+
+  /* Dashboard stat grid */
+  .mailsender-app [style*="gridTemplateColumns: 'repeat(4, 1fr)'"], .mailsender-app [style*="grid-template-columns: repeat(4, 1fr)"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* Chart + Activity stacks vertically */
+  .mailsender-app [style*="gridTemplateColumns: '1.6fr 1fr'"], .mailsender-app [style*="1.6fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Flex rows wrap on mobile */
+  .mailsender-app .flex-between { flex-wrap: wrap; gap: 0.75rem; }
+  .mailsender-app .flex-row { flex-wrap: wrap; }
+  .mailsender-app .header-actions .btn { display: none; } /* hide "+ New Campaign" btn in header on mobile */
+
+  /* Tables get horizontal scroll */
+  .mailsender-app .card .data-table, .mailsender-app .card table { display: block; overflow-x: auto; white-space: nowrap; }
+
+  /* Inbox layout stacks */
+  .mailsender-app .inbox-layout { flex-direction: column; }
+  .mailsender-app .inbox-list { width: 100%; border-right: none; border-bottom: 1px solid var(--border-color); max-height: 300px; }
+
+  /* Stat cards */
+  .mailsender-app .stat-value { font-size: 1.5rem; }
+
+  /* Button groups on mobile */
+  .mailsender-app .btn { white-space: nowrap; font-size: 0.8rem; padding: 0.5rem 0.9rem; }
+  .mailsender-app .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.75rem; }
+
+  /* Card padding */
+  .mailsender-app .card-p { padding: 1rem; }
+  .mailsender-app .stat-card { padding: 1rem; }
+
+  /* Modals full-screen on mobile.
+     The rule below is what actually does the work: every modal in Mail Sender
+     is a `position:fixed` + `alignItems:'center'` overlay wrapping a single
+     child, which React serialises to `position: fixed; align-items: center`,
+     so this catches all of them regardless of their pixel width. The
+     width-specific rules are narrow belt-and-braces for the widths that do
+     exist (520/620/700); the 860px and 480px variants were deleted because no
+     element in the codebase uses those widths, and the second selector here
+     (`[style*="alignItems:'center'"]`) was deleted because it matched JSX
+     source syntax rather than the serialised style attribute and so could
+     never match anything. */
+  .mailsender-app [style*="position: fixed"][style*="align-items: center"] > div {
+    max-width: 96vw !important;
+    width: 96vw !important;
+  }
+  .mailsender-app [style*="width: 520px"], .mailsender-app [style*="width:520px"] { width: 96vw !important; }
+  .mailsender-app [style*="width: 620px"], .mailsender-app [style*="width:620px"] { width: 96vw !important; }
+  .mailsender-app [style*="width: 700px"], .mailsender-app [style*="width:700px"] { width: 96vw !important; }
+
+  /* Header search box hidden, page-title visible */
+  .mailsender-app .search-box[style*="width: 220"] { display: none; }
+
+  /* Accounts page button row wraps */
+  .mailsender-app .accounts-header-btns { flex-direction: column; align-items: stretch; }
+
+  /* Account slide-over: 68% of a 380px viewport is a 258px column, which is
+     unusable — go full width on phones. */
+  .mailsender-app .account-slideover { width: 100% !important; max-width: 100% !important; }
+}
+
+/* ==================== SMALL MOBILE (≤ 480px) ==================== */
+@media (max-width: 480px) {
+  .mailsender-app .grid-3 { grid-template-columns: 1fr; }
+  .mailsender-app .grid-4 { grid-template-columns: 1fr 1fr; }
+  .mailsender-app .page-content { padding: 0.75rem; }
+  .mailsender-app .main-header { padding: 0 0.75rem; }
+  .mailsender-app .stat-value { font-size: 1.3rem; }
+  .mailsender-app .sidebar-footer { display: none; } /* hide warmup widget in sidebar on very small screens */
+}
+
+
+/* ==================== CAMPAIGN TAB SCROLL ==================== */
+.mailsender-app .campaign-tab-bar { overflow: hidden; }
+.mailsender-app .campaign-tab-scroll {
+  display: flex;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.mailsender-app .campaign-tab-scroll::-webkit-scrollbar { display: none; }
+
+/* ==================== STATS GRID (Analytics) ==================== */
+.mailsender-app .stats-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.85rem;
+}
+
+/* ==================== SCHEDULE 2-COL GRID ==================== */
+.mailsender-app .schedule-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+/* ==================== FLOATING ACTION BUTTON (mobile only) ==================== */
+.mailsender-app .fab {
+  display: none;
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: white;
+  font-size: 1.8rem;
+  font-weight: 300;
+  line-height: 1;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(99,102,241,0.5);
+  z-index: 80;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.mailsender-app .fab:hover { transform: scale(1.08); box-shadow: 0 8px 28px rgba(99,102,241,0.65); }
+
+/* ==================== INBOX MOBILE PANE ==================== */
+.mailsender-app .inbox-mobile-back {
+  display: none;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+.mailsender-app .inbox-sidebar--hidden  { display: none !important; }
+
+/* ==================== MOBILE OVERRIDES (≤ 768px) ==================== */
+@media (max-width: 768px) {
+  .mailsender-app .inbox-panel--hidden    { display: none !important; }
+  .mailsender-app .fab { display: flex; }
+  .mailsender-app .inbox-mobile-back { display: flex; }
+  .mailsender-app .inbox-detail-panel { width: 100% !important; }
+  .mailsender-app .inbox-list-panel   { width: 100% !important; border-right: none !important; }
+  .mailsender-app .tab-status-label   { display: none; }
+  .mailsender-app .stats-grid-4  { grid-template-columns: 1fr 1fr; }
+  .mailsender-app .schedule-grid-2 { grid-template-columns: 1fr; }
+  .mailsender-app .page-content { overflow-y: auto; }
+}
+
+/* ==================== SMALL MOBILE (≤ 480px) ==================== */
+@media (max-width: 480px) {
+  .mailsender-app .stats-grid-4 { gap: 0.5rem; }
+  .mailsender-app .tab-label-text { display: none; }
+  .mailsender-app .fab { bottom: 16px; right: 16px; width: 50px; height: 50px; font-size: 1.5rem; }
+}
+
+/* ==================== ANDROID DOWNLOAD BUTTON ==================== */
+.mailsender-app .download-apk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.8rem;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px dashed var(--accent-primary);
+  border-radius: 12px;
+  color: var(--accent-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  margin-top: 1rem;
+}
+
+.mailsender-app .download-apk-btn:hover {
+  background: var(--accent-primary);
+  color: #fff;
+  border-style: solid;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.mailsender-app .download-apk-btn:active {
+  transform: translateY(0);
+}
+
+/* ==================== FOCUS VISIBILITY ==================== */
+/* Mail Sender had exactly one :focus rule in the whole stylesheet while
+   several controls cleared the UA outline, leaving keyboard users with no
+   focus indicator at all. Declared last so it wins over the components that
+   still set `outline: none` in their base rule. */
+.mailsender-app :focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* ==================== RICH EDITOR CONTENT ==================== */
+.mailsender-app .rich-editor-content[contenteditable]:empty:before {
+  content: attr(placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+  display: block;
+}
+

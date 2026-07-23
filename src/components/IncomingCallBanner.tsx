@@ -113,7 +113,7 @@ export function IncomingCallBanner({ callerNumber, onAnswer, onDecline }: Props)
 
       {/* Card */}
       <div className="relative pointer-events-auto mt-16 w-80 animate-in slide-in-from-top-8 duration-300">
-        <div className="bg-gray-950 border border-green-500/50 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden">
+        <div className="bg-gray-50 dark:bg-gray-950 border border-green-500/50 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden">
           {/* Animated top bar */}
           <div className="h-1.5 bg-gradient-to-r from-green-500 via-emerald-400 to-green-500 animate-pulse" />
 
@@ -133,7 +133,7 @@ export function IncomingCallBanner({ callerNumber, onAnswer, onDecline }: Props)
                 <p className="text-[11px] font-bold text-green-400 uppercase tracking-widest mb-1">
                   Incoming Call
                 </p>
-                <p className="text-white font-bold text-xl tracking-wide">
+                <p className="text-gray-900 dark:text-white font-bold text-xl tracking-wide">
                   {callerNumber}
                 </p>
                 <p className="text-gray-500 text-sm mt-1">

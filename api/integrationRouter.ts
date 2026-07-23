@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, superAdminQuery, authedQuery } from "./middleware";
+import { createRouter, superAdminQuery, callerQuery } from "./middleware";
 import { requireCompanyScope, resolveCompanyScope } from "./lib/authz";
 import { nanoid } from "nanoid";
 import {
@@ -66,8 +66,10 @@ export const integrationRouter = createRouter({
       return togglePhoneNumber(companyId, input.id);
     }),
 
-  // Caller-safe: outbound caller IDs for the dialer (no secrets, any authed user).
-  getDialerConfig: authedQuery.query(async ({ ctx }) => {
+  // Outbound caller IDs + the user's OWN WebRTC credential for the dialer.
+  // Gated on callerQuery: this hands out a SIP password, so read-only viewers
+  // have no business calling it.
+  getDialerConfig: callerQuery.query(async ({ ctx }) => {
     const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? undefined);
     const cfg = companyId ? await getTelnyxConfig(companyId) : null;
     const isSuper = ctx.user.role === "superadmin";
@@ -98,15 +100,18 @@ export const integrationRouter = createRouter({
     }
     // Per-caller SIP credentials — each caller registers independently so
     // multiple callers can be on calls at the same time without kicking each
-    // other off. If the user has their own Telnyx SIP credential stored
-    // (domain !== "local"), use it; otherwise fall back to the global one.
+    // other off. A user only ever receives their OWN stored credential: the
+    // company-wide shared sipPassword is a secret that must not be handed to
+    // every authenticated account, so there is no fallback to it. The
+    // superadmin is the account that owns/configures that shared credential,
+    // so they alone still see it (unchanged behaviour for the operator).
     const userSip = (ctx.user as any)?.sipCredentials as
       { username?: string; password?: string; domain?: string } | undefined | null;
     const hasDedicatedSip =
       Boolean(userSip?.username && userSip?.password && userSip?.domain === "telnyx");
 
-    const webrtcLogin    = hasDedicatedSip ? (userSip!.username ?? "") : (cfg?.sipUsername ?? "");
-    const webrtcPassword = hasDedicatedSip ? (userSip!.password ?? "") : (cfg?.sipPassword ?? "");
+    const webrtcLogin    = hasDedicatedSip ? (userSip!.username ?? "") : (isSuper ? (cfg?.sipUsername ?? "") : "");
+    const webrtcPassword = hasDedicatedSip ? (userSip!.password ?? "") : (isSuper ? (cfg?.sipPassword ?? "") : "");
 
     return {
       enabled: Boolean(cfg?.enabled && cfg?.apiKey && cfg?.connectionId),

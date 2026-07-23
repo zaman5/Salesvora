@@ -35,8 +35,8 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 p-4">
-      <Card className="w-full max-w-md bg-gray-900 border-gray-800 text-white shadow-2xl relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-4">
+      <Card className="w-full max-w-md bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white shadow-2xl relative overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -44,10 +44,10 @@ export default function Login() {
           <div className="mx-auto w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20">
             <Phone className="w-6 h-6 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+          <CardTitle className="text-2xl font-bold tracking-tight bg-gradient-to-r from-gray-900 via-gray-700 to-gray-500 dark:from-white dark:via-gray-200 dark:to-gray-400 bg-clip-text text-transparent">
             Welcome to Salesvora
           </CardTitle>
-          <p className="text-sm text-gray-400 mt-1">Sign in to manage your campaigns and calls</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Sign in to manage your campaigns and calls</p>
         </CardHeader>
 
         <CardContent className="space-y-5 relative z-10">
@@ -60,7 +60,7 @@ export default function Login() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-gray-300 text-xs font-semibold">Email Address</Label>
+              <Label htmlFor="email" className="text-gray-600 dark:text-gray-300 text-xs font-semibold">Email Address</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <Input
@@ -69,7 +69,7 @@ export default function Login() {
                   placeholder="name@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="bg-gray-800 border-gray-700 focus:border-blue-600 text-white pl-10 h-10 text-sm"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 focus:border-blue-600 text-gray-900 dark:text-white pl-10 h-10 text-sm"
                   disabled={loading}
                   autoComplete="email"
                 />
@@ -77,7 +77,7 @@ export default function Login() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-gray-300 text-xs font-semibold">Password</Label>
+              <Label htmlFor="password" className="text-gray-600 dark:text-gray-300 text-xs font-semibold">Password</Label>
               <div className="relative">
                 <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <Input
@@ -86,7 +86,7 @@ export default function Login() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="bg-gray-800 border-gray-700 focus:border-blue-600 text-white pl-10 h-10 text-sm"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 focus:border-blue-600 text-gray-900 dark:text-white pl-10 h-10 text-sm"
                   disabled={loading}
                   autoComplete="current-password"
                 />

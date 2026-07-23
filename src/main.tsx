@@ -4,15 +4,18 @@ import { BrowserRouter } from 'react-router'
 import './index.css'
 import { TRPCProvider } from "@/providers/trpc"
 import { Toaster } from "@/components/ui/sonner"
+import { ThemeProvider } from "@/hooks/useTheme"
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <TRPCProvider>
-        <App />
-        <Toaster />
-      </TRPCProvider>
+      <ThemeProvider>
+        <TRPCProvider>
+          <App />
+          <Toaster />
+        </TRPCProvider>
+      </ThemeProvider>
     </BrowserRouter>
   </StrictMode>,
 )

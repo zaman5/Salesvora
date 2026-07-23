@@ -26,17 +26,17 @@ function dispIcon(category: string) {
 export function DispositionGrid({ dispositions, selected, onSelect }: DispositionGridProps) {
   return (
     <div className="space-y-2">
-      <p className="text-sm font-semibold text-gray-100">Select Call Result</p>
+      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Select Call Result</p>
       <div className="grid grid-cols-2 gap-2">
         {dispositions.map((disp) => (
           <Button
             key={disp.id}
             size="sm"
             onClick={() => onSelect(disp.id.toString())}
-            className={`justify-start text-white h-10 border transition-colors ${
+            className={`justify-start h-10 border transition-colors ${
               selected === disp.id.toString()
-                ? "bg-blue-600 hover:bg-blue-700 ring-2 ring-blue-400 border-blue-500"
-                : "bg-gray-800 hover:bg-gray-700 border-gray-700 hover:border-gray-500"
+                ? "bg-blue-600 hover:bg-blue-700 ring-2 ring-blue-400 border-blue-500 text-white"
+                : "bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-700 hover:border-gray-500 text-gray-900 dark:text-white"
             }`}
           >
             {dispIcon(disp.category)}

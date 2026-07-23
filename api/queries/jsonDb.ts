@@ -3,6 +3,11 @@ import * as os from "os";
 import * as path from "path";
 import { hasDatabase } from "./connection";
 import { env } from "../lib/env";
+import { hashSync } from "bcryptjs";
+
+// Kept local (not imported from ./users) to avoid a circular import — users.ts
+// imports readJsonDb from this module. Must match users.ts BCRYPT_COST.
+const BCRYPT_COST = 12;
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) {
@@ -173,6 +178,44 @@ const EMPTY = (): JsonDb => ({
   smsCampaigns: [], smsLogs: [], aiAgents: [],
 });
 
+/**
+ * Bootstrap superadmin for a brand-new db.json.
+ *
+ * Returns an EMPTY list unless BOTH ADMIN_EMAIL and ADMIN_PASSWORD are set.
+ * The credentials used to be hardcoded in source, which meant every fresh
+ * install came up with a publicly known superadmin login. Seeding nothing is
+ * strictly safer: an operator who wants a bootstrap account sets the two env
+ * vars (see .env.example). This function only ever runs when db.json does not
+ * exist yet, so it can never overwrite an already-seeded account.
+ */
+function seedAdminUsers(now: string): JsonDb["users"] {
+  if (!env.canSeedAdmin) {
+    console.warn(
+      "[db] ADMIN_EMAIL / ADMIN_PASSWORD are not set — creating db.json with NO admin account. " +
+        "Set both in .env and delete db.json to seed a bootstrap superadmin.",
+    );
+    return [];
+  }
+  return [
+    {
+      id: 1,
+      unionId: "admin-default",
+      name: "Admin",
+      email: env.adminEmail,
+      // Stored as a bcrypt digest — never plaintext.
+      password: hashSync(env.adminPassword, BCRYPT_COST),
+      // The seeded owner account is a superadmin (not just admin) so it can
+      // create/promote other admins — otherwise nobody could ever become a
+      // superadmin (creating one requires already being one).
+      role: "superadmin",
+      status: "active",
+      companyId: 1,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+}
+
 /** Bootstrap data written when db.json is created for the first time. */
 function defaultDb(): JsonDb {
   const now = new Date().toISOString();
@@ -181,23 +224,7 @@ function defaultDb(): JsonDb {
     companies: [
       { id: 1, name: "Salesvora", status: "active", settings: {}, createdAt: now, updatedAt: now },
     ],
-    users: [
-      {
-        id: 1,
-        unionId: "admin-default",
-        name: "Admin",
-        email: env.adminEmail,
-        password: env.adminPassword,
-        // The seeded owner account is a superadmin (not just admin) so it can
-        // create/promote other admins — otherwise nobody could ever become a
-        // superadmin (creating one requires already being one).
-        role: "superadmin",
-        status: "active",
-        companyId: 1,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
+    users: seedAdminUsers(now),
     callDispositions: [
       { id: 1,  name: "connected",      label: "Connected",                category: "connected",     isSystem: true, isActive: true, color: "#10B981", order: 1,  createdAt: now },
       { id: 2,  name: "no_answer",      label: "No Answer",                category: "no_answer",     isSystem: true, isActive: true, color: "#EF4444", order: 2,  createdAt: now },
@@ -241,7 +268,9 @@ function tryParse(content: string): JsonDb | null {
  */
 function migrateOwnerToSuperadmin(data: JsonDb): boolean {
   const owner = (data.users as Array<{ unionId?: string; email?: string; role?: string }>).find(
-    (u) => u.unionId === "admin-default" || u.email === env.adminEmail,
+    // env.adminEmail is "" when ADMIN_EMAIL is unset — never match on that, or
+    // any user with a blank email would be promoted to superadmin.
+    (u) => u.unionId === "admin-default" || (env.adminEmail !== "" && u.email === env.adminEmail),
   );
   if (owner && owner.role === "admin") {
     owner.role = "superadmin";
@@ -253,11 +282,16 @@ function migrateOwnerToSuperadmin(data: JsonDb): boolean {
 
 export function readJsonDb(): JsonDb {
   logStorageMode();
-  // File doesn't exist — first run. Write default data including the admin user.
+  // File doesn't exist — first run. Seeds a superadmin only if ADMIN_EMAIL and
+  // ADMIN_PASSWORD are set; an existing db.json is never re-seeded or altered.
   if (!fs.existsSync(DB_PATH)) {
     const fresh = defaultDb();
     writeJsonDb(fresh);
-    console.log(`[db] Created db.json with default admin: ${env.adminEmail}`);
+    console.log(
+      env.canSeedAdmin
+        ? `[db] Created db.json and seeded superadmin: ${env.adminEmail}`
+        : "[db] Created db.json with no seeded admin (ADMIN_EMAIL / ADMIN_PASSWORD unset).",
+    );
     return fresh;
   }
 

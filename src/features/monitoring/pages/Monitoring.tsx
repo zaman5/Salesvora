@@ -73,7 +73,10 @@ export default function MonitoringPage() {
   const [whisperMessage, setWhisperMessage]         = useState("");
   const [whisperSent, setWhisperSent]               = useState(false);
   const [reportCallerId, setReportCallerId]         = useState<string>("");
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Local calendar date — toISOString() would hand back the UTC day, which is
+  // still "yesterday" for anyone east of UTC after midnight.
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const [reportDate, setReportDate] = useState<string>(todayStr);
 
   // ── Queries ──
@@ -159,7 +162,7 @@ export default function MonitoringPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <AlertTriangle className="w-8 h-8 text-amber-400 mr-3" />
-        <p className="text-gray-400">Monitoring is only available for admin users.</p>
+        <p className="text-gray-500 dark:text-gray-400">Monitoring is only available for admin users.</p>
       </div>
     );
   }
@@ -172,18 +175,18 @@ export default function MonitoringPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Live Monitoring</h1>
-          <p className="text-gray-400 mt-1">Listen to active calls, barge in, or remove a caller</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Live Monitoring</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Listen to active calls, barge in, or remove a caller</p>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-gray-900 rounded-lg border border-gray-800">
+        <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800">
           <Radio className={`w-4 h-4 ${(activeCalls as any[]).length > 0 ? "text-green-400 animate-pulse" : "text-gray-600"}`} />
-          <span className="text-sm text-gray-300">{(activeCalls as any[]).length} active call{(activeCalls as any[]).length !== 1 ? "s" : ""}</span>
+          <span className="text-sm text-gray-600 dark:text-gray-300">{(activeCalls as any[]).length} active call{(activeCalls as any[]).length !== 1 ? "s" : ""}</span>
         </div>
       </div>
 
       {/* ── Active Monitoring Session banner ── */}
       {listeningCallId && activeListeningCall && (
-        <Card className="bg-gray-900 border-blue-600/40 shadow-lg shadow-blue-900/20">
+        <Card className="bg-white dark:bg-gray-900 border-blue-600/40 shadow-lg shadow-blue-900/20">
           <CardContent className="p-4">
             <div className="flex items-center gap-4 flex-wrap">
               {/* Animated headphones icon */}
@@ -199,14 +202,14 @@ export default function MonitoringPage() {
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-white font-semibold">
+                  <p className="text-gray-900 dark:text-white font-semibold">
                     {bargeCallId ? "Barged into call" : "Monitoring call"}
                   </p>
-                  <Badge className="bg-blue-500/20 text-blue-400 border-0 animate-pulse">● Live</Badge>
-                  {bargeCallId && <Badge className="bg-purple-500/20 text-purple-400 border-0">Barge Mode</Badge>}
+                  <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border-0 animate-pulse">● Live</Badge>
+                  {bargeCallId && <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400 border-0">Barge Mode</Badge>}
                 </div>
-                <p className="text-sm text-gray-400 mt-0.5">
-                  <span className="font-medium text-gray-200">{activeListeningCaller?.name || `Caller #${activeListeningCall.callerId}`}</span>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  <span className="font-medium text-gray-900 dark:text-gray-200">{activeListeningCaller?.name || `Caller #${activeListeningCall.callerId}`}</span>
                   <span className="text-gray-500"> → </span>
                   <span className="font-mono text-blue-300">{activeListeningCall.toNumber}</span>
                 </p>
@@ -235,7 +238,7 @@ export default function MonitoringPage() {
                 )}
                 <Button
                   size="sm"
-                  className="bg-gray-700 hover:bg-gray-600 text-white h-9"
+                  className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white h-9"
                   onClick={handleStopListening}
                 >
                   <EyeOff className="w-4 h-4 mr-1" /> Stop Listening
@@ -258,7 +261,7 @@ export default function MonitoringPage() {
 
       {/* ── Active Calls Grid ── */}
       <div>
-        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Active Calls</h2>
+        <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Active Calls</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {(activeCalls as any[]).map((call: any) => {
             const caller   = (users as any[]).find((u: any) => u.id === call.callerId) as any;
@@ -269,8 +272,8 @@ export default function MonitoringPage() {
             return (
               <Card
                 key={call.id}
-                className={`bg-gray-900 border-gray-800 transition-all ${
-                  isMonitoring ? "ring-2 ring-blue-500/60 border-blue-800/40" : "hover:border-gray-700"
+                className={`bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 transition-all ${
+                  isMonitoring ? "ring-2 ring-blue-500/60 border-blue-800/40" : "hover:border-gray-300 dark:hover:border-gray-700"
                 }`}
               >
                 <CardContent className="p-4 space-y-3">
@@ -288,23 +291,23 @@ export default function MonitoringPage() {
                         </span>
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-white">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
                           {caller?.name || `Caller #${call.callerId}`}
                         </p>
                         <p className="text-xs text-gray-500">{caller?.email || `ID: ${call.callerId}`}</p>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <Badge className="bg-green-500/20 text-green-400 border-0">● Live</Badge>
-                      <span className="text-xs font-mono text-gray-400">{liveDuration(call.startedAt)}</span>
+                      <Badge className="bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border-0">● Live</Badge>
+                      <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{liveDuration(call.startedAt)}</span>
                     </div>
                   </div>
 
                   {/* Call details */}
-                  <div className="bg-gray-800 rounded-xl p-3 space-y-1.5">
+                  <div className="bg-gray-100 dark:bg-gray-800 rounded-xl p-3 space-y-1.5">
                     <div className="flex items-center gap-2">
                       <Phone className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-                      <span className="text-sm font-mono text-white">{call.toNumber || "Unknown"}</span>
+                      <span className="text-sm font-mono text-gray-900 dark:text-white">{call.toNumber || "Unknown"}</span>
                     </div>
                     {call.fromNumber && (
                       <div className="flex items-center gap-2">
@@ -337,7 +340,7 @@ export default function MonitoringPage() {
                             <Mic className="w-3.5 h-3.5 mr-1" /> Barge In
                           </Button>
                         )}
-                        <Button size="sm" className="bg-gray-700 hover:bg-gray-600 text-white flex-1"
+                        <Button size="sm" className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white flex-1"
                           onClick={handleStopListening}>
                           <EyeOff className="w-3.5 h-3.5 mr-1" /> Stop
                         </Button>
@@ -401,12 +404,12 @@ export default function MonitoringPage() {
       </div>
 
       {/* ── Whisper Feature ── */}
-      <Card className="bg-gray-900 border-gray-800">
+      <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
         <CardHeader className="pb-3">
-          <CardTitle className="text-white text-base flex items-center gap-2">
+          <CardTitle className="text-gray-900 dark:text-white text-base flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-blue-400" /> Whisper to Caller
           </CardTitle>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Send a private text message to a caller — only they will see it, not the lead.
           </p>
         </CardHeader>
@@ -415,7 +418,7 @@ export default function MonitoringPage() {
             <select
               value={whisperCallerId}
               onChange={(e) => setWhisperCallerId(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+              className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white"
             >
               <option value="">Select caller…</option>
               {(activeCalls as any[]).map((c: any) => {
@@ -433,7 +436,7 @@ export default function MonitoringPage() {
               onChange={(e) => setWhisperMessage(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSendWhisper()}
               placeholder="Type message to caller…"
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600"
+              className="flex-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-600"
             />
             <Button
               className={`h-auto px-4 text-white ${whisperSent ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700"}`}
@@ -448,9 +451,9 @@ export default function MonitoringPage() {
       </Card>
 
       {/* ── Day Report ── */}
-      <Card className="bg-gray-900 border-gray-800">
+      <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
         <CardHeader>
-          <CardTitle className="text-white text-lg flex items-center gap-2">
+          <CardTitle className="text-gray-900 dark:text-white text-lg flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-blue-400" /> Caller Day Report
           </CardTitle>
         </CardHeader>
@@ -459,7 +462,7 @@ export default function MonitoringPage() {
             <select
               value={reportCallerId}
               onChange={(e) => setReportCallerId(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+              className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white"
             >
               <option value="">Select caller…</option>
               {callerUsers.map((u: any) => (
@@ -471,7 +474,7 @@ export default function MonitoringPage() {
               value={reportDate}
               max={todayStr}
               onChange={(e) => setReportDate(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+              className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white"
             />
             {reportLoading && <span className="text-sm text-gray-500 self-center animate-pulse">Loading…</span>}
           </div>
@@ -487,10 +490,10 @@ export default function MonitoringPage() {
                   { icon: Coffee, color: "text-amber-400", label: "Idle Time", value: fmtSecs(rpt.totalIdleTime) },
                   { icon: Activity, color: "text-rose-400", label: "Avg Duration", value: fmtSecs(rpt.avgCallDuration) },
                 ].map(({ icon: Icon, color, label, value }) => (
-                  <div key={label} className="bg-gray-800 rounded-xl p-3 text-center">
+                  <div key={label} className="bg-gray-100 dark:bg-gray-800 rounded-xl p-3 text-center">
                     <Icon className={`w-4 h-4 ${color} mx-auto mb-1`} />
-                    <p className="text-sm font-bold text-white">{value}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">{label}</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">{value}</p>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
                   </div>
                 ))}
               </div>
@@ -509,21 +512,21 @@ export default function MonitoringPage() {
                         </span>
                       </div>
                     ) : (
-                      <div key={i} className="bg-gray-800/50 border border-gray-800 rounded-xl p-3">
+                      <div key={i} className="bg-gray-100/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 rounded-xl p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-3">
                             <div className="w-7 h-7 rounded-full bg-blue-600/20 flex items-center justify-center text-xs font-bold text-blue-400">
                               #{item.callNumber}
                             </div>
                             <div>
-                              <p className="text-sm text-white font-medium">
+                              <p className="text-sm text-gray-900 dark:text-white font-medium">
                                 {item.toNumber}
                                 <Badge className={`ml-2 text-[10px] ${
                                   item.status === "completed" || item.status === "connected"
-                                    ? "bg-green-500/20 text-green-400 border-0"
-                                    : "bg-gray-600/30 text-gray-400 border-0"
+                                    ? "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border-0"
+                                    : "bg-gray-600/30 text-gray-500 dark:text-gray-400 border-0"
                                 }`}>{item.status}</Badge>
-                                <Badge className="ml-1 text-[10px] bg-purple-500/20 text-purple-400 border-0">{item.callType}</Badge>
+                                <Badge className="ml-1 text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400 border-0">{item.callType}</Badge>
                               </p>
                               <p className="text-[11px] text-gray-500">
                                 {fmtTime(item.startedAt)} → {fmtTime(item.endedAt)} · {fmtSecs(item.duration)}
@@ -539,7 +542,7 @@ export default function MonitoringPage() {
                           )}
                         </div>
                         {item.notes && (
-                          <p className="text-xs text-gray-400 italic mt-2 border-t border-gray-800 pt-2">{item.notes}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 italic mt-2 border-t border-gray-200 dark:border-gray-800 pt-2">{item.notes}</p>
                         )}
                       </div>
                     )

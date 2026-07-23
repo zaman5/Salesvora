@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery } from "./middleware";
-import { requireCompanyScope } from "./lib/authz";
+import { requireCompanyScope, assertSameCompany } from "./lib/authz";
+import { findCampaignById } from "./queries/campaigns";
 import {
   getDashboardStats, getCallVolumeByDate, getDispositionBreakdown,
   getAgentPerformance, getCampaignReport,
@@ -63,7 +65,12 @@ export const reportRouter = createRouter({
   // ─── Campaign Report ───
   campaignReport: adminQuery
     .input(z.object({ campaignId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      // The report is keyed by campaign id, not companyId — load the campaign
+      // and confirm it belongs to the caller's company before reporting on it.
+      const campaign = await findCampaignById(input.campaignId);
+      if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "Campaign not found." });
+      assertSameCompany(ctx.user, (campaign as { companyId?: number | null }).companyId);
       return getCampaignReport(input.campaignId);
     }),
 

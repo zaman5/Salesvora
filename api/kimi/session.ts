@@ -4,6 +4,23 @@ import type { SessionPayload } from "./types";
 
 const JWT_ALG = "HS256";
 
+/**
+ * Session token lifetime.
+ *
+ * Was "1 year", which meant a single stolen cookie stayed valid essentially
+ * forever and a revoked/deleted user kept a working token until then.
+ *
+ * TODO: there is currently NO refresh flow — `signSessionToken` is only called
+ * at password login (auth-router) and at the OAuth callback (kimi/auth), and
+ * nothing re-issues the cookie while the app is in use. Dropping straight to
+ * "7d" would therefore force every user (the owner included) back through the
+ * login screen every week with no silent renewal. 30 days is the compromise:
+ * a large reduction in the exposure window without a weekly interruption.
+ * Once a refresh endpoint exists (sliding renewal on authenticated requests,
+ * plus server-side revocation), shorten this to "7d" or less.
+ */
+const SESSION_TOKEN_TTL = "30d";
+
 export async function signSessionToken(
   payload: SessionPayload,
 ): Promise<string> {
@@ -11,7 +28,7 @@ export async function signSessionToken(
   return new jose.SignJWT(payload)
     .setProtectedHeader({ alg: JWT_ALG })
     .setIssuedAt()
-    .setExpirationTime("1 year")
+    .setExpirationTime(SESSION_TOKEN_TTL)
     .sign(secret);
 }
 

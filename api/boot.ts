@@ -1,6 +1,8 @@
-import { serve } from "@hono/node-server";
+import { getRequestListener } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
+import http from "http";
 import app from "./app";
+import mailApp from "./mailsender/app";
 import fs from "fs";
 import path from "path";
 
@@ -32,7 +34,19 @@ app.notFound((c) => {
 const port = parseInt(process.env.PORT || "3000");
 console.log(`[boot] starting on port ${port} (NODE_ENV=${process.env.NODE_ENV ?? "development"})`);
 
-const server = serve({ fetch: app.fetch, port }, () => {
+// Mail Sender's Express sub-app runs in this same process (Hostinger only
+// keeps one Node process alive) — requests to /api/mail/* go straight to
+// Express, everything else goes through Hono as before.
+const honoListener = getRequestListener(app.fetch);
+const server = http.createServer((req, res) => {
+  if (req.url?.startsWith("/api/mail")) {
+    mailApp(req, res);
+  } else {
+    honoListener(req, res);
+  }
+});
+
+server.listen(port, () => {
   console.log(`[boot] ready — http://localhost:${port}/`);
 });
 

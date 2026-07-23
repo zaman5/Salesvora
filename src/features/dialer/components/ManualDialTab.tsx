@@ -287,13 +287,13 @@ export function ManualDialTab() {
   };
 
   const getDispColor = (cat: string) => {
-    if (cat === "connected" || cat === "converted") return "bg-green-500/20 text-green-400 border-0";
-    if (cat === "no_answer") return "bg-amber-500/20 text-amber-400 border-0";
-    if (cat === "machine" || cat === "voicemail") return "bg-blue-500/20 text-blue-400 border-0";
-    if (cat === "wrong_number") return "bg-pink-500/20 text-pink-400 border-0";
-    if (cat === "not_interested" || cat === "dnc") return "bg-red-500/20 text-red-400 border-0";
-    if (cat === "callback") return "bg-purple-500/20 text-purple-400 border-0";
-    return "bg-gray-500/20 text-gray-400 border-0";
+    if (cat === "connected" || cat === "converted") return "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border-0";
+    if (cat === "no_answer") return "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 border-0";
+    if (cat === "machine" || cat === "voicemail") return "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border-0";
+    if (cat === "wrong_number") return "bg-pink-100 text-pink-700 dark:bg-pink-500/20 dark:text-pink-400 border-0";
+    if (cat === "not_interested" || cat === "dnc") return "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 border-0";
+    if (cat === "callback") return "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400 border-0";
+    return "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400 border-0";
   };
 
   const formatTimeAgo = (createdAt?: string) => {
@@ -342,17 +342,17 @@ export function ManualDialTab() {
           </div>
         )}
 
-        <Card className="bg-gray-900 border-gray-800 p-5">
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5">
 
           {/* IDLE */}
           {callStatus === "idle" && (
             <div className="space-y-3">
               {callerNumbers.length > 0 && (
                 <Select value={selectedNumber} onValueChange={setSelectedNumber}>
-                  <SelectTrigger className="h-8 w-full bg-gray-800 border-gray-600 text-white text-xs [&>span]:truncate">
+                  <SelectTrigger className="h-8 w-full bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-xs [&>span]:truncate">
                     <SelectValue placeholder="Caller ID" />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-600 text-white">
+                  <SelectContent className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">
                     {callerNumbers.map((n) => (
                       <SelectItem key={n.value} value={n.value} className="font-mono text-xs">{n.value}</SelectItem>
                     ))}
@@ -366,12 +366,12 @@ export function ManualDialTab() {
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   placeholder="Enter number"
-                  className="w-full h-14 bg-gray-950 border border-gray-700 rounded-xl text-white text-2xl text-center font-mono placeholder:text-gray-600 focus:outline-none focus:border-blue-500 pr-12"
+                  className="w-full h-14 bg-gray-50 dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white text-2xl text-center font-mono placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-500 pr-12"
                 />
                 {phoneNumber && (
                   <button
                     onClick={() => setPhoneNumber((p) => p.slice(0, -1))}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"
                   >
                     <ChevronLeft className="w-5 h-5" />
                   </button>
@@ -383,7 +383,7 @@ export function ManualDialTab() {
                   <button
                     key={d}
                     onClick={() => setPhoneNumber((p) => p + d)}
-                    className="h-14 rounded-xl bg-gray-800 text-white font-medium text-xl hover:bg-gray-700 active:bg-gray-600 active:scale-95 transition-all border border-gray-700/50"
+                    className="h-14 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium text-xl hover:bg-gray-200 dark:hover:bg-gray-700 active:bg-gray-300 dark:active:bg-gray-600 active:scale-95 transition-all border border-gray-300/50 dark:border-gray-700/50"
                   >
                     {d}
                   </button>
@@ -391,7 +391,7 @@ export function ManualDialTab() {
               </div>
 
               {callError && (
-                <div className="text-sm rounded-xl px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20">
+                <div className="text-sm rounded-xl px-3 py-2 bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 border border-red-500/20">
                   {callError}
                 </div>
               )}
@@ -409,14 +409,14 @@ export function ManualDialTab() {
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-medium transition-colors ${
                   autoRecord
                     ? "bg-red-500/10 border-red-500/30 text-red-400"
-                    : "bg-gray-800 border-gray-700 text-gray-500 hover:text-gray-300"
+                    : "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                 }`}
               >
                 <span className="flex items-center gap-1.5">
                   <Radio className="w-3.5 h-3.5" />
                   {autoRecord ? "Auto Record ON" : "Auto Record OFF"}
                 </span>
-                <div className={`relative w-8 h-4 rounded-full transition-colors ${autoRecord ? "bg-red-500" : "bg-gray-600"}`}>
+                <div className={`relative w-8 h-4 rounded-full transition-colors ${autoRecord ? "bg-red-500" : "bg-gray-300 dark:bg-gray-600"}`}>
                   <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${autoRecord ? "translate-x-4" : "translate-x-0.5"}`} />
                 </div>
               </button>
@@ -430,8 +430,8 @@ export function ManualDialTab() {
                 <Phone className="w-10 h-10 text-blue-400" />
               </div>
               <div>
-                <p className="text-xl font-semibold text-white">Dialing…</p>
-                <p className="text-gray-400 font-mono mt-1 text-lg">{phoneNumber}</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">Dialing…</p>
+                <p className="text-gray-500 dark:text-gray-400 font-mono mt-1 text-lg">{phoneNumber}</p>
                 {selectedNumber && <p className="text-xs text-gray-500 mt-1">From: {selectedNumber}</p>}
               </div>
               <Button className="bg-red-600 hover:bg-red-700 text-white rounded-xl" onClick={resetCall}>
@@ -449,9 +449,9 @@ export function ManualDialTab() {
                     ? <PhoneIncoming className="w-10 h-10 text-green-400" />
                     : <Phone className="w-10 h-10 text-green-400" />}
                 </div>
-                <p className="text-3xl font-bold text-white font-mono">{formatDur(duration)}</p>
-                <p className="text-sm text-gray-400 font-mono mt-1">{phoneNumber}</p>
-                <Badge className="bg-green-500/20 text-green-400 border-0 mt-2">
+                <p className="text-3xl font-bold text-gray-900 dark:text-white font-mono">{formatDur(duration)}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-mono mt-1">{phoneNumber}</p>
+                <Badge className="bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border-0 mt-2">
                   {rtc.callDirection === "inbound" ? "Incoming Call" : "Connected"}
                 </Badge>
               </div>
@@ -471,7 +471,7 @@ export function ManualDialTab() {
                 <button
                   onClick={() => setIsMuted(!isMuted)}
                   className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-colors ${
-                    isMuted ? "bg-red-600/20 border-red-500/30 text-red-400" : "bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700"
+                    isMuted ? "bg-red-600/20 border-red-500/30 text-red-400" : "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
                   }`}
                 >
                   {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
@@ -480,7 +480,7 @@ export function ManualDialTab() {
                 <button
                   onClick={handleAutoRecordToggle}
                   className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-colors ${
-                    autoRecord ? "bg-red-600/20 border-red-500/30 text-red-400" : "bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700"
+                    autoRecord ? "bg-red-600/20 border-red-500/30 text-red-400" : "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
                   }`}
                 >
                   <Radio className="w-5 h-5" />
@@ -492,7 +492,7 @@ export function ManualDialTab() {
                     className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-colors ${
                       recorder.isRecording
                         ? "bg-red-600/20 border-red-500/30 text-red-400 animate-pulse"
-                        : "bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700"
+                        : "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
                     }`}
                   >
                     {recorder.isRecording ? <Square className="w-5 h-5 fill-current" /> : <Disc className="w-5 h-5" />}
@@ -501,14 +501,14 @@ export function ManualDialTab() {
                 )}
               </div>
 
-              <div className="rounded-xl bg-gray-800 border border-gray-700 p-3">
+              <div className="rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 p-3">
                 <p className="text-xs text-center text-gray-500 mb-2">Keypad</p>
                 <div className="grid grid-cols-3 gap-1.5">
                   {dialPadDigits.map((d) => (
                     <button
                       key={d}
                       onClick={() => { if (webrtcOn) rtc.sendDTMF(d); }}
-                      className="h-10 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-600 active:scale-95 transition-all border border-gray-600"
+                      className="h-10 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 active:scale-95 transition-all border border-gray-300 dark:border-gray-600"
                     >{d}</button>
                   ))}
                 </div>
@@ -518,7 +518,7 @@ export function ManualDialTab() {
                 value={callNotes}
                 onChange={(e) => setCallNotes(e.target.value)}
                 placeholder="Call notes…"
-                className="bg-gray-800 border-gray-700 text-white min-h-[60px] text-sm rounded-xl"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white min-h-[60px] text-sm rounded-xl"
               />
 
               <Button
@@ -534,18 +534,18 @@ export function ManualDialTab() {
           {callStatus === "ended" && (
             <div className="space-y-4">
               <div className="text-center">
-                <div className="w-16 h-16 rounded-full bg-gray-700 flex items-center justify-center mx-auto mb-2">
-                  <Phone className="w-8 h-8 text-gray-400" />
+                <div className="w-16 h-16 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mx-auto mb-2">
+                  <Phone className="w-8 h-8 text-gray-500 dark:text-gray-400" />
                 </div>
-                <p className="text-xl font-semibold text-white">Call Ended</p>
-                <p className="text-3xl font-bold font-mono text-white mt-1">{formatDur(duration)}</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">Call Ended</p>
+                <p className="text-3xl font-bold font-mono text-gray-900 dark:text-white mt-1">{formatDur(duration)}</p>
                 {callError && <p className="text-xs text-red-400 mt-1">{callError}</p>}
               </div>
 
               {recorder.audioUrl && (
-                <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 space-y-2">
+                <div className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-gray-300 flex items-center gap-1.5">
+                    <p className="text-xs font-medium text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
                       <Disc className="w-3.5 h-3.5 text-red-400" /> Recording ({formatDur(recordingDuration)})
                     </p>
                     <a
@@ -564,21 +564,21 @@ export function ManualDialTab() {
                 value={callNotes}
                 onChange={(e) => setCallNotes(e.target.value)}
                 placeholder="Call notes…"
-                className="bg-gray-800 border-gray-700 text-white min-h-[60px] text-sm rounded-xl"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white min-h-[60px] text-sm rounded-xl"
               />
 
               <div>
-                <p className="text-sm font-semibold text-gray-100 mb-2">Call Result</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Call Result</p>
                 <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-0.5">
                   {dispsTyped.map((disp) => (
                     <Button
                       key={disp.id}
                       size="sm"
                       onClick={() => setSelectedDisposition(disp.id.toString())}
-                      className={`justify-start text-white text-xs ${
+                      className={`justify-start text-xs ${
                         selectedDisposition === disp.id.toString()
-                          ? "bg-blue-600 hover:bg-blue-700 ring-2 ring-blue-400"
-                          : "bg-gray-700 hover:bg-gray-600"
+                          ? "bg-blue-600 hover:bg-blue-700 ring-2 ring-blue-400 text-white"
+                          : "bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
                       }`}
                     >
                       {getDispIcon(disp.category)}
@@ -589,7 +589,7 @@ export function ManualDialTab() {
               </div>
 
               <div className="flex gap-2">
-                <Button className="flex-1 bg-gray-700 hover:bg-gray-600 text-white rounded-xl" onClick={resetCall}>
+                <Button className="flex-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl" onClick={resetCall}>
                   <SkipForward className="w-4 h-4 mr-1" /> Skip
                 </Button>
                 <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl" onClick={handleSaveCall}>
@@ -602,13 +602,13 @@ export function ManualDialTab() {
       </div>
 
       {/* ── RIGHT: Call Records ── */}
-      <Card className="bg-gray-900 border-gray-800 flex flex-col min-h-0">
-        <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between shrink-0">
-          <h3 className="font-semibold text-white">Recent Calls</h3>
+      <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 flex flex-col min-h-0">
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
+          <h3 className="font-semibold text-gray-900 dark:text-white">Recent Calls</h3>
           <span className="text-xs text-gray-500">{callLogs.length} calls</span>
         </div>
 
-        <div className="divide-y divide-gray-800/50 overflow-y-auto flex-1">
+        <div className="divide-y divide-gray-200/50 dark:divide-gray-800/50 overflow-y-auto flex-1">
           {callLogs.length === 0 && (
             <div className="text-center py-16 text-gray-500">
               <Phone className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -628,7 +628,7 @@ export function ManualDialTab() {
               <div key={log.id}>
                 {/* Main row */}
                 <div
-                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-800/40 cursor-pointer group transition-colors"
+                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-100/60 dark:hover:bg-gray-800/40 cursor-pointer group transition-colors"
                   onClick={() => {
                     if (hasDetails) {
                       setExpandedCallId(isExpanded ? null : log.id);
@@ -642,7 +642,7 @@ export function ManualDialTab() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white font-mono truncate">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white font-mono truncate">
                       {log.toNumber || "Unknown"}
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -651,20 +651,20 @@ export function ManualDialTab() {
                       </span>
                       {disp && (
                         <>
-                          <span className="text-gray-600 text-xs">·</span>
+                          <span className="text-gray-400 dark:text-gray-600 text-xs">·</span>
                           <Badge className={`${getDispColor(disp.category)} text-[10px] px-1.5 py-0`}>
                             {disp.label}
                           </Badge>
                         </>
                       )}
-                      <span className="text-gray-600 text-xs">·</span>
+                      <span className="text-gray-400 dark:text-gray-600 text-xs">·</span>
                       <span className="text-xs text-gray-500">{formatTimeAgo(log.createdAt)}</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
                     {log.duration ? (
-                      <span className="text-xs font-mono text-gray-400">{formatDur(log.duration)}</span>
+                      <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{formatDur(log.duration)}</span>
                     ) : null}
                     {/* Redial on hover (when no details to expand or when idle) */}
                     {!hasDetails && callStatus === "idle" && (
@@ -688,7 +688,7 @@ export function ManualDialTab() {
 
                 {/* Expanded detail panel */}
                 {isExpanded && (
-                  <div className="px-4 pb-4 pt-1 bg-gray-800/30 border-t border-gray-800/60 space-y-3">
+                  <div className="px-4 pb-4 pt-1 bg-gray-100/60 dark:bg-gray-800/30 border-t border-gray-200 dark:border-gray-800/60 space-y-3">
 
                     {/* Disposition badge */}
                     {disp && (
@@ -707,7 +707,7 @@ export function ManualDialTab() {
                         <FileText className="w-3.5 h-3.5 text-gray-500 mt-0.5 shrink-0" />
                         <div className="flex-1">
                           <p className="text-[11px] text-gray-500 mb-0.5">Notes</p>
-                          <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">{noteText}</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{noteText}</p>
                         </div>
                       </div>
                     )}

@@ -75,10 +75,48 @@
   }
 }
 
-/* Hide scrollbars globally across all browsers */
+/* Scrollbars: thin and unobtrusive, but VISIBLE. These used to be hidden
+   globally, which silently broke horizontal scrolling for mouse users on
+   every `overflow-x-auto` data table (a trackpad/shift-wheel was the only
+   way to reach the cut-off columns) and removed the only hint that a modal
+   body scrolls at all. Hiding is now opt-in via .scrollbar-none below. */
 * {
-  scrollbar-width: none; /* Firefox */
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(15, 23, 42, 0.25) transparent;
+}
+.dark * {
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
 *::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Edge */
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.25);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.4);
+}
+.dark *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+}
+.dark *::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Opt-in hiding, for decorative overflow where a bar would be noise (e.g. the
+   sidebar nav, which already asks for this class). Never use it on a
+   container whose content the user must be able to reach by scrolling. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

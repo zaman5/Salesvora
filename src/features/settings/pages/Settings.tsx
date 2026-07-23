@@ -271,22 +271,22 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
-        <p className="text-gray-400 mt-1">Manage your Telnyx SIP Trunk configuration</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">Manage your Telnyx SIP Trunk configuration</p>
       </div>
 
       {user && (
-        <div className="flex items-center gap-3 rounded-lg border border-gray-800 bg-gray-900 px-4 py-3">
+        <div className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3">
           <div className="w-9 h-9 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-300 font-semibold">
             {(user.name || user.email || "?").charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <p className="text-sm text-white truncate">
+            <p className="text-sm text-gray-900 dark:text-white truncate">
               Signed in as <span className="font-semibold">{user.name || user.email}</span>
             </p>
             <p className="text-xs text-gray-500 truncate">
               {user.email}{user.email ? " · " : ""}
-              <span className="uppercase tracking-wide text-gray-400">{user.role}</span>
+              <span className="uppercase tracking-wide text-gray-500 dark:text-gray-400">{user.role}</span>
             </p>
           </div>
           <span className="ml-auto flex items-center gap-1 text-xs text-green-400">
@@ -299,10 +299,10 @@ export default function SettingsPage() {
           Salesvora connection that's missing one (the #1 cause of
           "Destination temporarily unavailable" on outbound calls). */}
       {isAdmin && telnyxQuery.data?.hasApiKey && (
-        <Card className="bg-gray-900 border-amber-800/40">
+        <Card className="bg-white dark:bg-gray-900 border-amber-800/40">
           <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white">Calls failing with SIP 480 "Destination temporarily unavailable"?</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Calls failing with SIP 480 "Destination temporarily unavailable"?</p>
               <p className="text-xs text-gray-500 mt-0.5">
                 This usually means a connection has no Outbound Voice Profile. Click to check and fix all Salesvora connections automatically.
               </p>
@@ -330,10 +330,10 @@ export default function SettingsPage() {
           pointing at /api/webhooks/telnyx (client SMS) and routes each
           number's voice to the connection its agent registers on (calls). */}
       {isAdmin && telnyxQuery.data?.hasApiKey && (
-        <Card className="bg-gray-900 border-sky-800/40">
+        <Card className="bg-white dark:bg-gray-900 border-sky-800/40">
           <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white">Not receiving client texts or incoming calls?</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Not receiving client texts or incoming calls?</p>
               <p className="text-xs text-gray-500 mt-0.5">
                 Telnyx numbers don't route inbound traffic to Salesvora by default. Click to point every
                 number's SMS webhook and voice connection at this app automatically.
@@ -359,20 +359,20 @@ export default function SettingsPage() {
       )}
 
       {!isAdmin ? (
-        <Card className="bg-gray-900 border-gray-800">
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
           <CardContent className="py-10 text-center text-gray-500">
             <Radio className="w-8 h-8 mx-auto mb-2 opacity-40" />
             <p className="text-sm">Superadmin access required to manage SIP trunk settings.</p>
           </CardContent>
         </Card>
       ) : (
-        <Card className="bg-gray-900 border-gray-800">
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-white text-base flex items-center gap-2">
+            <CardTitle className="text-gray-900 dark:text-white text-base flex items-center gap-2">
               <Radio className="w-5 h-5 text-green-400" />
               Telnyx SIP Trunk
               {telnyxQuery.data?.enabled && telnyxQuery.data?.connectionId && (
-                <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
+                <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 border border-green-500/20">
                   Connected
                 </span>
               )}
@@ -414,23 +414,23 @@ export default function SettingsPage() {
                     {phoneNumbers.map((n) => (
                       <div
                         key={n.id}
-                        className="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-800 bg-gray-800/30"
+                        className="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-100/30 dark:bg-gray-800/30"
                       >
                         <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0">
                           <Phone className="w-4 h-4 text-blue-400" />
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <p className="text-white font-medium">{n.number}</p>
+                          <p className="text-gray-900 dark:text-white font-medium">{n.number}</p>
                           {n.label && (
-                            <p className="text-xs text-gray-400 mt-0.5">{n.label}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{n.label}</p>
                           )}
                         </div>
 
                         <span className={`text-xs px-2 py-0.5 rounded font-medium shrink-0 ${
                           n.status === "active"
-                            ? "bg-green-500/10 text-green-400"
-                            : "bg-gray-700 text-gray-500"
+                            ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
+                            : "bg-gray-200 dark:bg-gray-700 text-gray-500"
                         }`}>
                           {n.status === "active" ? "Active" : "Inactive"}
                         </span>
@@ -438,7 +438,7 @@ export default function SettingsPage() {
                         <Button
                           variant="ghost" size="sm"
                           onClick={() => openEdit(n.id)}
-                          className="h-8 w-8 p-0 text-gray-400 hover:text-white shrink-0"
+                          className="h-8 w-8 p-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white shrink-0"
                           title="Edit"
                         >
                           <Edit className="w-4 h-4" />
@@ -450,7 +450,7 @@ export default function SettingsPage() {
                             variant="ghost" size="sm"
                             onClick={() => removePhoneMutation.mutate({ id: n.id })}
                             disabled={removePhoneMutation.isPending}
-                            className="h-8 w-8 p-0 text-gray-400 hover:text-red-400 shrink-0"
+                            className="h-8 w-8 p-0 text-gray-500 dark:text-gray-400 hover:text-red-400 shrink-0"
                             title="Remove"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -465,14 +465,14 @@ export default function SettingsPage() {
 
             {/* ── Add / Edit form ── */}
             {showForm && (
-              <div className="space-y-5 border border-gray-700 rounded-xl p-5 bg-gray-800/20">
+              <div className="space-y-5 border border-gray-300 dark:border-gray-700 rounded-xl p-5 bg-gray-100/20 dark:bg-gray-800/20">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
                     {editingId === null ? "New Phone Credential"
                       : editingId === 0 ? "Edit Phone Credential"
                       : "Edit Phone Credential"}
                   </p>
-                  <Button variant="ghost" size="sm" onClick={closeForm} className="h-7 w-7 p-0 text-gray-400 hover:text-white">
+                  <Button variant="ghost" size="sm" onClick={closeForm} className="h-7 w-7 p-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
@@ -480,7 +480,7 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Phone number — read-only when editing a real entry */}
                   <div>
-                    <Label className="text-gray-300 text-sm">
+                    <Label className="text-gray-600 dark:text-gray-300 text-sm">
                       Phone Number <span className="text-red-400">*</span>
                     </Label>
                     <Input
@@ -488,26 +488,26 @@ export default function SettingsPage() {
                       onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
                       placeholder="+15550001111"
                       disabled={editingId !== null && editingId > 0}
-                      className="bg-gray-800 border-gray-700 text-white mt-1 disabled:opacity-60"
+                      className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 disabled:opacity-60"
                     />
                     <p className="text-xs text-gray-500 mt-1">E.164 format — e.g. +15550001111</p>
                   </div>
 
                   <div>
-                    <Label className="text-gray-300 text-sm">
+                    <Label className="text-gray-600 dark:text-gray-300 text-sm">
                       SIP Username <span className="text-red-400">*</span>
                     </Label>
                     <Input
                       value={form.sipUsername}
                       onChange={(e) => setForm({ ...form, sipUsername: e.target.value })}
                       placeholder="e.g. salesvora_agent"
-                      className="bg-gray-800 border-gray-700 text-white mt-1"
+                      className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"
                     />
                     <p className="text-xs text-gray-500 mt-1">From your Telnyx Credential Connection</p>
                   </div>
 
                   <div>
-                    <Label className="text-gray-300 text-sm">
+                    <Label className="text-gray-600 dark:text-gray-300 text-sm">
                       SIP Password <span className="text-red-400">*</span>
                     </Label>
                     <Input
@@ -519,7 +519,7 @@ export default function SettingsPage() {
                           ? "saved — type to change"
                           : "SIP credential password"
                       }
-                      className="bg-gray-800 border-gray-700 text-white mt-1"
+                      className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"
                     />
                     {editingId !== null && telnyxQuery.data?.hasSipPassword && (
                       <p className="text-xs text-green-400 mt-1">Password saved. Leave blank to keep it.</p>
@@ -527,7 +527,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <Label className="text-gray-300 text-sm">
+                    <Label className="text-gray-600 dark:text-gray-300 text-sm">
                       Telnyx API Key <span className="text-red-400">*</span>
                     </Label>
                     <Input
@@ -539,7 +539,7 @@ export default function SettingsPage() {
                           ? `Saved: ${telnyxQuery.data.apiKeyPreview}`
                           : "KEYxxxxxxxxxxxxxxxxxxxxxxxx"
                       }
-                      className="bg-gray-800 border-gray-700 text-white mt-1"
+                      className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"
                     />
                     {telnyxQuery.data?.hasApiKey && (
                       <p className="text-xs text-green-400 mt-1">API key saved. Leave blank to keep it.</p>
@@ -547,22 +547,22 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <Label className="text-gray-300 text-sm">SIP Host</Label>
+                    <Label className="text-gray-600 dark:text-gray-300 text-sm">SIP Host</Label>
                     <Input
                       value={form.sipHost}
                       onChange={(e) => setForm({ ...form, sipHost: e.target.value })}
                       placeholder="yourname.sip.telnyx.com"
-                      className="bg-gray-800 border-gray-700 text-white mt-1"
+                      className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"
                     />
                   </div>
 
                   <div>
-                    <Label className="text-gray-300 text-sm">Connection ID</Label>
+                    <Label className="text-gray-600 dark:text-gray-300 text-sm">Connection ID</Label>
                     <Input
                       value={form.connectionId}
                       onChange={(e) => setForm({ ...form, connectionId: e.target.value })}
                       placeholder="e.g. 2985974513046390685"
-                      className="bg-gray-800 border-gray-700 text-white mt-1"
+                      className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"
                     />
                     <p className="text-xs text-gray-500 mt-1">From Telnyx → Voice → SIP Connections</p>
                   </div>
@@ -570,7 +570,7 @@ export default function SettingsPage() {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label className="text-gray-300 text-sm">Enable for outbound calls</Label>
+                    <Label className="text-gray-600 dark:text-gray-300 text-sm">Enable for outbound calls</Label>
                     <p className="text-xs text-gray-500">Routes real calls through this SIP connection</p>
                   </div>
                   <Switch
@@ -581,10 +581,10 @@ export default function SettingsPage() {
 
                 {/* Test section — only shown when all required fields are filled */}
                 {isFormComplete && (
-                  <div className="border-t border-gray-700 pt-5 space-y-3">
+                  <div className="border-t border-gray-300 dark:border-gray-700 pt-5 space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-white">Test Phone Number</p>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">Test Phone Number</p>
                         <p className="text-xs text-gray-500 mt-0.5">
                           Verify outgoing and incoming connectivity before saving
                         </p>
@@ -617,8 +617,8 @@ export default function SettingsPage() {
                 {saveStatus.type !== "idle" && (
                   <div className={`text-sm rounded-md px-3 py-2 border ${
                     saveStatus.type === "ok"
-                      ? "bg-green-500/10 text-green-400 border-green-500/20"
-                      : "bg-red-500/10 text-red-400 border-red-500/20"
+                      ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 border-green-500/20"
+                      : "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 border-red-500/20"
                   }`}>
                     {saveStatus.message}
                   </div>
@@ -639,7 +639,7 @@ export default function SettingsPage() {
                       ? "Saving…"
                       : "Save Credential"}
                   </Button>
-                  <Button variant="outline" onClick={closeForm} className="border-gray-700 text-gray-300 hover:text-white">
+                  <Button variant="outline" onClick={closeForm} className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                     Cancel
                   </Button>
                 </div>
@@ -686,37 +686,37 @@ function InboundSmsWebhookCard({
   };
 
   return (
-    <Card className="bg-gray-900 border-gray-800">
+    <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
       <CardHeader>
-        <CardTitle className="text-white text-base flex items-center gap-2">
+        <CardTitle className="text-gray-900 dark:text-white text-base flex items-center gap-2">
           <PhoneIncoming className="w-5 h-5 text-blue-400" />
           Inbound SMS Webhook
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-xs text-gray-400 leading-relaxed">
+        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
           To receive replies from clients, add this URL as the webhook for your Telnyx Messaging Profile
           (Telnyx portal → Messaging → your profile → Inbound Settings → Webhook URL):
         </p>
         <div className="flex items-center gap-2">
-          <Input readOnly value={webhookUrl} className="bg-gray-800 border-gray-700 text-white font-mono text-xs" />
+          <Input readOnly value={webhookUrl} className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-mono text-xs" />
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="border-gray-700 text-gray-300 shrink-0"
+            className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 shrink-0"
             onClick={() => navigator.clipboard?.writeText(webhookUrl)}
           >
             Copy
           </Button>
         </div>
         <div>
-          <Label className="text-gray-300 text-xs">Telnyx Public Key (optional, verifies webhook signatures)</Label>
+          <Label className="text-gray-600 dark:text-gray-300 text-xs">Telnyx Public Key (optional, verifies webhook signatures)</Label>
           <Input
             value={publicKey}
             onChange={(e) => setPublicKey(e.target.value)}
             placeholder="From Telnyx portal → Account Settings → Public Key"
-            className="bg-gray-800 border-gray-700 text-white mt-1 text-xs font-mono"
+            className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-xs font-mono"
           />
           <p className="text-[11px] text-gray-500 mt-1">
             Without this, inbound messages are still accepted but not signature-verified. Set it once you've
@@ -742,7 +742,7 @@ function TestResultRow({
   const colorClass =
     state === "ok"    ? "bg-green-500/10 border-green-500/20 text-green-400" :
     state === "error" ? "bg-red-500/10 border-red-500/20 text-red-400" :
-                        "bg-gray-800 border-gray-700 text-gray-300";
+                        "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300";
   return (
     <div className={`flex items-start gap-3 px-3 py-2.5 rounded-md border text-sm ${colorClass}`}>
       <span className="mt-0.5">{icon}</span>

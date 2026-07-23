@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { downloadCSV, fmtDuration, type CsvLead } from "../components/campaignUtils";
 import { DispBadge } from "../components/DispBadge";
+import { StatusBadge } from "@/components/StatusBadge";
 
 // ── Campaign Detail View ────────────────────────────────────────────────────
 function CampaignDetail({
@@ -128,21 +129,21 @@ function CampaignDetail({
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-gray-400 hover:text-white text-sm font-medium transition-colors"
+          className="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm font-medium transition-colors"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Campaigns
         </button>
-        <div className="hidden sm:block w-px h-4 bg-gray-700" />
+        <div className="hidden sm:block w-px h-4 bg-gray-200 dark:bg-gray-700" />
         <div className="flex-1 min-w-0">
-          <h2 className="text-xl font-bold text-white truncate">{campaign.name}</h2>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white truncate">{campaign.name}</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             {leads.length} leads · {filtered.length} shown
             {dispositionFilter !== "all" && ` · filtered by "${dispositionFilter}"`}
           </p>
         </div>
         <Button
           size="sm"
-          className="bg-gray-700 hover:bg-gray-600 text-white shrink-0"
+          className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white shrink-0"
           onClick={() => downloadCSV(filtered, `${campaign.name.replace(/\s+/g, "_")}_leads.csv`)}
         >
           <Download className="w-4 h-4 mr-1.5" />
@@ -159,10 +160,10 @@ function CampaignDetail({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name, phone, company…"
-            className="pl-9 bg-gray-800 border-gray-600 text-gray-100 placeholder:text-gray-500 h-9"
+            className="pl-9 bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 h-9"
           />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 dark:hover:text-white">
               <X className="w-4 h-4" />
             </button>
           )}
@@ -172,7 +173,7 @@ function CampaignDetail({
         <select
           value={dispositionFilter}
           onChange={(e) => setDispositionFilter(e.target.value)}
-          className="bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white text-sm shrink-0"
+          className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-gray-900 dark:text-white text-sm shrink-0"
         >
           <option value="all">All results ({enriched.length})</option>
           {dispOptions.map((d) => {
@@ -186,9 +187,9 @@ function CampaignDetail({
       </div>
 
       {/* Lead table */}
-      <div className="rounded-xl border border-gray-800 overflow-hidden">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         {/* Table header */}
-        <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_auto] gap-0 bg-gray-800 border-b border-gray-700 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+        <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_auto] gap-0 bg-gray-100 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
           <div className="px-3 py-2.5 w-10 text-center">#</div>
           <div className="px-3 py-2.5">Name</div>
           <div className="px-3 py-2.5">Phone</div>
@@ -199,37 +200,37 @@ function CampaignDetail({
         </div>
 
         {filtered.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 bg-gray-900">
+          <div className="text-center py-12 text-gray-500 bg-white dark:bg-gray-900">
             <Search className="w-8 h-8 mx-auto mb-2 opacity-30" />
             <p className="text-sm">No leads match the current filter.</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-800 bg-gray-900 max-h-[60vh] overflow-y-auto">
+          <div className="divide-y divide-gray-200 dark:divide-gray-800 bg-white dark:bg-gray-900 max-h-[60vh] overflow-y-auto">
             {filtered.map((lead, idx) => {
               const isOpen = expandedId === lead.id;
               return (
                 <div key={lead.id}>
                   {/* Compact row */}
                   <div
-                    className={`grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_auto] gap-0 items-center hover:bg-gray-800/60 transition-colors ${isOpen ? "bg-gray-800/60" : ""}`}
+                    className={`grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_auto] gap-0 items-center hover:bg-gray-100/60 dark:hover:bg-gray-800/60 transition-colors ${isOpen ? "bg-gray-100/60 dark:bg-gray-800/60" : ""}`}
                   >
                     <div className="px-3 py-3 w-10 text-center text-xs text-gray-600">{idx + 1}</div>
                     <div className="px-3 py-3 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                         {[lead.firstName, lead.lastName].filter(Boolean).join(" ") || "—"}
                       </p>
                       {lead.email && <p className="text-xs text-gray-500 truncate">{lead.email}</p>}
                     </div>
                     <div className="px-3 py-3">
-                      <p className="text-sm font-mono text-blue-300 truncate">{lead.phone || "—"}</p>
+                      <p className="text-sm font-mono text-blue-700 dark:text-blue-300 truncate">{lead.phone || "—"}</p>
                     </div>
                     <div className="px-3 py-3">
-                      <p className="text-sm text-gray-300 truncate">{lead.companyName || "—"}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{lead.companyName || "—"}</p>
                     </div>
                     <div className="px-3 py-3">
                       <DispBadge label={lead._lastCallDisp} />
                     </div>
-                    <div className="px-3 py-3 text-sm text-gray-400 font-mono">
+                    <div className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400 font-mono">
                       {fmtDuration(lead._lastCallDuration)}
                     </div>
                     <div className="px-3 py-3 w-24 flex items-center justify-center gap-1">
@@ -245,23 +246,23 @@ function CampaignDetail({
                       <button
                         title={isOpen ? "Collapse" : "View all fields"}
                         onClick={() => setExpandedId(isOpen ? null : lead.id)}
-                        className="w-7 h-7 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors"
+                        className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center justify-center transition-colors"
                       >
                         {isOpen
-                          ? <ChevronDown className="w-3.5 h-3.5 text-white" />
-                          : <ChevronRight className="w-3.5 h-3.5 text-white" />}
+                          ? <ChevronDown className="w-3.5 h-3.5 text-gray-900 dark:text-white" />
+                          : <ChevronRight className="w-3.5 h-3.5 text-gray-900 dark:text-white" />}
                       </button>
                     </div>
                   </div>
 
                   {/* Expanded row */}
                   {isOpen && (
-                    <div className="bg-gray-800/50 border-t border-gray-700 px-4 py-4 space-y-4">
+                    <div className="bg-gray-100/50 dark:bg-gray-800/50 border-t border-gray-300 dark:border-gray-700 px-4 py-4 space-y-4">
                       {/* Call recording */}
                       {lead._recordingUrl && (
-                        <div className="rounded-xl bg-gray-900 border border-gray-700 p-4 space-y-2">
+                        <div className="rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 p-4 space-y-2">
                           <div className="flex items-center justify-between">
-                            <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                            <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
                               Call Recording · {fmtDuration(lead._lastCallDuration)}
                             </p>
                             <a
@@ -274,8 +275,8 @@ function CampaignDetail({
                           </div>
                           <audio controls src={lead._recordingUrl} className="w-full h-9" />
                           {lead._lastCall?.notes && (
-                            <p className="text-xs text-gray-400 bg-gray-800 rounded-lg px-3 py-2">
-                              <span className="font-medium text-gray-300">Notes: </span>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2">
+                              <span className="font-medium text-gray-600 dark:text-gray-300">Notes: </span>
                               {lead._lastCall.notes}
                             </p>
                           )}
@@ -284,7 +285,7 @@ function CampaignDetail({
 
                       {/* All fields grid */}
                       <div>
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
                           All Fields
                         </p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -292,9 +293,9 @@ function CampaignDetail({
                             const val = (lead as Record<string, unknown>)[key];
                             if (!val) return null;
                             return (
-                              <div key={key} className="bg-gray-900 rounded-lg px-3 py-2">
+                              <div key={key} className="bg-white dark:bg-gray-900 rounded-lg px-3 py-2">
                                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</p>
-                                <p className="text-sm text-gray-100 mt-0.5 break-words">{String(val)}</p>
+                                <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5 break-words">{String(val)}</p>
                               </div>
                             );
                           })}
@@ -303,29 +304,29 @@ function CampaignDetail({
                             Object.entries(lead.customFields as Record<string, unknown>)
                               .filter(([k]) => !k.startsWith("_"))
                               .map(([k, v]) => (
-                                <div key={k} className="bg-gray-900 rounded-lg px-3 py-2">
+                                <div key={k} className="bg-white dark:bg-gray-900 rounded-lg px-3 py-2">
                                   <p className="text-[10px] text-gray-500 uppercase tracking-wider">{k}</p>
-                                  <p className="text-sm text-gray-100 mt-0.5 break-words">{String(v)}</p>
+                                  <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5 break-words">{String(v)}</p>
                                 </div>
                               ))}
                           {/* Last call info */}
                           {lead._lastCall && (
                             <>
-                              <div className="bg-gray-900 rounded-lg px-3 py-2">
+                              <div className="bg-white dark:bg-gray-900 rounded-lg px-3 py-2">
                                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">Last Called</p>
-                                <p className="text-sm text-gray-100 mt-0.5">
+                                <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
                                   {lead._lastCall.startedAt
                                     ? new Date(lead._lastCall.startedAt).toLocaleString()
                                     : "—"}
                                 </p>
                               </div>
-                              <div className="bg-gray-900 rounded-lg px-3 py-2">
+                              <div className="bg-white dark:bg-gray-900 rounded-lg px-3 py-2">
                                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">Called From</p>
-                                <p className="text-sm font-mono text-gray-100 mt-0.5">{lead._lastCall.fromNumber || "—"}</p>
+                                <p className="text-sm font-mono text-gray-900 dark:text-gray-100 mt-0.5">{lead._lastCall.fromNumber || "—"}</p>
                               </div>
-                              <div className="bg-gray-900 rounded-lg px-3 py-2">
+                              <div className="bg-white dark:bg-gray-900 rounded-lg px-3 py-2">
                                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">Call Status</p>
-                                <p className="text-sm text-gray-100 mt-0.5 capitalize">{lead._lastCall.status || "—"}</p>
+                                <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5 capitalize">{lead._lastCall.status || "—"}</p>
                               </div>
                             </>
                           )}
@@ -401,16 +402,8 @@ export default function CampaignsPage() {
     catch (err) { console.error("Failed to delete campaign:", err); }
   };
 
-  const getStatusBadge = (status: string) => {
-    const colors: Record<string, string> = {
-      running: "bg-green-500/20 text-green-400",
-      paused: "bg-amber-500/20 text-amber-400",
-      completed: "bg-blue-500/20 text-blue-400",
-      draft: "bg-gray-500/20 text-gray-400",
-      scheduled: "bg-purple-500/20 text-purple-400",
-    };
-    return <Badge className={`${colors[status] || "bg-gray-500/20"} border-0 capitalize`}>{status}</Badge>;
-  };
+  // Palette lives in the shared StatusBadge so light/dark stay in one place.
+  const getStatusBadge = (status: string) => <StatusBadge status={status} />;
 
   const getTypeBadge = (type: string) => {
     const icons: Record<string, React.ReactNode> = {
@@ -418,7 +411,7 @@ export default function CampaignsPage() {
       ai: <BarChart3 className="w-3 h-3" />, sms: <Phone className="w-3 h-3" />,
     };
     return (
-      <span className="flex items-center gap-1 text-xs text-gray-400 capitalize">
+      <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 capitalize">
         {icons[type]} {type}
       </span>
     );
@@ -438,8 +431,8 @@ export default function CampaignsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Campaigns</h1>
-          <p className="text-gray-400 mt-1">Manage calling and messaging campaigns</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Campaigns</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Manage calling and messaging campaigns</p>
         </div>
         <Dialog open={showCreate} onOpenChange={setShowCreate}>
           <DialogTrigger asChild>
@@ -447,22 +440,22 @@ export default function CampaignsPage() {
               <Plus className="w-4 h-4 mr-2" /> New Campaign
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg">
+          <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white max-w-lg">
             <DialogHeader>
               <DialogTitle>Create Campaign</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>
-                <Label className="text-gray-300">Campaign Name</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Campaign Name</Label>
                 <Input value={newName} onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Enter campaign name" className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  placeholder="Enter campaign name" className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-gray-300">Type</Label>
+                  <Label className="text-gray-600 dark:text-gray-300">Type</Label>
                   <Select value={newType} onValueChange={(v: "auto" | "manual" | "ai" | "sms") => setNewType(v)}>
-                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-gray-800 border-gray-700">
+                    <SelectTrigger className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700">
                       <SelectItem value="auto">Auto Dialer</SelectItem>
                       <SelectItem value="manual">Manual</SelectItem>
                       <SelectItem value="ai">AI Agent</SelectItem>
@@ -471,12 +464,12 @@ export default function CampaignsPage() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-gray-300">Lead List</Label>
+                  <Label className="text-gray-600 dark:text-gray-300">Lead List</Label>
                   <Select value={selectedListId} onValueChange={setSelectedListId}>
-                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
+                    <SelectTrigger className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1">
                       <SelectValue placeholder="Select list" />
                     </SelectTrigger>
-                    <SelectContent className="bg-gray-800 border-gray-700">
+                    <SelectContent className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700">
                       {(leadLists as { id: number; name: string }[]).map((l) => (
                         <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>
                       ))}
@@ -486,14 +479,14 @@ export default function CampaignsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-gray-300">Daily Start Time</Label>
+                  <Label className="text-gray-600 dark:text-gray-300">Daily Start Time</Label>
                   <Input type="time" value={dailyStart} onChange={(e) => setDailyStart(e.target.value)}
-                    className="bg-gray-800 border-gray-700 text-white mt-1" />
+                    className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
                 </div>
                 <div>
-                  <Label className="text-gray-300">Daily End Time</Label>
+                  <Label className="text-gray-600 dark:text-gray-300">Daily End Time</Label>
                   <Input type="time" value={dailyEnd} onChange={(e) => setDailyEnd(e.target.value)}
-                    className="bg-gray-800 border-gray-700 text-white mt-1" />
+                    className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
                 </div>
               </div>
               <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={handleCreateCampaign}>
@@ -513,7 +506,7 @@ export default function CampaignsPage() {
           const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
 
           return (
-            <Card key={campaign.id} className="bg-gray-900 border-gray-800">
+            <Card key={campaign.id} className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
@@ -522,7 +515,7 @@ export default function CampaignsPage() {
                     </div>
                     <div>
                       <button
-                        className="text-base font-semibold text-white hover:text-blue-400 transition-colors text-left"
+                        className="text-base font-semibold text-gray-900 dark:text-white hover:text-blue-400 transition-colors text-left"
                         onClick={() => setSelectedCampaign(campaign)}
                       >
                         {campaign.name}
@@ -538,7 +531,7 @@ export default function CampaignsPage() {
                   {getStatusBadge(campaign.status ?? "")}
                 </div>
 
-                <div className="flex items-center gap-4 text-sm text-gray-400 mb-3">
+                <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 mb-3">
                   <span className="flex items-center gap-1"><Users className="w-4 h-4" />{callersCount} callers</span>
                   <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{campaign.dailyStartTime ?? "09:00"} - {campaign.dailyEndTime ?? "18:00"}</span>
                   {campaign.startDate && (
@@ -550,17 +543,17 @@ export default function CampaignsPage() {
 
                 <div className="mb-2">
                   <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-400">{completed.toLocaleString()} / {total.toLocaleString()} leads</span>
-                    <span className="text-white font-medium">{percentage}%</span>
+                    <span className="text-gray-500 dark:text-gray-400">{completed.toLocaleString()} / {total.toLocaleString()} leads</span>
+                    <span className="text-gray-900 dark:text-white font-medium">{percentage}%</span>
                   </div>
-                  <Progress value={percentage} className="h-2 bg-gray-800" />
+                  <Progress value={percentage} className="h-2 bg-gray-100 dark:bg-gray-800" />
                 </div>
 
                 <div className="flex gap-2 mt-4">
                   {/* View details */}
                   <Button
                     size="sm"
-                    className="bg-gray-700 hover:bg-gray-600 text-white"
+                    className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
                     onClick={() => setSelectedCampaign(campaign)}
                   >
                     <List className="w-4 h-4 mr-1" /> View Leads

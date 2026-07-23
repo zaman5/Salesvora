@@ -244,8 +244,8 @@ export default function AIAgentsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">AI Voice Agents</h1>
-          <p className="text-gray-400 mt-1">Manage AI-powered calling agents</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AI Voice Agents</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Manage AI-powered calling agents</p>
         </div>
         <Dialog open={showCreate} onOpenChange={setShowCreate}>
           <DialogTrigger asChild>
@@ -253,28 +253,28 @@ export default function AIAgentsPage() {
               <Plus className="w-4 h-4 mr-2" /> New Agent
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create AI Agent</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>
-                <Label className="text-gray-300">Agent Name</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Agent Name</Label>
                 <Input 
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="e.g., Sales Assistant" 
-                  className="bg-gray-800 border-gray-700 text-white mt-1" 
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-gray-300">Voice</Label>
+                  <Label className="text-gray-600 dark:text-gray-300">Voice</Label>
                   <Select value={newVoice} onValueChange={(v: any) => setNewVoice(v)}>
-                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
+                    <SelectTrigger className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-gray-800 border-gray-700">
+                    <SelectContent className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700">
                       <SelectItem value="alloy">Alloy</SelectItem>
                       <SelectItem value="echo">Echo</SelectItem>
                       <SelectItem value="fable">Fable</SelectItem>
@@ -285,12 +285,12 @@ export default function AIAgentsPage() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-gray-300">Language</Label>
+                  <Label className="text-gray-600 dark:text-gray-300">Language</Label>
                   <Select value={newLanguage} onValueChange={setNewLanguage}>
-                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
+                    <SelectTrigger className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-gray-800 border-gray-700">
+                    <SelectContent className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700">
                       <SelectItem value="en">English</SelectItem>
                       <SelectItem value="es">Spanish</SelectItem>
                       <SelectItem value="fr">French</SelectItem>
@@ -300,26 +300,26 @@ export default function AIAgentsPage() {
                 </div>
               </div>
               <div>
-                <Label className="text-gray-300">Greeting Message</Label>
+                <Label className="text-gray-600 dark:text-gray-300">Greeting Message</Label>
                 <Textarea
                   value={newGreeting}
                   onChange={(e) => setNewGreeting(e.target.value)}
                   placeholder="Hello! I'm calling from..."
-                  className="bg-gray-800 border-gray-700 text-white mt-1"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"
                 />
               </div>
               <div>
-                <Label className="text-gray-300">System Prompt / Script</Label>
+                <Label className="text-gray-600 dark:text-gray-300">System Prompt / Script</Label>
                 <Textarea
                   value={newPrompt}
                   onChange={(e) => setNewPrompt(e.target.value)}
                   placeholder="You are a helpful sales assistant. Your goal is to..."
-                  className="bg-gray-800 border-gray-700 text-white mt-1 min-h-[100px]"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 min-h-[100px]"
                 />
               </div>
               {/* ─── Voice / TTS Provider ─── */}
-              <div className="border border-gray-800 rounded-lg p-3 space-y-3">
-                <Label className="text-gray-300 flex items-center gap-1.5">
+              <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 space-y-3">
+                <Label className="text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
                   <AudioWaveform className="w-4 h-4 text-purple-400" /> Voice / TTS Provider
                 </Label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -336,7 +336,7 @@ export default function AIAgentsPage() {
                       className={`px-2 py-2 rounded-md text-xs font-medium border transition-colors ${
                         newProvider === pvd.key
                           ? "bg-purple-600/20 border-purple-500 text-purple-300"
-                          : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white"
+                          : "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                       }`}
                     >
                       {pvd.label}
@@ -346,12 +346,12 @@ export default function AIAgentsPage() {
 
                 {/* TTS Model per provider */}
                 <div>
-                  <Label className="text-gray-400 text-xs">TTS Model</Label>
+                  <Label className="text-gray-500 dark:text-gray-400 text-xs">TTS Model</Label>
                   <Select value={newTtsModel} onValueChange={setNewTtsModel}>
-                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
+                    <SelectTrigger className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1">
                       <SelectValue placeholder="Select TTS model..." />
                     </SelectTrigger>
-                    <SelectContent className="bg-gray-800 border-gray-700">
+                    <SelectContent className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700">
                       {(ttsModelOptions[newProvider] || []).map((m) => (
                         <SelectItem key={m.value} value={m.value}>
                           {m.label} — {m.latencyNote}
@@ -363,25 +363,25 @@ export default function AIAgentsPage() {
 
                 {(newProvider === "elevenlabs" || newProvider === "cartesia") && (
                   <div>
-                    <Label className="text-gray-400 text-xs">
+                    <Label className="text-gray-500 dark:text-gray-400 text-xs">
                       {newProvider === "elevenlabs" ? "ElevenLabs Voice ID" : "Cartesia Voice ID"}
                     </Label>
                     <Input
                       value={newVoiceId}
                       onChange={(e) => setNewVoiceId(e.target.value)}
                       placeholder={newProvider === "elevenlabs" ? "e.g., 21m00Tcm4TlvDq8ikWAM" : "e.g., a0e99841-438c-4a64..."}
-                      className="bg-gray-800 border-gray-700 text-white mt-1"
+                      className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"
                     />
                   </div>
                 )}
 
                 {/* ─── Voice Sample: Record via Mic or Upload Audio (all providers) ─── */}
-                <div className="bg-gray-800/50 rounded-lg p-3 space-y-2">
-                    <Label className="text-gray-300 text-xs flex items-center gap-1.5">
+                <div className="bg-gray-100/50 dark:bg-gray-800/50 rounded-lg p-3 space-y-2">
+                    <Label className="text-gray-600 dark:text-gray-300 text-xs flex items-center gap-1.5">
                       <Mic className="w-3.5 h-3.5 text-green-400" />
                       Voice Sample — Record via Mic or Upload Audio
                     </Label>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                       {newProvider === "voice_clone"
                         ? "Feed your own voice — the agent will speak on calls mimicking your voice (powered by ElevenLabs voice cloning). Record at least 30–60 seconds of clear speech for best results."
                         : newProvider === "openai"
@@ -392,14 +392,14 @@ export default function AIAgentsPage() {
                       value={cloneName}
                       onChange={(e) => setCloneName(e.target.value)}
                       placeholder="Voice sample name (e.g., My Sales Voice)"
-                      className="bg-gray-800 border-gray-700 text-white"
+                      className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white"
                     />
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
                         size="sm"
                         variant="outline"
-                        className={`border-gray-700 ${voiceRecorder.status === "recording" ? "text-red-400 bg-red-500/10 border-red-700 animate-pulse" : "text-gray-300"}`}
+                        className={`border-gray-300 dark:border-gray-700 ${voiceRecorder.status === "recording" ? "text-red-400 bg-red-500/10 border-red-700 animate-pulse" : "text-gray-600 dark:text-gray-300"}`}
                         onClick={handleToggleVoiceRecording}
                       >
                         {voiceRecorder.status === "recording" ? (
@@ -409,7 +409,7 @@ export default function AIAgentsPage() {
                         )}
                       </Button>
                       <label className="cursor-pointer">
-                        <span className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium border border-gray-700 text-gray-300 hover:text-white bg-transparent">
+                        <span className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white bg-transparent">
                           <Upload className="w-3.5 h-3.5 mr-1" /> Upload Audio
                         </span>
                         <input type="file" accept="audio/*" className="hidden" onChange={handleUploadVoiceSample} />
@@ -435,8 +435,8 @@ export default function AIAgentsPage() {
               </div>
 
               {/* ─── Latency Optimization ─── */}
-              <div className="border border-gray-800 rounded-lg p-3 space-y-2">
-                <Label className="text-gray-300 flex items-center gap-1.5">
+              <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 space-y-2">
+                <Label className="text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
                   <Zap className="w-4 h-4 text-amber-400" /> Latency Mode (response speed focus)
                 </Label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -453,10 +453,10 @@ export default function AIAgentsPage() {
                       className={`px-2 py-2 rounded-md text-left border transition-colors ${
                         newLatency === l.key
                           ? "bg-amber-600/20 border-amber-500"
-                          : "bg-gray-800 border-gray-700 hover:border-gray-600"
+                          : "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
                       }`}
                     >
-                      <p className={`text-xs font-medium ${newLatency === l.key ? "text-amber-300" : "text-gray-300"}`}>{l.label}</p>
+                      <p className={`text-xs font-medium ${newLatency === l.key ? "text-amber-300" : "text-gray-600 dark:text-gray-300"}`}>{l.label}</p>
                       <p className="text-[10px] text-gray-500">{l.desc}</p>
                     </button>
                   ))}
@@ -464,8 +464,8 @@ export default function AIAgentsPage() {
               </div>
 
               {/* ─── Knowledge Base ─── */}
-              <div className="border border-gray-800 rounded-lg p-3 space-y-2">
-                <Label className="text-gray-300 flex items-center gap-1.5">
+              <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 space-y-2">
+                <Label className="text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
                   <BookOpen className="w-4 h-4 text-cyan-400" /> Knowledge Base ({kbEntries.length} entries)
                 </Label>
                 <p className="text-[11px] text-gray-500">
@@ -474,9 +474,9 @@ export default function AIAgentsPage() {
                 {kbEntries.length > 0 && (
                   <div className="space-y-1 max-h-[120px] overflow-y-auto">
                     {kbEntries.map((kb) => (
-                      <div key={kb.id} className="flex items-start justify-between bg-gray-800/60 rounded-md px-2 py-1.5">
+                      <div key={kb.id} className="flex items-start justify-between bg-gray-100/60 dark:bg-gray-800/60 rounded-md px-2 py-1.5">
                         <div className="min-w-0">
-                          <p className="text-xs font-medium text-white truncate">{kb.title}</p>
+                          <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{kb.title}</p>
                           <p className="text-[10px] text-gray-500 line-clamp-1">{kb.content}</p>
                         </div>
                         <button type="button" onClick={() => removeKbEntry(kb.id)} className="text-gray-500 hover:text-red-400 ml-2">
@@ -490,15 +490,15 @@ export default function AIAgentsPage() {
                   value={kbTitle}
                   onChange={(e) => setKbTitle(e.target.value)}
                   placeholder="Entry title (e.g., Pricing Plans)"
-                  className="bg-gray-800 border-gray-700 text-white"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white"
                 />
                 <Textarea
                   value={kbContent}
                   onChange={(e) => setKbContent(e.target.value)}
                   placeholder="Knowledge content the AI should know..."
-                  className="bg-gray-800 border-gray-700 text-white min-h-[60px]"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white min-h-[60px]"
                 />
-                <Button type="button" size="sm" variant="outline" className="border-gray-700 text-gray-300" onClick={addKbEntry}>
+                <Button type="button" size="sm" variant="outline" className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300" onClick={addKbEntry}>
                   <Plus className="w-3.5 h-3.5 mr-1" /> Add to Knowledge Base
                 </Button>
               </div>
@@ -514,7 +514,7 @@ export default function AIAgentsPage() {
       {/* Agents Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {agents.map((agent: any) => (
-          <Card key={agent.id} className="bg-gray-900 border-gray-800">
+          <Card key={agent.id} className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
             <CardContent className="p-5">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -522,43 +522,43 @@ export default function AIAgentsPage() {
                     <Bot className="w-5 h-5 text-purple-400" />
                   </div>
                   <div>
-                    <h3 className="text-base font-semibold text-white">{agent.name}</h3>
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-white">{agent.name}</h3>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <Badge className="bg-gray-700 text-gray-300 text-xs">
+                      <Badge className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs">
                         <Mic className="w-3 h-3 mr-1" />{agent.voice}
                       </Badge>
-                      <Badge className="bg-gray-700 text-gray-300 text-xs">{agent.language}</Badge>
+                      <Badge className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs">{agent.language}</Badge>
                       {agent.voiceProvider && (
-                        <Badge className="bg-purple-500/20 text-purple-400 text-xs">
+                        <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400 text-xs">
                           {agent.voiceProvider === "voice_clone" ? "Voice Clone" : agent.voiceProvider === "elevenlabs" ? "ElevenLabs" : agent.voiceProvider === "cartesia" ? "Cartesia" : "OpenAI"}
                         </Badge>
                       )}
                       {agent.latencyMode && (
-                        <Badge className="bg-amber-500/20 text-amber-400 text-xs">
+                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 text-xs">
                           <Zap className="w-3 h-3 mr-0.5" />{agent.latencyMode.replace("_", " ")}
                         </Badge>
                       )}
                     </div>
                   </div>
                 </div>
-                <Badge className={agent.isActive ? "bg-green-500/20 text-green-400" : "bg-gray-500/20 text-gray-400"}>
+                <Badge className={agent.isActive ? "bg-green-500/20 text-green-400" : "bg-gray-500/20 text-gray-500 dark:text-gray-400"}>
                   {agent.isActive ? "Active" : "Inactive"}
                 </Badge>
               </div>
 
-              <p className="text-sm text-gray-400 mb-3 italic line-clamp-2">{agent.greeting || "No greeting message configured."}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3 italic line-clamp-2">{agent.greeting || "No greeting message configured."}</p>
 
               <div className="grid grid-cols-3 gap-2 mb-4">
-                <div className="bg-gray-800/50 rounded p-2 text-center">
-                  <p className="text-sm font-semibold text-white">{(agent.totalCalls || 0).toLocaleString()}</p>
+                <div className="bg-gray-100/50 dark:bg-gray-800/50 rounded p-2 text-center">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{(agent.totalCalls || 0).toLocaleString()}</p>
                   <p className="text-xs text-gray-500">Calls</p>
                 </div>
-                <div className="bg-gray-800/50 rounded p-2 text-center">
+                <div className="bg-gray-100/50 dark:bg-gray-800/50 rounded p-2 text-center">
                   <p className="text-sm font-semibold text-green-400">{(agent.connectedCalls || 0).toLocaleString()}</p>
                   <p className="text-xs text-gray-500">Connected</p>
                 </div>
-                <div className="bg-gray-800/50 rounded p-2 text-center">
-                  <p className="text-sm font-semibold text-white">{agent.avgDuration || "2m 15s"}</p>
+                <div className="bg-gray-100/50 dark:bg-gray-800/50 rounded p-2 text-center">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{agent.avgDuration || "2m 15s"}</p>
                   <p className="text-xs text-gray-500">Avg</p>
                 </div>
               </div>
@@ -571,7 +571,7 @@ export default function AIAgentsPage() {
                   variant="ghost" 
                   size="sm" 
                   onClick={() => handleDeleteAgent(agent.id)}
-                  className="text-gray-400 hover:text-red-400"
+                  className="text-gray-500 dark:text-gray-400 hover:text-red-400"
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
@@ -606,18 +606,18 @@ export default function AIAgentsPage() {
       </div>
 
       {/* Recent Conversations */}
-      <Card className="bg-gray-900 border-gray-800">
+      <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-white text-base flex items-center gap-2">
+          <CardTitle className="text-gray-900 dark:text-white text-base flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-purple-400" />
             Recent AI Conversations
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Label className="text-gray-400 text-xs">Agent filter:</Label>
+            <Label className="text-gray-500 dark:text-gray-400 text-xs">Agent filter:</Label>
             <select
               value={selectedLogAgentId || ""}
               onChange={(e) => setSelectedLogAgentId(parseInt(e.target.value) || null)}
-              className="bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-white text-xs"
+              className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 text-gray-900 dark:text-white text-xs"
             >
               <option value="">Select agent...</option>
               {agents.map((a: any) => (
@@ -630,40 +630,40 @@ export default function AIAgentsPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-800">
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Agent</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Lead ID</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Duration</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Sentiment</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Outcome</th>
+                <tr className="border-b border-gray-200 dark:border-gray-800">
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Agent</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Lead ID</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Duration</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Sentiment</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Outcome</th>
                 </tr>
               </thead>
               <tbody>
                 {conversations.map((conv: any) => {
                   const agentName = agents.find((a: any) => a.id === conv.agentId)?.name || "AI Agent";
                   return (
-                    <tr key={conv.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                      <td className="px-4 py-3 text-sm text-white flex items-center gap-2">
+                    <tr key={conv.id} className="border-b border-gray-200/50 dark:border-gray-800/50 hover:bg-gray-100/30 dark:hover:bg-gray-800/30">
+                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-white flex items-center gap-2">
                         <Bot className="w-4 h-4 text-purple-400" />
                         {agentName}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-400">Lead #{conv.leadId}</td>
-                      <td className="px-4 py-3 text-sm text-gray-400">
+                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Lead #{conv.leadId}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" /> {conv.duration}s
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         <Badge className={
-                          conv.sentiment === "positive" ? "bg-green-500/20 text-green-400" :
-                          conv.sentiment === "negative" ? "bg-red-500/20 text-red-400" :
-                          "bg-gray-500/20 text-gray-400"
+                          conv.sentiment === "positive" ? "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400" :
+                          conv.sentiment === "negative" ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400" :
+                          "bg-gray-500/20 text-gray-500 dark:text-gray-400"
                         }>
                           {conv.sentiment || "neutral"}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge className="bg-blue-500/20 text-blue-400">{conv.outcome || "Interested"}</Badge>
+                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">{conv.outcome || "Interested"}</Badge>
                       </td>
                     </tr>
                   );
@@ -683,7 +683,7 @@ export default function AIAgentsPage() {
 
       {/* Test Dialog */}
       <Dialog open={showTest} onOpenChange={setShowTest}>
-        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-md">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white max-w-md">
           <DialogHeader>
             <DialogTitle>Test AI Agent Simulation</DialogTitle>
           </DialogHeader>
@@ -691,11 +691,11 @@ export default function AIAgentsPage() {
             {simulateMutation.isPending ? (
               <div className="text-center py-12 space-y-3">
                 <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mx-auto animate-spin border-t-2 border-purple-500" />
-                <p className="text-gray-400 text-sm">Initiating simulated voice dialog...</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Initiating simulated voice dialog...</p>
               </div>
             ) : simulationResult ? (
               <div className="space-y-4">
-                <div className="bg-gray-800 rounded-lg p-4 space-y-3 max-h-[300px] overflow-y-auto">
+                <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 space-y-3 max-h-[300px] overflow-y-auto">
                   {simulationResult.transcript?.map((line: any, idx: number) => (
                     <div key={idx} className={`flex items-start gap-2 ${line.speaker === "human" ? "justify-end" : ""}`}>
                       {line.speaker !== "human" && (
@@ -704,7 +704,7 @@ export default function AIAgentsPage() {
                         </div>
                       )}
                       <div className={`rounded-lg px-3 py-2 text-sm ${
-                        line.speaker === "human" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-200"
+                        line.speaker === "human" ? "bg-blue-600 text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-200"
                       }`}>
                         {line.text}
                       </div>
@@ -716,10 +716,10 @@ export default function AIAgentsPage() {
                     </div>
                   ))}
                 </div>
-                <div className="bg-gray-800/50 p-3 rounded text-xs space-y-1">
-                  <p className="text-gray-400">Call Outcome: <span className="text-white font-medium capitalize">{simulationResult.status}</span></p>
-                  <p className="text-gray-400">Sentiment: <span className="text-green-400 font-medium capitalize">{simulationResult.sentiment}</span></p>
-                  <p className="text-gray-400">Duration: <span className="text-white font-mono">{simulationResult.duration} seconds</span></p>
+                <div className="bg-gray-100/50 dark:bg-gray-800/50 p-3 rounded text-xs space-y-1">
+                  <p className="text-gray-500 dark:text-gray-400">Call Outcome: <span className="text-gray-900 dark:text-white font-medium capitalize">{simulationResult.status}</span></p>
+                  <p className="text-gray-500 dark:text-gray-400">Sentiment: <span className="text-green-400 font-medium capitalize">{simulationResult.sentiment}</span></p>
+                  <p className="text-gray-500 dark:text-gray-400">Duration: <span className="text-gray-900 dark:text-white font-mono">{simulationResult.duration} seconds</span></p>
                 </div>
                 <Button className="w-full bg-purple-600 hover:bg-purple-700" onClick={() => setShowTest(false)}>
                   Close Test

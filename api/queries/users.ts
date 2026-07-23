@@ -2,6 +2,47 @@
 import { users } from "@db/schema";
 import { eq, and, or, desc, ne } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
+import { compare, hash } from "bcryptjs";
+
+// ── Password hashing ────────────────────────────────────────────────────────
+// bcryptjs (pure JS, no native build step) so this works on Windows and on
+// shared hosting where node-gyp isn't available.
+
+/** bcrypt work factor for newly hashed passwords. */
+export const BCRYPT_COST = 12;
+
+/**
+ * True when `value` is already a bcrypt digest. Stored passwords predate
+ * hashing, so every read has to distinguish "hash" from "legacy plaintext".
+ */
+export function isBcryptHash(value: unknown): value is string {
+  return typeof value === "string" && /^\$2[aby]\$\d{2}\$/.test(value);
+}
+
+/** Hash a plaintext password at {@link BCRYPT_COST}. */
+export function hashPassword(plain: string): Promise<string> {
+  return hash(plain, BCRYPT_COST);
+}
+
+/**
+ * Verify a submitted password against whatever is stored, transparently
+ * supporting accounts that have not migrated yet.
+ *
+ * - stored value is a bcrypt hash  → constant-time bcrypt comparison
+ * - stored value is legacy plaintext → direct comparison (never invalidates an
+ *   existing password; the caller is expected to re-hash on success)
+ */
+export async function verifyPassword(plain: string, stored: unknown): Promise<boolean> {
+  if (typeof stored !== "string" || stored.length === 0) return false;
+  if (isBcryptHash(stored)) {
+    try {
+      return await compare(plain, stored);
+    } catch {
+      return false;
+    }
+  }
+  return stored === plain;
+}
 
 export async function findAllUsers(companyId?: number) {
   try {

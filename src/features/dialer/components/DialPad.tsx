@@ -15,7 +15,7 @@ export function DialPad({ onDigit, buttonHeight = "h-11" }: DialPadProps) {
         <button
           key={d}
           onClick={() => onDigit(d)}
-          className={`${buttonHeight} rounded-lg bg-gray-800 text-white font-medium text-lg hover:bg-gray-700 active:bg-gray-600 active:scale-95 transition-all border border-gray-700/50`}
+          className={`${buttonHeight} rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium text-lg hover:bg-gray-200 dark:hover:bg-gray-700 active:bg-gray-300 dark:active:bg-gray-600 active:scale-95 transition-all border border-gray-300/50 dark:border-gray-700/50`}
         >
           {d}
         </button>

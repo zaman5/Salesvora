@@ -7,7 +7,7 @@ import { getTelnyxConfig, saveTelnyxConfig } from "./lib/telnyxConfig";
 import { createCredentialConnection, ensureOutboundVoiceProfile } from "./lib/telnyx";
 import {
   findAllUsers, findUsersCreatedBy, findUserById,
-  createUser, updateUser, deleteUser, findCallersByAdmin,
+  createUser, updateUser, deleteUser, findCallersByAdmin, hashPassword,
 } from "./queries/users";
 
 // A non-superadmin may only act on users inside their own company AND that
@@ -66,6 +66,10 @@ export const userRouter = createRouter({
       const companyId = isSuperAdmin(ctx.user)
         ? (input.companyId || ctx.user.companyId || 1)
         : (ctx.user.companyId || 1);
+      // Passwords are stored as bcrypt digests only — the plaintext never
+      // reaches the database, including the "local" sipCredentials mirror that
+      // the login path falls back to.
+      const passwordHash = password ? await hashPassword(password) : undefined;
       const id = await createUser({
         ...rest,
         unionId: finalUnionId,
@@ -73,8 +77,8 @@ export const userRouter = createRouter({
         createdBy: ctx.user.id,
         role: input.role,
         status: "active",
-        password: password || undefined,
-        sipCredentials: password ? { username: input.email, password, domain: "local" } : undefined,
+        password: passwordHash,
+        sipCredentials: passwordHash ? { username: input.email, password: passwordHash, domain: "local" } : undefined,
       });
       return { id, success: true };
     }),
@@ -127,11 +131,15 @@ export const userRouter = createRouter({
       const { sipUsername, sipTelnyxPassword, ...rest } = input.data;
       const updateData: Record<string, unknown> = { ...rest };
 
-      // Login password → local sipCredentials (for authentication)
-      if (updateData.password) {
+      // Login password → bcrypt digest, mirrored into the "local"
+      // sipCredentials slot that the login fallback reads. Plaintext is never
+      // persisted.
+      if (typeof updateData.password === "string" && updateData.password.length > 0) {
+        const passwordHash = await hashPassword(updateData.password);
+        updateData.password = passwordHash;
         updateData.sipCredentials = {
           username: (updateData.email as string) || "",
-          password: updateData.password,
+          password: passwordHash,
           domain: "local",
         };
       }

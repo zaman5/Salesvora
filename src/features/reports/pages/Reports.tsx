@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,9 +35,22 @@ export default function ReportsPage() {
     dateRange === "7d" ? 7 :
     dateRange === "30d" ? 30 : 90;
 
+  // The selected range applies to every query that accepts it, so the KPIs,
+  // dispositions and agent table can't silently stay all-time while the chart
+  // changes. Day-granularity strings keep the query keys stable between
+  // renders (a fresh timestamp each render would refetch forever).
+  const { dateFrom, dateTo } = useMemo(() => {
+    const day = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(start.getDate() - (daysParam - 1));
+    return { dateFrom: day(start), dateTo: day(now) };
+  }, [daysParam]);
+
   // Queries
   const { data: adminStats } = trpc.report.dashboard.useQuery(
-    { companyId },
+    { companyId, dateFrom, dateTo },
     { enabled: isAdmin }
   );
 
@@ -47,12 +60,12 @@ export default function ReportsPage() {
   );
 
   const { data: rawDispositions = [] } = trpc.report.dispositionBreakdown.useQuery(
-    { companyId },
+    { companyId, dateFrom, dateTo },
     { enabled: isAdmin }
   );
 
   const { data: agentPerformance = [] } = trpc.report.agentPerformance.useQuery(
-    { companyId },
+    { companyId, dateFrom, dateTo },
     { enabled: isAdmin }
   );
 
@@ -66,18 +79,50 @@ export default function ReportsPage() {
     { enabled: isAdmin }
   );
 
-  const exportCallsMutation = trpc.report.exportCalls.useMutation();
+  // Build the CSV entirely from data already loaded on this page — the
+  // exportCalls procedure returns only filter metadata, no rows, so claiming a
+  // download from it would be a no-op.
+  const downloadCSV = (filename: string, rows: (string | number)[][]) => {
+    const escape = (v: string | number) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = rows.map((r) => r.map(escape).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-  const handleExportCSV = async () => {
-    try {
-      const res = await exportCallsMutation.mutateAsync({
-        companyId,
-        format: "csv",
-      });
-      alert(`Export generated successfully! Download started. Generated at: ${new Date(res.generatedAt).toLocaleString()}`);
-    } catch (err) {
-      console.error("Export failed:", err);
-    }
+  const handleExportCSV = () => {
+    const rows: (string | number)[][] = [
+      ["Report", `Last ${daysParam} day(s)`, `${dateFrom} to ${dateTo}`],
+      [],
+      ["Summary"],
+      ["Metric", "Value"],
+      ["Total Calls", adminStats?.totalCalls ?? 0],
+      ["Connection Rate (%)", adminStats?.connectionRate ?? 0],
+      ["Avg Duration (s)", avgDurationSeconds ?? 0],
+      ["Active Campaigns", adminStats?.activeCampaigns ?? 0],
+      [],
+      ["Agent Performance"],
+      ["Agent", "Total Calls", "Connected Calls", "Avg Duration (s)"],
+      ...agentPerformance.map((a: any) => {
+        const u = users.find((x: any) => x.id === a.callerId) as any;
+        return [u?.name || `Caller #${a.callerId}`, a.totalCalls ?? 0, a.connectedCalls ?? 0, a.avgDuration ?? 0];
+      }),
+      [],
+      ["Disposition Breakdown"],
+      ["Disposition", "Count", "Percent"],
+      ...dispositionData.map((d: any) => [d.label, d.count ?? 0, `${d.pct}%`]),
+      [],
+      ["Campaigns"],
+      ["Campaign", "Type", "Total Leads", "Completed", "Successful Calls", "Status"],
+      ...campaigns.map((c: any) => [
+        c.name, c.type, c.totalLeads ?? 0, c.completedLeads ?? 0, c.successfulCalls ?? 0, c.status,
+      ]),
+    ];
+    downloadCSV(`salesvora-report-${dateFrom}-to-${dateTo}.csv`, rows);
   };
 
   // Disposition metadata mapping
@@ -106,12 +151,28 @@ export default function ReportsPage() {
     };
   });
 
+  // Real average duration, weighted by each agent's call count.
+  const durationTotals = agentPerformance.reduce(
+    (acc: { secs: number; calls: number }, a: any) => {
+      const calls = a.totalCalls || 0;
+      return { secs: acc.secs + (a.avgDuration || 0) * calls, calls: acc.calls + calls };
+    },
+    { secs: 0, calls: 0 },
+  );
+  const avgDurationSeconds = durationTotals.calls > 0
+    ? Math.round(durationTotals.secs / durationTotals.calls)
+    : 0;
+  const avgDurationLabel = `${Math.floor(avgDurationSeconds / 60)}m ${avgDurationSeconds % 60}s`;
+
   const getStatusBadge = (status: string) => {
     const colors: Record<string, string> = {
-      running: "bg-green-500/20 text-green-400",
-      paused: "bg-amber-500/20 text-amber-400",
-      completed: "bg-blue-500/20 text-blue-400",
-      draft: "bg-gray-500/20 text-gray-400",
+      // Light pair first, original dark values behind `dark:` — the bare
+      // `bg-*-500/20 text-*-400` combos were dark-only and became unreadable
+      // against the light theme's white background.
+      running: "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
+      paused: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+      completed: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+      draft: "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400",
     };
     return <Badge className={`${colors[status] || "bg-gray-500/20"} border-0 capitalize`}>{status}</Badge>;
   };
@@ -120,16 +181,16 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Reports & Analytics</h1>
-          <p className="text-gray-400 mt-1">Detailed call analytics and performance reports</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reports & Analytics</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Detailed call analytics and performance reports</p>
         </div>
         <div className="flex gap-2">
           <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-36 bg-gray-900 border-gray-800 text-white">
+            <SelectTrigger className="w-36 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white">
               <Calendar className="w-4 h-4 mr-2" />
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-gray-900 border-gray-800">
+            <SelectContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
               <SelectItem value="today">Today</SelectItem>
               <SelectItem value="7d">Last 7 Days</SelectItem>
               <SelectItem value="30d">Last 30 Days</SelectItem>
@@ -139,7 +200,7 @@ export default function ReportsPage() {
           <Button 
             variant="outline" 
             onClick={handleExportCSV}
-            className="border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800"
+            className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <Download className="w-4 h-4 mr-2" />
             Export CSV
@@ -148,64 +209,64 @@ export default function ReportsPage() {
       </div>
 
       <Tabs defaultValue="overview">
-        <TabsList className="bg-gray-900 border border-gray-800">
-          <TabsTrigger value="overview" className="data-[state=active]:bg-gray-800">Overview</TabsTrigger>
-          <TabsTrigger value="agents" className="data-[state=active]:bg-gray-800">Agent Performance</TabsTrigger>
-          <TabsTrigger value="campaigns" className="data-[state=active]:bg-gray-800">Campaigns</TabsTrigger>
-          <TabsTrigger value="dispositions" className="data-[state=active]:bg-gray-800">Dispositions</TabsTrigger>
+        <TabsList className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+          <TabsTrigger value="overview" className="data-[state=active]:bg-gray-100 dark:data-[state=active]:bg-gray-800">Overview</TabsTrigger>
+          <TabsTrigger value="agents" className="data-[state=active]:bg-gray-100 dark:data-[state=active]:bg-gray-800">Agent Performance</TabsTrigger>
+          <TabsTrigger value="campaigns" className="data-[state=active]:bg-gray-100 dark:data-[state=active]:bg-gray-800">Campaigns</TabsTrigger>
+          <TabsTrigger value="dispositions" className="data-[state=active]:bg-gray-100 dark:data-[state=active]:bg-gray-800">Dispositions</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <Card className="bg-gray-900 border-gray-800">
+            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
               <CardContent className="p-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
                   <Phone className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">{(adminStats?.totalCalls || 0).toLocaleString()}</p>
-                  <p className="text-sm text-gray-400">Total Calls</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{(adminStats?.totalCalls || 0).toLocaleString()}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Total Calls</p>
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-gray-900 border-gray-800">
+            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
               <CardContent className="p-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
                   <CheckCircle2 className="w-5 h-5 text-green-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">{adminStats?.connectionRate || 0}%</p>
-                  <p className="text-sm text-gray-400">Connection Rate</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{adminStats?.connectionRate || 0}%</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Connection Rate</p>
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-gray-900 border-gray-800">
+            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
               <CardContent className="p-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
                   <Clock className="w-5 h-5 text-purple-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">2m 45s</p>
-                  <p className="text-sm text-gray-400">Avg Duration</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{avgDurationLabel}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Avg Duration</p>
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-gray-900 border-gray-800">
+            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
               <CardContent className="p-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
                   <TrendingUp className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">{(adminStats?.activeCampaigns || 0).toLocaleString()}</p>
-                  <p className="text-sm text-gray-400">Active Campaigns</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{(adminStats?.activeCampaigns || 0).toLocaleString()}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Active Campaigns</p>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          <Card className="bg-gray-900 border-gray-800">
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
             <CardHeader>
-              <CardTitle className="text-white text-base">Call Volume</CardTitle>
+              <CardTitle className="text-gray-900 dark:text-white text-base">Call Volume</CardTitle>
             </CardHeader>
             <CardContent>
               {callVolume.length > 0 ? (
@@ -241,25 +302,25 @@ export default function ReportsPage() {
                 </div>
               )}
               <div className="flex gap-4 justify-center mt-4 text-xs">
-                <span className="flex items-center gap-1 text-gray-400"><div className="w-3 h-3 bg-green-500/60 rounded" /> Connected</span>
-                <span className="flex items-center gap-1 text-gray-400"><div className="w-3 h-3 bg-blue-500/40 rounded" /> Total</span>
+                <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400"><div className="w-3 h-3 bg-green-500/60 rounded" /> Connected</span>
+                <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400"><div className="w-3 h-3 bg-blue-500/40 rounded" /> Total</span>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="agents" className="mt-4">
-          <Card className="bg-gray-900 border-gray-800">
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-800">
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Agent</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Calls</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Connected</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Avg Duration</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Status</th>
+                    <tr className="border-b border-gray-200 dark:border-gray-800">
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Agent</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Calls</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Connected</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Avg Duration</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -269,13 +330,13 @@ export default function ReportsPage() {
                       const status = userObj?.status || "active";
 
                       return (
-                        <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                          <td className="px-4 py-3 text-sm font-medium text-white">{name}</td>
-                          <td className="px-4 py-3 text-sm text-gray-400">{agent.totalCalls}</td>
+                        <tr key={i} className="border-b border-gray-200/50 dark:border-gray-800/50 hover:bg-gray-100/30 dark:hover:bg-gray-800/30">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{agent.totalCalls}</td>
                           <td className="px-4 py-3 text-sm text-green-400">{agent.connectedCalls}</td>
-                          <td className="px-4 py-3 text-sm text-gray-400">{agent.avgDuration || 0}s</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{agent.avgDuration || 0}s</td>
                           <td className="px-4 py-3">
-                            <Badge className={status === "active" ? "bg-green-500/20 text-green-400" : "bg-gray-500/20 text-gray-400"}>
+                            <Badge className={status === "active" ? "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400" : "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400"}>
                               {status}
                             </Badge>
                           </td>
@@ -297,30 +358,30 @@ export default function ReportsPage() {
         </TabsContent>
 
         <TabsContent value="campaigns" className="mt-4">
-          <Card className="bg-gray-900 border-gray-800">
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-800">
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Campaign</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Type</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Total Leads</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Completed</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Success Calls</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Status</th>
+                    <tr className="border-b border-gray-200 dark:border-gray-800">
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Campaign</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Type</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Total Leads</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Completed</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Success Calls</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {campaigns.map((camp: any, i: number) => {
                       return (
-                        <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                          <td className="px-4 py-3 text-sm font-medium text-white">{camp.name}</td>
+                        <tr key={i} className="border-b border-gray-200/50 dark:border-gray-800/50 hover:bg-gray-100/30 dark:hover:bg-gray-800/30">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{camp.name}</td>
                           <td className="px-4 py-3">
-                            <Badge className="bg-gray-700 text-gray-300 capitalize">{camp.type}</Badge>
+                            <Badge className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 capitalize">{camp.type}</Badge>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-400">{(camp.totalLeads || 0).toLocaleString()}</td>
-                          <td className="px-4 py-3 text-sm text-gray-400">{(camp.completedLeads || 0).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{(camp.totalLeads || 0).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{(camp.completedLeads || 0).toLocaleString()}</td>
                           <td className="px-4 py-3 text-sm text-green-400">{(camp.successfulCalls || 0).toLocaleString()}</td>
                           <td className="px-4 py-3">
                             {getStatusBadge(camp.status)}
@@ -344,19 +405,19 @@ export default function ReportsPage() {
 
         <TabsContent value="dispositions" className="mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="bg-gray-900 border-gray-800">
+            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
               <CardHeader>
-                <CardTitle className="text-white text-base">Disposition Breakdown</CardTitle>
+                <CardTitle className="text-gray-900 dark:text-white text-base">Disposition Breakdown</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {dispositionData.map((d: any, i: number) => (
                     <div key={i}>
                       <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="text-gray-300">{d.label}</span>
-                        <span className="text-gray-400">{(d.count || 0).toLocaleString()} ({d.pct}%)</span>
+                        <span className="text-gray-600 dark:text-gray-300">{d.label}</span>
+                        <span className="text-gray-500 dark:text-gray-400">{(d.count || 0).toLocaleString()} ({d.pct}%)</span>
                       </div>
-                      <div className="w-full bg-gray-800 rounded-full h-2">
+                      <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
                         <div className={`${d.color} h-2 rounded-full`} style={{ width: `${d.pct}%` }} />
                       </div>
                     </div>
@@ -367,41 +428,28 @@ export default function ReportsPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-gray-900 border-gray-800">
+            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
               <CardHeader>
-                <CardTitle className="text-white text-base">Export and Analytics</CardTitle>
+                <CardTitle className="text-gray-900 dark:text-white text-base">Export and Analytics</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <Button 
                   variant="outline" 
                   onClick={handleExportCSV}
-                  className="w-full justify-start border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800"
+                  className="w-full justify-start border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   <FileSpreadsheet className="w-4 h-4 mr-3 text-green-400" />
                   Export calls to CSV
                 </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={handleExportCSV}
-                  className="w-full justify-start border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800"
+                <Button
+                  variant="outline"
+                  disabled
+                  title="Coming soon"
+                  className="w-full justify-start border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300"
                 >
                   <PieChart className="w-4 h-4 mr-3 text-purple-400" />
-                  Generate custom PDF report
+                  Generate custom PDF report (coming soon)
                 </Button>
-                <div className="pt-3 border-t border-gray-800">
-                  <h4 className="text-sm font-medium text-gray-300 mb-2">Campaign Filter List</h4>
-                  <div className="space-y-2">
-                    {campaigns.map((c: any) => (
-                      <label key={c.id} className="flex items-center gap-2 text-sm text-gray-400">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-600 bg-gray-800" />
-                        {c.name}
-                      </label>
-                    ))}
-                    {campaigns.length === 0 && (
-                      <p className="text-xs text-gray-500">No campaigns created yet.</p>
-                    )}
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </div>

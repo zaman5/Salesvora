@@ -77,14 +77,19 @@ export async function authenticateRequest(headers: Headers) {
   try {
     user = await findUserByUnionId(claim.unionId);
   } catch (error) {
-    if (env.isProduction) {
+    // Swallowing a DB failure into a fabricated privileged user is only ever
+    // acceptable behind an explicit local opt-in (ALLOW_DEV_LOGIN=true).
+    // NODE_ENV alone is not a safe gate: it is commonly unset on shared
+    // hosting, which would turn a transient DB outage into "everyone with a
+    // signed token becomes an admin".
+    if (!env.allowDevLogin) {
       throw error;
     }
     console.warn("[auth] Database query failed during authentication, using mock dev user.");
   }
 
   if (!user) {
-    if (!env.isProduction) {
+    if (env.allowDevLogin) {
       let role: "superadmin" | "admin" | "caller" | "viewer" = "admin";
       if (claim.unionId.endsWith("-superadmin")) {
         role = "superadmin";
@@ -111,9 +116,11 @@ export async function authenticateRequest(headers: Headers) {
       throw Errors.forbidden("User not found. Please re-login.");
     }
   }
-  // Superadmins are exempt: the platform operator must never be locked out,
-  // even if the account's status was accidentally flipped to suspended.
-  if (user.role !== "superadmin" && (user.status === "suspended" || user.status === "inactive")) {
+  // Suspension applies to every role. Exempting superadmins here would undo
+  // the login-side check: a suspended operator's existing cookie would keep
+  // working on every request. userRouter already refuses to suspend a
+  // superadmin from the app, so this cannot strand an active operator.
+  if (user.status === "suspended" || user.status === "inactive") {
     throw Errors.forbidden("Your account is inactive or suspended.");
   }
   return user;
