@@ -3,11 +3,9 @@ import * as os from "os";
 import * as path from "path";
 import { hasDatabase } from "./connection";
 import { env } from "../lib/env";
-import { hashSync } from "bcryptjs";
-
-// Kept local (not imported from ./users) to avoid a circular import — users.ts
-// imports readJsonDb from this module. Must match users.ts BCRYPT_COST.
-const BCRYPT_COST = 12;
+// Dependency-free hashing (Node crypto). The helper lives outside ./users to
+// avoid the users.ts <-> jsonDb.ts import cycle.
+import { hashPasswordSync } from "../lib/password";
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) {
@@ -203,7 +201,7 @@ function seedAdminUsers(now: string): JsonDb["users"] {
       name: "Admin",
       email: env.adminEmail,
       // Stored as a bcrypt digest — never plaintext.
-      password: hashSync(env.adminPassword, BCRYPT_COST),
+      password: hashPasswordSync(env.adminPassword),
       // The seeded owner account is a superadmin (not just admin) so it can
       // create/promote other admins — otherwise nobody could ever become a
       // superadmin (creating one requires already being one).

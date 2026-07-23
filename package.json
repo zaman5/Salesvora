@@ -59,7 +59,6 @@
     "@trpc/server": "^11.8.1",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.23",
-    "bcryptjs": "^3.0.3",
     "body-parser": "^1.20.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -103,7 +102,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.13",
     "@types/body-parser": "^1.19.5",
     "@types/express": "^5.0.6",

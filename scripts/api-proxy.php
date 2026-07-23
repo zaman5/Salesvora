@@ -86,6 +86,40 @@ function startServer($appDir) {
         // Mail Sender's SQLite file must live here too — this whole checkout
         // is replaced on every git push, so anywhere inside it loses data on deploy.
         $envVars .= ' MAIL_DB_PATH=' . escapeshellarg($dataDir . '/mailsender.db');
+
+        // APP_SECRET signs session tokens. The app refuses to boot in
+        // production without one (a known default key is forgeable). Rather
+        // than commit a secret to the repo, generate a strong random one on
+        // first run and persist it here, OUTSIDE the deploy checkout and the
+        // web root, so it survives every git push and stays private.
+        $secretFile = $dataDir . '/app_secret';
+        if (!file_exists($secretFile)) {
+            $secret = bin2hex(random_bytes(32)); // 256-bit, 64 hex chars
+            file_put_contents($secretFile, $secret);
+            @chmod($secretFile, 0600);
+        }
+        $appSecret = trim((string)@file_get_contents($secretFile));
+        if ($appSecret !== '') {
+            $envVars .= ' APP_SECRET=' . escapeshellarg($appSecret);
+        }
+
+        // Optional bootstrap admin: if the operator drops an app_admin file
+        // ("email:password" on one line) into the data dir, pass it through so
+        // a fresh db.json can seed the first superadmin. Ignored once db.json
+        // exists. Never required — existing installs already have their admin.
+        $adminFile = $dataDir . '/app_admin';
+        if (file_exists($adminFile)) {
+            $adminLine = trim((string)@file_get_contents($adminFile));
+            $sep = strpos($adminLine, ':');
+            if ($sep !== false) {
+                $adminEmail = substr($adminLine, 0, $sep);
+                $adminPass  = substr($adminLine, $sep + 1);
+                if ($adminEmail !== '' && $adminPass !== '') {
+                    $envVars .= ' ADMIN_EMAIL=' . escapeshellarg($adminEmail);
+                    $envVars .= ' ADMIN_PASSWORD=' . escapeshellarg($adminPass);
+                }
+            }
+        }
     }
 
     $cmd = 'cd ' . escapeshellarg($appDir) . ' && ' . $envVars . ' nohup ' . escapeshellarg($node) . ' dist/boot.js >> ' . escapeshellarg($logFile) . ' 2>&1 &';

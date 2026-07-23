@@ -6,7 +6,7 @@ import { createRouter, authedQuery, publicQuery } from "./middleware";
 import { signSessionToken } from "./kimi/session";
 import {
   upsertUser, findUserByEmail, updateUser,
-  verifyPassword, hashPassword, isBcryptHash,
+  verifyPassword, hashPassword, isHashedPassword,
 } from "./queries/users";
 import { env } from "./lib/env";
 import { z } from "zod";
@@ -92,7 +92,7 @@ export const authRouter = createRouter({
       // Self-migration: the account authenticated against a plaintext value, so
       // replace it with a bcrypt hash right now. Each account upgrades itself
       // on its next successful login with no password reset required.
-      if (!isBcryptHash(storedPassword)) {
+      if (!isHashedPassword(storedPassword)) {
         try {
           const digest = await hashPassword(input.password);
           const patch: Record<string, unknown> = { password: digest };
