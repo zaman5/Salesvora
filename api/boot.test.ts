@@ -9,6 +9,12 @@ describe("Hono Server Smoke Test", () => {
     expect(body).toEqual({ error: "Not Found" });
   });
 
+  it("should not serve the PHP proxy's source from dist/public", async () => {
+    const res = await app.request("/api-proxy.php");
+    expect(res.status).toBe(404);
+    expect(await res.text()).not.toContain("<?php");
+  });
+
   it("should export app Hono instance", () => {
     expect(app).toBeDefined();
     expect(typeof app.fetch).toBe("function");

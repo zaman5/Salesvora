@@ -21,6 +21,12 @@ process.on("unhandledRejection", (reason) => {
 const staticRoot = path.resolve(import.meta.dirname, "public");
 console.log(`[boot] static root: ${staticRoot} (exists: ${fs.existsSync(staticRoot)})`);
 
+// The Hostinger deploy stages scripts/api-proxy.php into dist/public so it
+// ships to the docroot with the rest of the bundle. Apache serves it as PHP
+// there, but Node would hand back its source as plain text — so never serve it
+// from here.
+app.get("/api-proxy.php", (c) => c.json({ error: "Not Found" }, 404));
+
 app.use("*", serveStatic({ root: staticRoot }));
 
 app.notFound((c) => {

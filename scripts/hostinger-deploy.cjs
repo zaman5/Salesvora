@@ -31,6 +31,24 @@ if (!fs.existsSync(src)) {
   process.exit(1);
 }
 
+// Stage the PHP proxy INTO the build output before copying.
+//
+// The proxy used to be copied to public_html on its own, after .htaccess was
+// written. That ordering is what took the site down on 2026-07-25: .htaccess
+// landed, the separate proxy copy did not, and every /api request was then
+// rewritten to a file that was not there — LiteSpeed answered a bare 404 for
+// auth.login, auth.me and every other tRPC call while the SPA itself loaded
+// fine. Shipping the proxy as part of dist/public means it rides the same
+// fs.cpSync as index.html: if the site's HTML landed, the proxy landed too.
+const phpSrc = path.join(cwd, 'scripts/api-proxy.php');
+if (!fs.existsSync(phpSrc)) {
+  console.error('[deploy] ERROR: scripts/api-proxy.php is missing from the checkout.');
+  console.error('[deploy]   Without it every /api request 404s. Refusing to deploy.');
+  process.exit(1);
+}
+fs.copyFileSync(phpSrc, path.join(src, 'api-proxy.php'));
+console.log('[deploy] ✓ api-proxy.php staged into dist/public/');
+
 // Copy all static files to public_html/
 fs.cpSync(src, dest, { recursive: true, force: true });
 console.log('[deploy] ✓ Static files copied to public_html/');
@@ -67,6 +85,30 @@ function chmodTree(target) {
 fs.chmodSync(dest, DIR_MODE);
 for (const entry of fs.readdirSync(src)) chmodTree(path.join(dest, entry));
 console.log('[deploy] ✓ Permissions set (dirs 755, files 644)');
+
+// Gate the .htaccess on the proxy actually being in the docroot.
+//
+// The .htaccess below rewrites every /api and /health request to
+// /api-proxy.php. Installing it while that file is absent is strictly worse
+// than not deploying at all: the SPA loads and then every API call answers a
+// bare LiteSpeed 404. So confirm the proxy is there — retrying the copy
+// directly if the bundle copy somehow missed it — and bail out before
+// touching .htaccess if it still is not, leaving the previous working
+// .htaccess and proxy in place.
+const phpDest = path.join(dest, 'api-proxy.php');
+if (!fs.existsSync(phpDest)) {
+  console.log('[deploy] api-proxy.php not found in public_html — copying directly.');
+  fs.copyFileSync(phpSrc, phpDest);
+}
+fs.chmodSync(phpDest, FILE_MODE);
+
+if (!fs.existsSync(phpDest) || fs.statSync(phpDest).size === 0) {
+  console.error('[deploy] ✗ api-proxy.php is missing or empty in public_html.');
+  console.error('[deploy]   Every /api request would answer 404. Aborting before');
+  console.error('[deploy]   .htaccess is written so the previous deploy keeps serving.');
+  process.exit(1);
+}
+console.log(`[deploy] ✓ api-proxy.php in public_html/ (${fs.statSync(phpDest).size} bytes)`);
 
 // Create .htaccess — routes API calls through PHP proxy (no mod_proxy needed)
 const htaccess = `# Salesvora - React SPA + PHP API Proxy
@@ -105,15 +147,6 @@ fs.writeFileSync(htaccessPath, htaccess);
 fs.chmodSync(htaccessPath, FILE_MODE);
 console.log('[deploy] ✓ .htaccess created in public_html/');
 
-// Copy PHP proxy to public_html/
-const phpSrc = path.join(cwd, 'scripts/api-proxy.php');
-if (fs.existsSync(phpSrc)) {
-  const phpDest = path.join(dest, 'api-proxy.php');
-  fs.copyFileSync(phpSrc, phpDest);
-  fs.chmodSync(phpDest, FILE_MODE);
-  console.log('[deploy] ✓ api-proxy.php copied to public_html/');
-}
-
 // Also copy the server file for Node.js
 const serverSrc = path.join(cwd, 'dist/boot.js');
 if (fs.existsSync(serverSrc)) {
@@ -149,6 +182,16 @@ if (fs.existsSync(indexPath)) {
   ok = false;
   console.error('[deploy] ✗ index.html is MISSING from public_html.');
   console.error('[deploy]   The site will answer "403 Forbidden" until it exists.');
+}
+
+// index.html landing is not enough to call a deploy good — the site can serve
+// its HTML perfectly while every API call 404s. Check the proxy too.
+if (fs.existsSync(phpDest)) {
+  console.log(`[deploy] ✓ api-proxy.php present (mode ${mode(phpDest)})`);
+} else {
+  ok = false;
+  console.error('[deploy] ✗ api-proxy.php is MISSING from public_html.');
+  console.error('[deploy]   Every /api request will answer 404 until it exists.');
 }
 console.log(`[deploy] public_html mode: ${mode(dest)}`);
 
