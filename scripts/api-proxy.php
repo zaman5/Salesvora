@@ -187,7 +187,10 @@ function findNode() {
 /** Where persistent data lives — outside the checkout, which every push wipes. */
 function dataDir($appDir) {
     if ($appDir && preg_match('#^(/home/[^/]+)/#', $appDir, $m)) return $m[1] . '/salesvora-data';
-    $home = getenv('HOME');
+    // Falling back to the account home keeps this working even when no
+    // checkout can be found at all, which is exactly when the data directory
+    // (holding the secret, the database and the fallback boot.js) matters most.
+    $home = accountHome();
     return $home ? $home . '/salesvora-data' : null;
 }
 
@@ -248,17 +251,55 @@ function buildEnv($appDir) {
     return $envVars;
 }
 
+/**
+ * Every boot.js this proxy could start, best first.
+ *
+ * Hostinger DELETES .builds/source/repository once a deploy finishes, so the
+ * checkout is not somewhere the server can be relied on to exist: the proxy
+ * can only start Node during the brief window between the build and that
+ * cleanup. Miss it — because Node crashed later, or was killed — and there is
+ * no boot.js left anywhere to restart from, which is a silent one-way trip to
+ * a permanently 503 API.
+ *
+ * The deploy therefore keeps a copy in the data directory, which nothing ever
+ * cleans, and that is the fallback here. It works only because boot.js is now
+ * a self-contained bundle (see hostinger-deploy.cjs) — the old external-
+ * packages shim could not have run from outside the checkout at all.
+ *
+ * The checkout still wins when it exists: mid-deploy it is the freshest build,
+ * and preferring it avoids booting a stale copy.
+ */
+function bootScriptCandidates() {
+    $out = [];
+    foreach (appDirCandidates() as $d) $out[] = $d . '/dist/boot.js';
+    $home = accountHome();
+    if ($home) $out[] = $home . '/salesvora-data/boot.js';
+    return array_values(array_unique($out));
+}
+
+function findBootScript() {
+    foreach (bootScriptCandidates() as $p) {
+        if (file_exists($p)) return $p;
+    }
+    return null;
+}
+
 // Try to start Node.js server
 function startServer($appDir) {
-    $script = $appDir . '/dist/boot.js';
-    if (!file_exists($script)) return;
+    $script = findBootScript();
+    if ($script === null) return;
 
     $node = findNode();
     if ($node === null) return;
 
+    // Run from the script's own directory. Every path the app actually needs
+    // (db.json, the mail database, the log) is passed as an absolute env var,
+    // so this only has to be somewhere that exists.
+    $workDir = dirname($script);
     $logFile = logFilePath($appDir);
-    $cmd = 'cd ' . escapeshellarg($appDir) . ' && ' . buildEnv($appDir)
-         . ' nohup ' . escapeshellarg($node) . ' dist/boot.js >> ' . escapeshellarg($logFile) . ' 2>&1 &';
+    $cmd = 'cd ' . escapeshellarg($workDir) . ' && ' . buildEnv($appDir)
+         . ' nohup ' . escapeshellarg($node) . ' ' . escapeshellarg($script)
+         . ' >> ' . escapeshellarg($logFile) . ' 2>&1 &';
 
     if (!shellSpawn($cmd, $logFile)) return;
 
@@ -319,6 +360,12 @@ if (isset($_GET['debug'])) {
         }, appDirCandidates()),
         'app_dir_memo'   => ($m = appDirMemoPath()) && file_exists($m)
             ? trim((string)@file_get_contents($m)) : null,
+        // Which boot.js a restart would actually use. boot_script === null is
+        // the fatal state: Node cannot be started again by any request.
+        'boot_script'    => findBootScript(),
+        'boot_script_search' => array_map(function ($p) {
+            return ['path' => $p, 'exists' => file_exists($p)];
+        }, bootScriptCandidates()),
         'script_dir'     => __DIR__,
         'document_root'  => isset($_SERVER['DOCUMENT_ROOT']) ? $_SERVER['DOCUMENT_ROOT'] : null,
         'server_running' => isServerRunning(),

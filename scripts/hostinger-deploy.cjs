@@ -72,6 +72,41 @@ console.log('[deploy] ✓ api-proxy.php staged into dist/public/');
 fs.cpSync(src, dest, { recursive: true, force: true });
 console.log('[deploy] ✓ Static files copied to public_html/');
 
+// Keep a copy of the server bundle where nothing ever deletes it.
+//
+// Hostinger removes .builds/source/repository once a deploy completes, so the
+// checkout is NOT a durable home for dist/boot.js. The proxy can only start
+// Node in the window between this script running and that cleanup; if the
+// process later dies there is no boot.js left to restart from and the API is
+// permanently 503 with no way back short of pushing another commit. That is
+// the state the site was found in.
+//
+// The data directory is outside both the checkout and the web root, and is
+// where db.json and app_secret already live for the same reason. Copying the
+// bundle there is only possible because it is now self-contained — see the
+// INVARIANT note above.
+const bootSrc = path.join(cwd, 'dist/boot.js');
+const homeMatch = cwd.replace(/\\/g, '/').match(/^(\/home\/[^/]+)\//);
+if (homeMatch && fs.existsSync(bootSrc)) {
+  const dataDir = path.join(homeMatch[1], 'salesvora-data');
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    // Write beside the target then rename, so a restart that happens during
+    // this copy sees either the old bundle or the new one, never a half file.
+    const tmp = path.join(dataDir, 'boot.js.tmp');
+    fs.copyFileSync(bootSrc, tmp);
+    fs.renameSync(tmp, path.join(dataDir, 'boot.js'));
+    const kb = Math.round(fs.statSync(path.join(dataDir, 'boot.js')).size / 1024);
+    console.log(`[deploy] ✓ Server bundle mirrored to ${dataDir}/boot.js (${kb} kb)`);
+  } catch (err) {
+    // Non-fatal: the checkout copy still works for this deploy's boot window.
+    console.log(`[deploy] Note: could not mirror boot.js (${err.message}).`);
+    console.log('[deploy]   The API will not survive a restart once the checkout is cleaned.');
+  }
+} else if (!fs.existsSync(bootSrc)) {
+  console.log('[deploy] Note: dist/boot.js not found — server bundle not mirrored.');
+}
+
 // Permissions the web server needs: 0755 on directories, 0644 on files.
 //
 // This is not belt-and-braces — fs.cpSync copies the SOURCE mode onto the
