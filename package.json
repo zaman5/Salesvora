@@ -9,7 +9,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build && esbuild api/boot.ts --platform=node --bundle --format=esm --packages=external --outfile=dist/boot.js && node scripts/hostinger-deploy.cjs",
+    "build": "vite build && npm run build:server && node scripts/hostinger-deploy.cjs",
+    "build:server": "esbuild api/boot.ts --platform=node --bundle --format=esm --outfile=dist/boot.js --external:better-sqlite3 --banner:js=\"import{createRequire as ___cr}from'module';const require=___cr(import.meta.url);\"",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node dist/boot.js",

@@ -5,6 +5,25 @@ const path = require('path');
 const cwd = process.cwd();
 const src = path.join(cwd, 'dist/public');
 
+// INVARIANT: dist/boot.js must be a SELF-CONTAINED bundle.
+//
+// The server build deliberately does not use esbuild's --packages=external.
+// With it, boot.js was a thin 364kb shim that resolved every dependency from
+// the checkout's node_modules at runtime, which made booting only as reliable
+// as that directory. On 2026-07-25 it wasn't: an interrupted/partial npm
+// install left @trpc/server holding chunks from two different versions, so
+// Node died at startup with
+//   ERR_MODULE_NOT_FOUND: .../@trpc/server/dist/codes-DagpWZLc.mjs
+//   imported from .../@trpc/server/dist/getErrorShape-BPSzUA7W.mjs
+// and the whole API answered 503. Nothing in the app could detect or recover
+// from that, because the failure happened before any of the app's own code ran.
+//
+// Bundling every JS dependency in makes the running server independent of
+// node_modules entirely (verified by booting it in an empty directory). Only
+// better-sqlite3 stays external, and only as the unreachable fallback arm of
+// api/mailsender/db.ts — the host's Node 24 provides node:sqlite. If you ever
+// reintroduce --packages=external, you are also reintroducing this outage.
+
 // Detect Hostinger by checking if public_html is in the path
 const isHostinger = cwd.includes('public_html');
 
