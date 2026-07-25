@@ -2,6 +2,7 @@
 import { calls, callDispositions, callRecordings } from "@db/schema";
 import { eq, and, desc, count, sql, gte, lte } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
+import { warnJsonFallback } from "./fallbackLog";
 
 // ─── Calls ───
 export async function findCallsByCompany(companyId?: number, page?: number, limit?: number) {
@@ -27,7 +28,7 @@ export async function findCallsByCompany(companyId?: number, page?: number, limi
       orderBy: [desc(calls.createdAt)],
     });
   } catch {
-    console.warn("[findCallsByCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findCallsByCompany");
     const data = readJsonDb();
     const companyCalls = data.calls
       .filter((c: any) => companyId === undefined || c.companyId == companyId)
@@ -64,7 +65,7 @@ export async function findCallsByCaller(callerId: number, page?: number, limit?:
       orderBy: [desc(calls.createdAt)],
     });
   } catch {
-    console.warn("[findCallsByCaller] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findCallsByCaller");
     const data = readJsonDb();
     const callerCalls = data.calls
       .filter((c: any) => c.callerId == callerId)
@@ -85,7 +86,7 @@ export async function findCallById(id: number) {
       where: eq(calls.id, id),
     });
   } catch {
-    console.warn("[findCallById] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findCallById");
     const data = readJsonDb();
     return data.calls.find((c: any) => c.id == id) || null;
   }
@@ -103,7 +104,7 @@ export async function findActiveCallByCaller(callerId: number) {
       orderBy: [desc(calls.createdAt)],
     });
   } catch {
-    console.warn("[findActiveCallByCaller] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findActiveCallByCaller");
     const data = readJsonDb();
     const active = data.calls
       .filter((c: any) => c.callerId == callerId && c.status === "connected")
@@ -182,7 +183,7 @@ export async function getCallStats(callerId: number, dateFrom?: Date, dateTo?: D
       avgDuration: Math.round(avgDurationResult[0]?.avg || 0),
     };
   } catch {
-    console.warn("[getCallStats] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getCallStats");
     const data = readJsonDb();
     const callerCalls = data.calls.filter((c: any) => c.callerId == callerId);
     const filtered = callerCalls.filter((c: any) => {
@@ -226,7 +227,7 @@ export async function findDispositions(companyId?: number) {
       orderBy: [callDispositions.order],
     });
   } catch {
-    console.warn("[findDispositions] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findDispositions");
     const data = readJsonDb();
     return data.callDispositions
       .filter((d: any) => d.isActive !== false && (!d.companyId || d.companyId == companyId))
@@ -239,7 +240,7 @@ export async function createDisposition(data: any) {
     const result = await getDb().insert(callDispositions).values(data).$returningId();
     return result[0]?.id;
   } catch {
-    console.warn("[createDisposition] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createDisposition");
     const store = readJsonDb();
     const id = Date.now();
     const newDisp = {
@@ -289,7 +290,7 @@ export async function createRecording(data: any) {
     const result = await getDb().insert(callRecordings).values(data).$returningId();
     return result[0]?.id;
   } catch {
-    console.warn("[createRecording] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createRecording");
     const store = readJsonDb();
     const id = Date.now();
     const newRec = {
@@ -310,7 +311,7 @@ export async function findRecordingsByCall(callId: number) {
       orderBy: [desc(callRecordings.createdAt)],
     });
   } catch {
-    console.warn("[findRecordingsByCall] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findRecordingsByCall");
     const data = readJsonDb();
     return data.callRecordings
       .filter((r: any) => r.callId == callId)

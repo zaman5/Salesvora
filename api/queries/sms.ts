@@ -2,6 +2,7 @@
 import { smsCampaigns, smsLogs } from "@db/schema";
 import { eq, desc, sql, and, or, count } from "drizzle-orm";
 import { readJsonDb, writeJsonDb, serializeDates } from "./jsonDb";
+import { warnJsonFallback } from "./fallbackLog";
 
 export async function findSMSCampaignsByCompany(companyId?: number) {
   try {
@@ -10,7 +11,7 @@ export async function findSMSCampaignsByCompany(companyId?: number) {
       orderBy: [desc(smsCampaigns.createdAt)],
     });
   } catch {
-    console.warn("[findSMSCampaignsByCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findSMSCampaignsByCompany");
     const data = readJsonDb();
     return data.smsCampaigns
       .filter((sc: any) => companyId === undefined || sc.companyId == companyId)
@@ -24,7 +25,7 @@ export async function findSMSCampaignById(id: number) {
       where: eq(smsCampaigns.id, id),
     });
   } catch {
-    console.warn("[findSMSCampaignById] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findSMSCampaignById");
     const data = readJsonDb();
     return data.smsCampaigns.find((sc: any) => sc.id == id) || null;
   }
@@ -43,7 +44,7 @@ export async function createSMSCampaign(data: { name: string; companyId: number;
     }).$returningId();
     return result[0]?.id;
   } catch {
-    console.warn("[createSMSCampaign] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createSMSCampaign");
     const store = readJsonDb();
     const id = Date.now();
     const newCamp = {
@@ -67,7 +68,7 @@ export async function updateSMSCampaign(id: number, data: Partial<{ name: string
   try {
     await getDb().update(smsCampaigns).set(data as any).where(eq(smsCampaigns.id, id));
   } catch {
-    console.warn("[updateSMSCampaign] DB offline, falling back to local JSON store.");
+    warnJsonFallback("updateSMSCampaign");
     const store = readJsonDb();
     const idx = store.smsCampaigns.findIndex((sc: any) => sc.id == id);
     if (idx !== -1) {
@@ -89,7 +90,7 @@ export async function findSMSLogsByCampaign(smsCampaignId: number) {
       orderBy: [desc(smsLogs.createdAt)],
     });
   } catch {
-    console.warn("[findSMSLogsByCampaign] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findSMSLogsByCampaign");
     const data = readJsonDb();
     return data.smsLogs
       .filter((sl: any) => sl.smsCampaignId == smsCampaignId)
@@ -137,7 +138,7 @@ export async function findSMSLogsByCompany(companyId: number, limit = 200) {
       limit,
     });
   } catch {
-    console.warn("[findSMSLogsByCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findSMSLogsByCompany");
     const data = readJsonDb();
     return (data.smsLogs as any[])
       .filter((sl) => sl.companyId == companyId)
@@ -179,7 +180,7 @@ export async function findSMSConversation(companyId: number, otherNumber: string
       orderBy: [smsLogs.createdAt],
     });
   } catch {
-    console.warn("[findSMSConversation] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findSMSConversation");
     const data = readJsonDb();
     return (data.smsLogs as any[])
       .filter((sl) => sl.companyId == companyId && (variants.includes(sl.toNumber) || variants.includes(sl.fromNumber)))
@@ -205,7 +206,7 @@ export async function markConversationRead(companyId: number, otherNumber: strin
         or(...variants.map((v) => eq(smsLogs.fromNumber, v))),
       ));
   } catch {
-    console.warn("[markConversationRead] DB offline, falling back to local JSON store.");
+    warnJsonFallback("markConversationRead");
     const store = readJsonDb();
     let changed = false;
     for (const sl of store.smsLogs as any[]) {
@@ -226,7 +227,7 @@ export async function findAllSMSLogsByCompany(companyId: number) {
       orderBy: [smsLogs.createdAt],
     });
   } catch {
-    console.warn("[findAllSMSLogsByCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findAllSMSLogsByCompany");
     const data = readJsonDb();
     return (data.smsLogs as any[])
       .filter((sl) => sl.companyId == companyId)
@@ -285,7 +286,7 @@ export async function getSMSStats(companyId: number) {
       ));
     return { totalSent: sentR.value, totalReceived: receivedR.value, unreadCount: unreadR.value };
   } catch {
-    console.warn("[getSMSStats] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getSMSStats");
     const data = readJsonDb();
     const companyLogs = (data.smsLogs as any[]).filter((sl) => sl.companyId == companyId);
     return {
@@ -306,7 +307,7 @@ export async function updateSMSLogStatus(id: number, status: string, twilioSid?:
     
     await getDb().update(smsLogs).set(updateData).where(eq(smsLogs.id, id));
   } catch {
-    console.warn("[updateSMSLogStatus] DB offline, falling back to local JSON store.");
+    warnJsonFallback("updateSMSLogStatus");
     const store = readJsonDb();
     const idx = store.smsLogs.findIndex((sl: any) => sl.id == id);
     if (idx !== -1) {
@@ -330,7 +331,7 @@ export async function incrementSMSStats(campaignId: number, field: "sentMessages
       .set({ [field]: sql`${smsCampaigns[field]} + 1` })
       .where(eq(smsCampaigns.id, campaignId));
   } catch {
-    console.warn("[incrementSMSStats] DB offline, falling back to local JSON store.");
+    warnJsonFallback("incrementSMSStats");
     const store = readJsonDb();
     const idx = store.smsCampaigns.findIndex((sc: any) => sc.id == campaignId);
     if (idx !== -1) {

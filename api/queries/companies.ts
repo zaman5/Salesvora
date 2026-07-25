@@ -2,6 +2,7 @@
 import { companies } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
+import { warnJsonFallback } from "./fallbackLog";
 
 export async function findAllCompanies() {
   try {
@@ -9,7 +10,7 @@ export async function findAllCompanies() {
       orderBy: (companies, { desc }) => [desc(companies.createdAt)],
     });
   } catch {
-    console.warn("[findAllCompanies] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findAllCompanies");
     const data = readJsonDb();
     return data.companies.filter((c: any) => c.isActive !== false);
   }
@@ -21,7 +22,7 @@ export async function findCompanyById(id: number) {
       where: eq(companies.id, id),
     });
   } catch {
-    console.warn("[findCompanyById] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findCompanyById");
     const data = readJsonDb();
     return data.companies.find((c: any) => c.id === id) || null;
   }
@@ -32,7 +33,7 @@ export async function createCompany(data: any) {
     const result = await getDb().insert(companies).values(data).$returningId();
     return result[0]?.id;
   } catch {
-    console.warn("[createCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createCompany");
     const store = readJsonDb();
     const id = Date.now();
     const newCompany = {
@@ -52,7 +53,7 @@ export async function updateCompany(id: number, data: any) {
   try {
     await getDb().update(companies).set(data).where(eq(companies.id, id));
   } catch {
-    console.warn("[updateCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("updateCompany");
     const store = readJsonDb();
     const companyIndex = store.companies.findIndex((c: any) => c.id === id);
     if (companyIndex !== -1) {
@@ -70,7 +71,7 @@ export async function deleteCompany(id: number) {
   try {
     await getDb().update(companies).set({ isActive: false }).where(eq(companies.id, id));
   } catch {
-    console.warn("[deleteCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("deleteCompany");
     const store = readJsonDb();
     const companyIndex = store.companies.findIndex((c: any) => c.id === id);
     if (companyIndex !== -1) {

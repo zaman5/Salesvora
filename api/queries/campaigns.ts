@@ -3,6 +3,7 @@ import { campaigns, campaignLeads } from "@db/schema";
 import { eq, and, desc, count, sql } from "drizzle-orm";
 import type { InsertCampaignLead } from "@db/schema";
 import { readJsonDb, writeJsonDb, serializeDates } from "./jsonDb";
+import { warnJsonFallback } from "./fallbackLog";
 
 export async function findCampaignsByCompany(companyId?: number) {
   try {
@@ -11,7 +12,7 @@ export async function findCampaignsByCompany(companyId?: number) {
       orderBy: [desc(campaigns.createdAt)],
     });
   } catch {
-    console.warn("[findCampaignsByCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findCampaignsByCompany");
     const data = readJsonDb();
     return data.campaigns
       .filter((c: any) => companyId === undefined || c.companyId == companyId)
@@ -25,7 +26,7 @@ export async function findCampaignById(id: number) {
       where: eq(campaigns.id, id),
     });
   } catch {
-    console.warn("[findCampaignById] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findCampaignById");
     const data = readJsonDb();
     return data.campaigns.find((c: any) => c.id == id) || null;
   }
@@ -38,7 +39,7 @@ export async function findCampaignsByStatus(companyId: number, status: string) {
       orderBy: [desc(campaigns.createdAt)],
     });
   } catch {
-    console.warn("[findCampaignsByStatus] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findCampaignsByStatus");
     const data = readJsonDb();
     return data.campaigns
       .filter((c: any) => c.companyId == companyId && c.status === status)
@@ -51,7 +52,7 @@ export async function createCampaign(data: any) {
     const result = await getDb().insert(campaigns).values(data).$returningId();
     return result[0]?.id;
   } catch {
-    console.warn("[createCampaign] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createCampaign");
     const store = readJsonDb();
     const id = Date.now();
     const newCampaign = {
@@ -75,7 +76,7 @@ export async function updateCampaign(id: number, data: any) {
   try {
     await getDb().update(campaigns).set(data).where(eq(campaigns.id, id));
   } catch {
-    console.warn("[updateCampaign] DB offline, falling back to local JSON store.");
+    warnJsonFallback("updateCampaign");
     const store = readJsonDb();
     const idx = store.campaigns.findIndex((c: any) => c.id == id);
     if (idx !== -1) {
@@ -93,7 +94,7 @@ export async function deleteCampaign(id: number) {
   try {
     await getDb().update(campaigns).set({ status: "completed" }).where(eq(campaigns.id, id));
   } catch {
-    console.warn("[deleteCampaign] DB offline, falling back to local JSON store.");
+    warnJsonFallback("deleteCampaign");
     const store = readJsonDb();
     const idx = store.campaigns.findIndex((c: any) => c.id == id);
     if (idx !== -1) {
@@ -120,7 +121,7 @@ export async function addLeadsToCampaign(data: InsertCampaignLead[]) {
     
     return result.map(r => r.id);
   } catch {
-    console.warn("[addLeadsToCampaign] DB offline, falling back to local JSON store.");
+    warnJsonFallback("addLeadsToCampaign");
     const store = readJsonDb();
     const ids = [];
     const campaignId = data[0]?.campaignId;
@@ -166,7 +167,7 @@ export async function getCampaignLeads(campaignId: number, status?: string) {
       orderBy: [campaignLeads.sequenceOrder],
     });
   } catch {
-    console.warn("[getCampaignLeads] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getCampaignLeads");
     const data = readJsonDb();
     const clList = data.campaignLeads.filter((cl: any) => cl.campaignId == campaignId);
     const filtered = status ? clList.filter((cl: any) => cl.status === status) : clList;
@@ -199,7 +200,7 @@ export async function getNextCampaignLead(campaignId: number, callerId?: number)
       orderBy: [campaignLeads.sequenceOrder],
     });
   } catch {
-    console.warn("[getNextCampaignLead] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getNextCampaignLead");
     const data = readJsonDb();
     let clList = data.campaignLeads.filter((cl: any) => cl.campaignId == campaignId && cl.status === "pending");
     if (callerId) {
@@ -221,7 +222,7 @@ export async function updateCampaignLeadStatus(id: number, status: string, data?
   try {
     await getDb().update(campaignLeads).set({ status: status as any, ...data }).where(eq(campaignLeads.id, id));
   } catch {
-    console.warn("[updateCampaignLeadStatus] DB offline, falling back to local JSON store.");
+    warnJsonFallback("updateCampaignLeadStatus");
     const store = readJsonDb();
     const idx = store.campaignLeads.findIndex((cl: any) => cl.id == id);
     if (idx !== -1) {
@@ -257,7 +258,7 @@ export async function getCampaignProgress(campaignId: number) {
       progress: totalResult.value > 0 ? Math.round((completedResult.value / totalResult.value) * 100) : 0,
     };
   } catch {
-    console.warn("[getCampaignProgress] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getCampaignProgress");
     const data = readJsonDb();
     const clList = data.campaignLeads.filter((cl: any) => cl.campaignId == campaignId);
     const total = clList.length;

@@ -2,6 +2,7 @@
 import { aiAgents, aiConversations } from "@db/schema";
 import { eq, desc } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
+import { warnJsonFallback } from "./fallbackLog";
 
 export async function findAIAgentsByCompany(companyId?: number) {
   try {
@@ -10,7 +11,7 @@ export async function findAIAgentsByCompany(companyId?: number) {
       orderBy: [desc(aiAgents.createdAt)],
     });
   } catch {
-    console.warn("[findAIAgentsByCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findAIAgentsByCompany");
     const data = readJsonDb();
     return data.aiAgents
       .filter((a: any) => companyId === undefined || a.companyId == companyId)
@@ -24,7 +25,7 @@ export async function findAIAgentById(id: number) {
       where: eq(aiAgents.id, id),
     });
   } catch {
-    console.warn("[findAIAgentById] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findAIAgentById");
     const data = readJsonDb();
     return data.aiAgents.find((a: any) => a.id == id) || null;
   }
@@ -51,7 +52,7 @@ export async function createAIAgent(data: {
     }).$returningId();
     return result[0]?.id;
   } catch {
-    console.warn("[createAIAgent] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createAIAgent");
     const store = readJsonDb();
     const id = Date.now();
     const newAgent = {
@@ -77,7 +78,7 @@ export async function updateAIAgent(id: number, data: Partial<{
   try {
     await getDb().update(aiAgents).set(data as any).where(eq(aiAgents.id, id));
   } catch {
-    console.warn("[updateAIAgent] DB offline, falling back to local JSON store.");
+    warnJsonFallback("updateAIAgent");
     const store = readJsonDb();
     const idx = store.aiAgents.findIndex((a: any) => a.id == id);
     if (idx !== -1) {
@@ -95,7 +96,7 @@ export async function deleteAIAgent(id: number) {
   try {
     await getDb().update(aiAgents).set({ isActive: false }).where(eq(aiAgents.id, id));
   } catch {
-    console.warn("[deleteAIAgent] DB offline, falling back to local JSON store.");
+    warnJsonFallback("deleteAIAgent");
     const store = readJsonDb();
     const idx = store.aiAgents.findIndex((a: any) => a.id == id);
     if (idx !== -1) {
@@ -114,7 +115,7 @@ export async function findConversationsByAgent(agentId: number) {
       orderBy: [desc(aiConversations.createdAt)],
     });
   } catch {
-    console.warn("[findConversationsByAgent] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findConversationsByAgent");
     const data = readJsonDb();
     return data.aiConversations
       .filter((c: any) => c.agentId == agentId)
@@ -132,7 +133,7 @@ export async function createAIConversation(data: { agentId: number; leadId: numb
     }).$returningId();
     return result[0]?.id;
   } catch {
-    console.warn("[createAIConversation] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createAIConversation");
     const store = readJsonDb();
     const id = Date.now();
     const newConv = {
@@ -155,7 +156,7 @@ export async function updateConversationTranscript(id: number, transcript: any[]
       .set({ transcript, sentiment: sentiment as any, outcome })
       .where(eq(aiConversations.id, id));
   } catch {
-    console.warn("[updateConversationTranscript] DB offline, falling back to local JSON store.");
+    warnJsonFallback("updateConversationTranscript");
     const store = readJsonDb();
     const idx = store.aiConversations.findIndex((c: any) => c.id == id);
     if (idx !== -1) {

@@ -3,6 +3,7 @@ import { leadLists, leads, leadListAssignments } from "@db/schema";
 import { eq, and, or, desc, count, sql } from "drizzle-orm";
 import type { InsertLeadListAssignment } from "@db/schema";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
+import { warnJsonFallback } from "./fallbackLog";
 
 // ─── Lead Lists ───
 export async function findLeadListsByCompany(companyId?: number) {
@@ -12,7 +13,7 @@ export async function findLeadListsByCompany(companyId?: number) {
       orderBy: [desc(leadLists.createdAt)],
     });
   } catch {
-    console.warn("[findLeadListsByCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findLeadListsByCompany");
     const data = readJsonDb();
     return data.leadLists
       .filter((l: any) => (companyId === undefined || l.companyId == companyId) && l.status !== "archived")
@@ -26,7 +27,7 @@ export async function findLeadListById(id: number) {
       where: eq(leadLists.id, id),
     });
   } catch {
-    console.warn("[findLeadListById] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findLeadListById");
     const data = readJsonDb();
     return data.leadLists.find((l: any) => l.id == id) || null;
   }
@@ -37,7 +38,7 @@ export async function createLeadList(data: any) {
     const result = await getDb().insert(leadLists).values(data).$returningId();
     return result[0]?.id;
   } catch {
-    console.warn("[createLeadList] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createLeadList");
     const store = readJsonDb();
     const id = Date.now();
     const newList = {
@@ -59,7 +60,7 @@ export async function updateLeadList(id: number, data: any) {
   try {
     await getDb().update(leadLists).set(data).where(eq(leadLists.id, id));
   } catch {
-    console.warn("[updateLeadList] DB offline, falling back to local JSON store.");
+    warnJsonFallback("updateLeadList");
     const store = readJsonDb();
     const idx = store.leadLists.findIndex((l: any) => l.id == id);
     if (idx !== -1) {
@@ -77,7 +78,7 @@ export async function deleteLeadList(id: number) {
   try {
     await getDb().update(leadLists).set({ status: "archived" }).where(eq(leadLists.id, id));
   } catch {
-    console.warn("[deleteLeadList] DB offline, falling back to local JSON store.");
+    warnJsonFallback("deleteLeadList");
     const store = readJsonDb();
     const idx = store.leadLists.findIndex((l: any) => l.id == id);
     if (idx !== -1) {
@@ -94,7 +95,7 @@ export async function incrementLeadCount(listId: number, amount: number = 1) {
       .set({ totalLeads: sql`${leadLists.totalLeads} + ${amount}` })
       .where(eq(leadLists.id, listId));
   } catch {
-    console.warn("[incrementLeadCount] DB offline, falling back to local JSON store.");
+    warnJsonFallback("incrementLeadCount");
     const store = readJsonDb();
     const idx = store.leadLists.findIndex((l: any) => l.id == listId);
     if (idx !== -1) {
@@ -127,7 +128,7 @@ export async function findLeadsByList(leadListId: number, page?: number, limit?:
       orderBy: [desc(leads.createdAt)],
     });
   } catch {
-    console.warn("[findLeadsByList] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findLeadsByList");
     const data = readJsonDb();
     const listLeads = data.leads
       .filter((l: any) => l.leadListId == leadListId && l.isDeleted !== true)
@@ -149,7 +150,7 @@ export async function findLeadsByCompany(companyId: number) {
       orderBy: [desc(leads.createdAt)],
     });
   } catch {
-    console.warn("[findLeadsByCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findLeadsByCompany");
     const data = readJsonDb();
     return data.leads
       .filter((l: any) => l.companyId == companyId && l.isDeleted !== true)
@@ -167,7 +168,7 @@ export async function findLeadByPhone(companyId: number, phone: string) {
       ),
     });
   } catch {
-    console.warn("[findLeadByPhone] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findLeadByPhone");
     const data = readJsonDb();
     return data.leads.find(
       (l: any) => l.companyId == companyId && l.isDeleted !== true && (l.phone === phone || l.phone2 === phone),
@@ -181,7 +182,7 @@ export async function findLeadById(id: number) {
       where: eq(leads.id, id),
     });
   } catch {
-    console.warn("[findLeadById] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findLeadById");
     const data = readJsonDb();
     return data.leads.find((l: any) => l.id == id) || null;
   }
@@ -196,7 +197,7 @@ export async function createLead(data: any) {
     }
     return id;
   } catch {
-    console.warn("[createLead] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createLead");
     const store = readJsonDb();
     const id = Date.now();
     const newLead = {
@@ -235,7 +236,7 @@ export async function createLeadsBatch(data: any[]) {
     
     return result.map(r => r.id);
   } catch {
-    console.warn("[createLeadsBatch] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createLeadsBatch");
     const store = readJsonDb();
     const ids = [];
     const listId = data[0]?.leadListId;
@@ -272,7 +273,7 @@ export async function updateLead(id: number, data: any) {
   try {
     await getDb().update(leads).set(data).where(eq(leads.id, id));
   } catch {
-    console.warn("[updateLead] DB offline, falling back to local JSON store.");
+    warnJsonFallback("updateLead");
     const store = readJsonDb();
     const idx = store.leads.findIndex((l: any) => l.id == id);
     if (idx !== -1) {
@@ -290,7 +291,7 @@ export async function deleteLead(id: number) {
   try {
     await getDb().update(leads).set({ isDeleted: true }).where(eq(leads.id, id));
   } catch {
-    console.warn("[deleteLead] DB offline, falling back to local JSON store.");
+    warnJsonFallback("deleteLead");
     const store = readJsonDb();
     const idx = store.leads.findIndex((l: any) => l.id == id);
     if (idx !== -1) {
@@ -312,7 +313,7 @@ export async function searchLeads(companyId: number, query: string) {
       limit: 50,
     });
   } catch {
-    console.warn("[searchLeads] DB offline, falling back to local JSON store.");
+    warnJsonFallback("searchLeads");
     const data = readJsonDb();
     const q = query.toLowerCase();
     return data.leads
@@ -337,7 +338,7 @@ export async function assignListToCaller(data: InsertLeadListAssignment) {
     const result = await getDb().insert(leadListAssignments).values(data).$returningId();
     return result[0]?.id;
   } catch {
-    console.warn("[assignListToCaller] DB offline, falling back to local JSON store.");
+    warnJsonFallback("assignListToCaller");
     const store = readJsonDb();
     const id = Date.now();
     const newAssignment = {
@@ -357,7 +358,7 @@ export async function getAssignedListsForCaller(callerId: number) {
       where: eq(leadListAssignments.callerId, callerId),
     });
   } catch {
-    console.warn("[getAssignedListsForCaller] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getAssignedListsForCaller");
     const data = readJsonDb();
     return data.leadListAssignments.filter((a: any) => a.callerId == callerId);
   }
@@ -368,7 +369,7 @@ export async function removeListAssignment(listId: number, callerId: number) {
     await getDb().delete(leadListAssignments)
       .where(and(eq(leadListAssignments.leadListId, listId), eq(leadListAssignments.callerId, callerId)));
   } catch {
-    console.warn("[removeListAssignment] DB offline, falling back to local JSON store.");
+    warnJsonFallback("removeListAssignment");
     const store = readJsonDb();
     store.leadListAssignments = store.leadListAssignments.filter(
       (a: any) => !(a.leadListId == listId && a.callerId == callerId)

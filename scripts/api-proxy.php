@@ -472,9 +472,31 @@ if (in_array($_SERVER['REQUEST_METHOD'], ['POST', 'PUT', 'PATCH'])) {
     curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents('php://input'));
 }
 
+// Forward the client's headers, minus the ones that describe the hop.
+//
+// Host is dropped because curl sets its own (127.0.0.1:3000). That rewriting is
+// what broke Mail Sender: its CSRF guard compares the browser's Origin against
+// the Host the request arrived on, and behind this proxy those are
+// "salesvora.online" and "127.0.0.1:3000" — never equal, so every POST/PUT/
+// DELETE to /api/mail answered 403.
+//
+// The X-Forwarded-* headers below carry the original values instead. They are
+// STRIPPED from the incoming request first and then set here, so a client
+// cannot supply its own and talk the app into trusting a host it never saw —
+// without that, forwarding them would hand over the very CSRF bypass the guard
+// exists to prevent.
+$dropped = ['host', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-for'];
 $hdrs = [];
 foreach (getallheaders() as $k => $v) {
-    if (strtolower($k) !== 'host') $hdrs[] = "$k: $v";
+    if (!in_array(strtolower($k), $dropped, true)) $hdrs[] = "$k: $v";
+}
+if (!empty($_SERVER['HTTP_HOST'])) {
+    $hdrs[] = 'X-Forwarded-Host: ' . $_SERVER['HTTP_HOST'];
+}
+$https = !empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off';
+$hdrs[] = 'X-Forwarded-Proto: ' . ($https ? 'https' : 'http');
+if (!empty($_SERVER['REMOTE_ADDR'])) {
+    $hdrs[] = 'X-Forwarded-For: ' . $_SERVER['REMOTE_ADDR'];
 }
 curl_setopt($ch, CURLOPT_HTTPHEADER, $hdrs);
 

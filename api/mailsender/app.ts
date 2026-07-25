@@ -33,6 +33,17 @@ mailApp.use(bodyParser.json({ limit: 52428800 }));
 // matches the Host header this request arrived on.
 const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/**
+ * True when the request arrived over loopback — i.e. from the local PHP proxy
+ * rather than straight off the network. Only then may X-Forwarded-* be trusted.
+ * IPv4-mapped IPv6 (::ffff:127.0.0.1) is how Node reports a v4 loopback peer on
+ * a dual-stack socket, so it has to count too.
+ */
+function isLoopback(req: { socket?: { remoteAddress?: string | null } }): boolean {
+  const addr = req.socket?.remoteAddress || '';
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+
 mailApp.use((req, res, next) => {
   if (!STATE_CHANGING.has(req.method)) return next();
 
@@ -46,7 +57,19 @@ mailApp.use((req, res, next) => {
     return res.status(403).json({ error: 'Request blocked: malformed Origin header.' });
   }
 
-  const selfHost = req.get('host') || '';
+  // In production this app sits behind scripts/api-proxy.php, which forwards
+  // over loopback — so the Host header here is "127.0.0.1:3000" while the
+  // browser's Origin is "salesvora.online". Comparing those two rejected every
+  // state-changing Mail Sender request with 403 (the live log was a wall of
+  // "CSRF block: POST /api/mail/accounts"), which is to say the feature was
+  // entirely unusable rather than merely noisy.
+  //
+  // X-Forwarded-Host carries the host the browser actually addressed. It is
+  // only honoured when the request reached us over loopback, because that is
+  // the only path the proxy uses and the header is trivially forgeable by
+  // anyone who can reach this port directly. The proxy strips any
+  // client-supplied copy before setting its own.
+  const selfHost = (isLoopback(req) && req.get('x-forwarded-host')) || req.get('host') || '';
   // Allow an explicit extra origin if the owner ever needs a real cross-site
   // embed (comma-separated hostnames in MAILSENDER_ALLOWED_ORIGINS).
   const extra = (process.env.MAILSENDER_ALLOWED_ORIGINS || '')

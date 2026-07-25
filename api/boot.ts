@@ -62,8 +62,15 @@ function startServer() {
     }
   });
 
-  server.listen(port, () => {
-    console.log(`[boot] ready — http://localhost:${port}/`);
+  // Bind to loopback only. The sole client is scripts/api-proxy.php running on
+  // the same machine, and this is SHARED hosting — listening on 0.0.0.0 put an
+  // unauthenticated app port in front of every other tenant on the box. It also
+  // makes the X-Forwarded-Host trust in api/mailsender/app.ts sound: that header
+  // is honoured for loopback peers, so nothing off-machine may set it.
+  // Override with HOST=0.0.0.0 if a deployment ever genuinely needs it.
+  const host = process.env.HOST || "127.0.0.1";
+  server.listen(port, host, () => {
+    console.log(`[boot] ready — http://${host}:${port}/`);
   });
 
   server.on("error", (err: NodeJS.ErrnoException) => {

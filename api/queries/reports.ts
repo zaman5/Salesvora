@@ -2,6 +2,7 @@ import { getDb } from "./connection";
 import { calls, leads, campaigns, users, smsLogs } from "@db/schema";
 import { eq, and, count, sql, gte, lte } from "drizzle-orm";
 import { readJsonDb } from "./jsonDb";
+import { warnJsonFallback } from "./fallbackLog";
 
 export async function getDashboardStats(companyId: number, dateFrom?: Date, dateTo?: Date) {
   const inRange = (d: any) => {
@@ -121,7 +122,7 @@ export async function getDashboardStats(companyId: number, dateFrom?: Date, date
       smsUnread: smsUnreadResult.value,
     };
   } catch {
-    console.warn("[getDashboardStats] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getDashboardStats");
     const data = readJsonDb();
     const companyCalls = data.calls.filter((c: any) => c.companyId == companyId);
     const totalCalls = companyCalls.length;
@@ -174,7 +175,7 @@ export async function getCallVolumeByDate(companyId: number, days: number = 7) {
     
     return results;
   } catch {
-    console.warn("[getCallVolumeByDate] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getCallVolumeByDate");
     const data = readJsonDb();
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - days);
@@ -223,7 +224,7 @@ export async function getDispositionBreakdown(companyId: number, dateFrom?: Date
     
     return results;
   } catch {
-    console.warn("[getDispositionBreakdown] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getDispositionBreakdown");
     const data = readJsonDb();
     const companyCalls = data.calls.filter((c: any) => c.companyId == companyId && c.dispositionId);
     const filtered = companyCalls.filter((c: any) => {
@@ -266,7 +267,7 @@ export async function getAgentPerformance(companyId: number, dateFrom?: Date, da
     
     return results;
   } catch {
-    console.warn("[getAgentPerformance] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getAgentPerformance");
     const data = readJsonDb();
     const companyCalls = data.calls.filter((c: any) => c.companyId == companyId);
     const filtered = companyCalls.filter((c: any) => {
@@ -327,7 +328,7 @@ export async function getCampaignReport(campaignId: number) {
       dispositions: dispositionResults,
     };
   } catch {
-    console.warn("[getCampaignReport] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getCampaignReport");
     const data = readJsonDb();
     const campaign = data.campaigns.find((c: any) => c.id == campaignId) || null;
     const campCalls = data.calls.filter((c: any) => c.campaignId == campaignId);

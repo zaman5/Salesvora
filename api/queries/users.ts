@@ -6,6 +6,7 @@ import { readJsonDb, writeJsonDb } from "./jsonDb";
 // missing npm package can never crash boot on the shared-hosting deploy. Kept
 // in api/lib/password.ts to avoid the users.ts <-> jsonDb.ts import cycle.
 import { hashPassword, verifyPassword, isHashedPassword } from "../lib/password";
+import { warnJsonFallback } from "./fallbackLog";
 
 // Re-exported so existing importers (auth-router, userRouter) keep working.
 export { hashPassword, verifyPassword, isHashedPassword };
@@ -24,7 +25,7 @@ export async function findAllUsers(companyId?: number) {
       orderBy: [desc(users.createdAt)],
     });
   } catch {
-    console.warn("[findAllUsers] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findAllUsers");
     const data = readJsonDb();
     let res = data.users.filter((u: any) => u.status !== "inactive");
     if (companyId) {
@@ -48,7 +49,7 @@ export async function countAllUsers(): Promise<number> {
   try {
     return (await getDb().query.users.findMany({ columns: { id: true } })).length;
   } catch {
-    console.warn("[countAllUsers] DB offline, falling back to local JSON store.");
+    warnJsonFallback("countAllUsers");
     return readJsonDb().users.length;
   }
 }
@@ -60,7 +61,7 @@ export async function findUsersByCompany(companyId: number) {
       orderBy: [desc(users.createdAt)],
     });
   } catch {
-    console.warn("[findUsersByCompany] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findUsersByCompany");
     const data = readJsonDb();
     return data.users
       .filter((u: any) => u.companyId == companyId && u.status !== "inactive")
@@ -84,7 +85,7 @@ export async function findUsersCreatedBy(companyId: number, adminId: number) {
       orderBy: [desc(users.createdAt)],
     });
   } catch {
-    console.warn("[findUsersCreatedBy] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findUsersCreatedBy");
     const data = readJsonDb();
     return data.users
       .filter((u: any) => u.companyId == companyId && u.status !== "inactive" && (u.createdBy == adminId || u.id == adminId))
@@ -99,7 +100,7 @@ export async function findUsersByRole(companyId: number, role: string) {
       orderBy: [desc(users.createdAt)],
     });
   } catch {
-    console.warn("[findUsersByRole] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findUsersByRole");
     const data = readJsonDb();
     return data.users
       .filter((u: any) => u.companyId == companyId && u.role === role && u.status !== "inactive")
@@ -113,7 +114,7 @@ export async function findUserById(id: number) {
       where: eq(users.id, id),
     });
   } catch {
-    console.warn("[findUserById] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findUserById");
     const data = readJsonDb();
     return data.users.find((u: any) => u.id == id) || null;
   }
@@ -126,7 +127,7 @@ export async function findCallersByAdmin(adminId: number) {
       orderBy: [desc(users.createdAt)],
     });
   } catch {
-    console.warn("[findCallersByAdmin] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findCallersByAdmin");
     const data = readJsonDb();
     return data.users
       .filter((u: any) => u.createdBy == adminId && u.role === "caller" && u.status !== "inactive")
@@ -139,7 +140,7 @@ export async function createUser(data: any) {
     const result = await getDb().insert(users).values(data).$returningId();
     return result[0]?.id;
   } catch {
-    console.warn("[createUser] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createUser");
     const store = readJsonDb();
     const id = Date.now();
     const newUser = {
@@ -158,7 +159,7 @@ export async function updateUser(id: number, data: any) {
   try {
     await getDb().update(users).set(data).where(eq(users.id, id));
   } catch {
-    console.warn("[updateUser] DB offline, falling back to local JSON store.");
+    warnJsonFallback("updateUser");
     const store = readJsonDb();
     const userIndex = store.users.findIndex((u: any) => u.id == id);
     if (userIndex !== -1) {
@@ -176,7 +177,7 @@ export async function deleteUser(id: number) {
   try {
     await getDb().update(users).set({ status: "inactive" }).where(eq(users.id, id));
   } catch {
-    console.warn("[deleteUser] DB offline, falling back to local JSON store.");
+    warnJsonFallback("deleteUser");
     const store = readJsonDb();
     const userIndex = store.users.findIndex((u: any) => u.id == id);
     if (userIndex !== -1) {
@@ -191,7 +192,7 @@ export async function updateLastLogin(id: number) {
   try {
     await getDb().update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, id));
   } catch {
-    console.warn("[updateLastLogin] DB offline, falling back to local JSON store.");
+    warnJsonFallback("updateLastLogin");
     const store = readJsonDb();
     const userIndex = store.users.findIndex((u: any) => u.id == id);
     if (userIndex !== -1) {
@@ -207,7 +208,7 @@ export async function findUserByUnionId(unionId: string) {
       where: eq(users.unionId, unionId),
     });
   } catch {
-    console.warn("[findUserByUnionId] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findUserByUnionId");
     const data = readJsonDb();
     return data.users.find((u: any) => u.unionId === unionId) || null;
   }
@@ -219,7 +220,7 @@ export async function findUserByEmail(email: string) {
       where: eq(users.email, email),
     });
   } catch {
-    console.warn("[findUserByEmail] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findUserByEmail");
     const data = readJsonDb();
     return data.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase()) || null;
   }
@@ -258,7 +259,7 @@ export async function upsertUser(data: { unionId: string; name?: string | null; 
     });
     return findUserById(id!);
   } catch {
-    console.warn("[upsertUser] DB offline, falling back to local JSON store.");
+    warnJsonFallback("upsertUser");
     const store = readJsonDb();
     const existingIndex = store.users.findIndex((u: any) => u.unionId === data.unionId);
     if (existingIndex !== -1) {

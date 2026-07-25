@@ -2,6 +2,7 @@
 import { liveMonitorSessions, calls } from "@db/schema";
 import { eq, and, desc, lt, or, isNull } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
+import { warnJsonFallback } from "./fallbackLog";
 
 // A caller's browser pings calls.heartbeat every ~15s while a call is
 // "connected". If no heartbeat (or start) has been seen for this long, the
@@ -56,7 +57,7 @@ export async function createMonitorSession(data: { adminId: number; callerId: nu
     }).$returningId();
     return result[0]?.id;
   } catch {
-    console.warn("[createMonitorSession] DB offline, falling back to local JSON store.");
+    warnJsonFallback("createMonitorSession");
     const store = readJsonDb();
     const id = Date.now();
     const newSession = {
@@ -77,7 +78,7 @@ export async function findActiveMonitorSessions(adminId: number) {
       orderBy: [desc(liveMonitorSessions.startedAt)],
     });
   } catch {
-    console.warn("[findActiveMonitorSessions] DB offline, falling back to local JSON store.");
+    warnJsonFallback("findActiveMonitorSessions");
     const data = readJsonDb();
     return data.liveMonitorSessions
       .filter((s: any) => s.adminId == adminId && s.status === "listening")
@@ -91,7 +92,7 @@ export async function endMonitorSession(id: number) {
       .set({ status: "ended", endedAt: new Date() })
       .where(eq(liveMonitorSessions.id, id));
   } catch {
-    console.warn("[endMonitorSession] DB offline, falling back to local JSON store.");
+    warnJsonFallback("endMonitorSession");
     const store = readJsonDb();
     const idx = store.liveMonitorSessions.findIndex((s: any) => s.id == id);
     if (idx !== -1) {
@@ -110,7 +111,7 @@ export async function getActiveCallsForMonitoring(companyId: number) {
       orderBy: [desc(calls.createdAt)],
     });
   } catch {
-    console.warn("[getActiveCallsForMonitoring] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getActiveCallsForMonitoring");
     const data = readJsonDb();
     return data.calls
       .filter((c: any) => c.companyId == companyId && (c.status === "connected" || c.status === "ringing"))
@@ -126,7 +127,7 @@ export async function getCallerActiveCall(callerId: number) {
       orderBy: [desc(calls.createdAt)],
     });
   } catch {
-    console.warn("[getCallerActiveCall] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getCallerActiveCall");
     const data = readJsonDb();
     const active = data.calls
       .filter((c: any) => c.callerId == callerId && (c.status === "connected" || c.status === "ringing"))
@@ -157,7 +158,7 @@ export async function getCallerDayReport(callerId: number, date: string) {
       return t >= dayStart.getTime() && t <= dayEnd.getTime();
     });
   } catch {
-    console.warn("[getCallerDayReport] DB offline, falling back to local JSON store.");
+    warnJsonFallback("getCallerDayReport");
     const data = readJsonDb();
     dayCalls = (data.calls || []).filter((c: any) => {
       if (c.callerId != callerId) return false;
