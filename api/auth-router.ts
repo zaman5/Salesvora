@@ -70,9 +70,13 @@ export const authRouter = createRouter({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      // Bad credentials are an authentication failure, not a server fault.
+      // Thrown as a plain Error these reached the browser as HTTP 500, so the
+      // login page logged "auth.login 500" for nothing worse than a typo'd
+      // password. TRPCError carries the right status through.
       const user = await findUserByEmail(input.email);
       if (!user) {
-        throw new Error("Invalid email or password");
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
       }
 
       // Stored credential lookup order is unchanged from the plaintext era so
@@ -86,7 +90,7 @@ export const authRouter = createRouter({
       // legacy plaintext values are compared directly. An existing password is
       // never invalidated by this change.
       if (!(await verifyPassword(input.password, storedPassword))) {
-        throw new Error("Invalid email or password");
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
       }
 
       // Self-migration: the account authenticated against a plaintext value, so
@@ -117,7 +121,7 @@ export const authRouter = createRouter({
       // reactivating a suspended superadmin would make the suspension useless
       // as a containment measure for a compromised operator account.
       if (user.status === "suspended" || user.status === "inactive") {
-        throw new Error("Your account is inactive or suspended");
+        throw new TRPCError({ code: "FORBIDDEN", message: "Your account is inactive or suspended" });
       }
 
       // The session token is keyed on unionId and every lookup that resolves a
@@ -126,7 +130,10 @@ export const authRouter = createRouter({
       // refuse to mint a token rather than hand out an unusable session.
       if (!user.unionId) {
         console.error(`[login] Account ${input.email} has no unionId — cannot issue a session.`);
-        throw new Error("Your account is not fully set up. Contact an administrator.");
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Your account is not fully set up. Contact an administrator.",
+        });
       }
 
       const token = await signSessionToken({
