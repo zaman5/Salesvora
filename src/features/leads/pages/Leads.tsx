@@ -856,7 +856,7 @@ export default function LeadsPage() {
           <DialogHeader>
             <DialogTitle>Add New Lead</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 mt-4 text-left">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 text-left">
             <div>
               <Label className="text-gray-600 dark:text-gray-300">First Name</Label>
               <Input 
@@ -1011,7 +1011,7 @@ export default function LeadsPage() {
           <DialogHeader>
             <DialogTitle>Edit Lead</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 mt-4 text-left">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 text-left">
             <div>
               <Label className="text-gray-600 dark:text-gray-300">First Name</Label>
               <Input 

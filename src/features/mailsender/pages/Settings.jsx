@@ -207,6 +207,7 @@ export default function Settings() {
 
           <div className="card" style={{ overflow: 'hidden' }}>
             <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', fontWeight: 600 }}>Billing History</div>
+            <div className="table-scroll-x">
             <table className="data-table">
               <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Status</th><th>Invoice</th></tr></thead>
               <tbody>
@@ -225,6 +226,7 @@ export default function Settings() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}
@@ -276,6 +278,7 @@ export default function Settings() {
               <span style={{ fontWeight: 600 }}>Team Members ({team.length})</span>
               <button className="btn btn-primary btn-sm" onClick={() => setInviteModal(true)}>+ Invite Member</button>
             </div>
+            <div className="table-scroll-x">
             <table className="data-table">
               <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
@@ -294,6 +297,7 @@ export default function Settings() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
           {inviteModal && (
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>

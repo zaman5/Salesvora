@@ -308,7 +308,7 @@ export default function SMSCampaignsPage() {
                 <Label className="text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-blue-400" /> Sending Settings
                 </Label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <Label className="text-gray-500 dark:text-gray-400 text-xs">Window Start</Label>
                     <Input type="time" value={sendWindowStart} onChange={(e) => setSendWindowStart(e.target.value)}
@@ -337,7 +337,7 @@ export default function SMSCampaignsPage() {
                     <span className="text-xs text-gray-600 dark:text-gray-300">Random delay between messages</span>
                   </label>
                   {randomDelay && (
-                    <div className="grid grid-cols-2 gap-3 pl-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6">
                       <div>
                         <Label className="text-gray-500 dark:text-gray-400 text-xs">Min delay (sec)</Label>
                         <Input type="number" min={1} value={randomDelayMin} onChange={(e) => setRandomDelayMin(e.target.value)}
@@ -475,7 +475,7 @@ export default function SMSCampaignsPage() {
                     </div>
 
                     {/* Stats */}
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {[
                         { label: "Delivered", value: delivered, color: "text-green-400" },
                         { label: "Sent", value: sent, color: "text-blue-400" },

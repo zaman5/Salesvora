@@ -622,7 +622,15 @@ html:not(.dark) .mailsender-app {
 }
 
 /* ==================== RESPONSIVE TABLE WRAPPER ==================== */
-.mailsender-app .table-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* Wrap any wide table in this. max-width is what actually does the work: a
+   grid/flex child defaults to min-width:auto and will happily grow to its
+   content's width, so without it the wrapper simply widens to fit the table
+   and never scrolls — it just pushes the page sideways instead. */
+.mailsender-app .table-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
 
 /* ==================== MODAL RESPONSIVE ==================== */
 .mailsender-app .modal-responsive {
@@ -685,8 +693,17 @@ html:not(.dark) .mailsender-app {
   .mailsender-app .flex-row { flex-wrap: wrap; }
   .mailsender-app .header-actions .btn { display: none; } /* hide "+ New Campaign" btn in header on mobile */
 
-  /* Tables get horizontal scroll */
-  .mailsender-app .card .data-table, .mailsender-app .card table { display: block; overflow-x: auto; white-space: nowrap; }
+  /* Tables get horizontal scroll.
+     This used to be `display:block; overflow-x:auto` on the TABLE itself.
+     Making a table a block detaches <thead> and <tbody> from table layout, so
+     the header columns stop lining up with the body columns — and it only
+     applied below 768px, leaving every tablet-width viewport to clip wide
+     tables against an `overflow:hidden` card with no scrollbar at all.
+     Scrolling now belongs to the .table-scroll-x wrapper and works at every
+     width, so the table keeps real table layout. Kept here only as a safety
+     net for any table that still lacks a wrapper. */
+  .mailsender-app .card .data-table, .mailsender-app .card table { max-width: 100%; }
+  .mailsender-app .card > .data-table, .mailsender-app .card > table { display: block; overflow-x: auto; }
 
   /* Inbox layout stacks */
   .mailsender-app .inbox-layout { flex-direction: column; }

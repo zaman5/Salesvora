@@ -267,7 +267,7 @@ export default function AIAgentsPage() {
                   className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" 
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-gray-600 dark:text-gray-300">Voice</Label>
                   <Select value={newVoice} onValueChange={(v: any) => setNewVoice(v)}>

@@ -323,6 +323,7 @@ export default function Warmup() {
 
       {/* Accounts Table */}
       <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="table-scroll-x">
         <table className="data-table">
           <thead>
             <tr>
@@ -403,6 +404,7 @@ export default function Warmup() {
             {loading && <tr><td colSpan={10} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>Loading connected accounts...</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Add Account Modal */}

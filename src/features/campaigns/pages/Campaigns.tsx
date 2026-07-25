@@ -450,7 +450,7 @@ export default function CampaignsPage() {
                 <Input value={newName} onChange={(e) => setNewName(e.target.value)}
                   placeholder="Enter campaign name" className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-gray-600 dark:text-gray-300">Type</Label>
                   <Select value={newType} onValueChange={(v: "auto" | "manual" | "ai" | "sms") => setNewType(v)}>
@@ -477,7 +477,7 @@ export default function CampaignsPage() {
                   </Select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-gray-600 dark:text-gray-300">Daily Start Time</Label>
                   <Input type="time" value={dailyStart} onChange={(e) => setDailyStart(e.target.value)}

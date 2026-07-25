@@ -1050,6 +1050,7 @@ export default function Accounts({ userId }) {
                     <div style={{ textAlign:'center', padding:'2rem', color:'var(--text-muted)', fontSize:'0.875rem' }}>No emails sent yet from this account.</div>
                   ) : (
                     <div className="card" style={{ overflow:'hidden' }}>
+                      <div className="table-scroll-x">
                       <table className="data-table">
                         <thead><tr>
                           <th>To</th><th>Subject</th><th>Type</th><th>Sent At</th>
@@ -1073,6 +1074,7 @@ export default function Accounts({ userId }) {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   )}
                   <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'1rem' }}>
@@ -1171,6 +1173,7 @@ export default function Accounts({ userId }) {
               <div style={{ textAlign:'center', padding:'2rem', color:'var(--text-muted)', fontSize:'0.875rem' }}>No leads yet. Add your first lead above.</div>
             ) : (
               <div className="card" style={{ overflow:'hidden' }}>
+                <div className="table-scroll-x">
                 <table className="data-table">
                   <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Company</th><th>Phone</th><th></th></tr></thead>
                   <tbody>
@@ -1186,6 +1189,7 @@ export default function Accounts({ userId }) {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
