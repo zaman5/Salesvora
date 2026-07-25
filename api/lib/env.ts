@@ -39,6 +39,20 @@ if (!isProduction && appSecretIsInsecure) {
 const adminEmail = (process.env.ADMIN_EMAIL || "").trim();
 const adminPassword = process.env.ADMIN_PASSWORD || "";
 
+// Password recovery for an account that already exists.
+//
+// ADMIN_EMAIL / ADMIN_PASSWORD only ever seed an EMPTY database, which leaves a
+// gap with no way out: once the one superadmin exists but its password does not
+// work — mistyped into the bootstrap file, or a stray space picked up from
+// "email: password" — the account cannot be seeded again and cannot be logged
+// into either. These reset the password on an existing account instead.
+//
+// Kept separate from the seed variables on purpose. Overwriting a live
+// password must never be something that happens as a side effect of leaving a
+// bootstrap file lying around; it requires its own explicit file.
+const adminResetEmail = (process.env.ADMIN_RESET_EMAIL || "").trim();
+const adminResetPassword = process.env.ADMIN_RESET_PASSWORD || "";
+
 export const env = {
   appId:         process.env.APP_ID         || "salesvora",
   appSecret:     rawAppSecret || INSECURE_DEFAULT_APP_SECRET,
@@ -54,6 +68,14 @@ export const env = {
   // Only seed the bootstrap superadmin when BOTH values were explicitly
   // provided. Seeding a default-credential superadmin is never acceptable.
   canSeedAdmin: adminEmail.length > 0 && adminPassword.length > 0,
+  // Password reset for an existing account, from ADMIN_RESET_EMAIL /
+  // ADMIN_RESET_PASSWORD. Callers MUST check `canResetAdmin` first.
+  adminResetEmail,
+  adminResetPassword,
+  canResetAdmin: adminResetEmail.length > 0 && adminResetPassword.length > 0,
+  // File the reset credentials came from, so it can be removed once applied and
+  // a plaintext password does not linger on disk.
+  adminResetFile: process.env.ADMIN_RESET_FILE || "",
   // Credential-free dev logins (devLogin mutation, fabricated mock users when
   // the DB lookup fails) are OFF unless explicitly switched on. Gating them on
   // NODE_ENV alone is unsafe: on shared hosting NODE_ENV is often unset, which

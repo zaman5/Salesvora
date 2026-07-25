@@ -348,6 +348,66 @@ function seedAdminIntoEmptyDb(data: JsonDb): boolean {
   return true;
 }
 
+/**
+ * Reset an existing account's password from ADMIN_RESET_EMAIL / ADMIN_RESET_PASSWORD.
+ *
+ * The bootstrap seed only ever fires on an empty user list, which leaves a
+ * state with no way out: the superadmin exists but its password does not work,
+ * so it can be neither re-seeded nor logged into. Recovering meant hand-editing
+ * db.json or deleting the database. This is the supported way back in.
+ *
+ * Applied at most once per process. readJsonDb() runs on every read, and
+ * re-hashing on each one would rewrite db.json on every request for as long as
+ * the variables stay set.
+ */
+let adminResetApplied = false;
+
+function applyAdminPasswordReset(data: JsonDb): boolean {
+  if (adminResetApplied || !env.canResetAdmin) return false;
+  adminResetApplied = true;
+
+  const target = env.adminResetEmail.toLowerCase();
+  const user = data.users.find(
+    (u: any) => typeof u.email === "string" && u.email.trim().toLowerCase() === target,
+  );
+  if (!user) {
+    console.error(
+      `[db] Password reset requested for ${env.adminResetEmail}, but no such account exists. ` +
+        `Known accounts: ${data.users.map((u: any) => u.email).join(", ") || "(none)"}`,
+    );
+    return false;
+  }
+
+  (user as any).password = hashPasswordSync(env.adminResetPassword);
+  // A password nobody can use and a suspended account are the same lockout, so
+  // clear that too — otherwise the reset appears to work and login still fails.
+  if ((user as any).status !== "active") (user as any).status = "active";
+  // The legacy plaintext mirror would otherwise still hold the OLD password and
+  // win on the next login attempt through the fallback path.
+  const sip = (user as any).sipCredentials;
+  if (sip && sip.domain !== "telnyx" && typeof sip.password === "string") {
+    (user as any).sipCredentials = { ...sip, password: (user as any).password };
+  }
+  (user as any).updatedAt = new Date().toISOString();
+
+  console.log(`[db] Password reset applied for ${(user as any).email} (role: ${(user as any).role}).`);
+
+  // Remove the source file so a plaintext password does not sit on disk, and so
+  // the reset cannot silently re-apply on later boots.
+  if (env.adminResetFile) {
+    try {
+      fs.unlinkSync(env.adminResetFile);
+      console.log(`[db] Removed ${env.adminResetFile} after applying the reset.`);
+    } catch (err) {
+      console.warn(
+        `[db] Could not remove ${env.adminResetFile} — delete it by hand; it holds a plaintext password.`,
+        err,
+      );
+    }
+  }
+  return true;
+}
+
 export function readJsonDb(): JsonDb {
   logStorageMode();
   // File doesn't exist — first run. Seeds a superadmin only if ADMIN_EMAIL and
@@ -370,6 +430,7 @@ export function readJsonDb(): JsonDb {
     if (data) {
       let dirty = migrateOwnerToSuperadmin(data);
       if (seedAdminIntoEmptyDb(data)) dirty = true;
+      if (applyAdminPasswordReset(data)) dirty = true;
       if (dirty) writeJsonDb(data);
       return data;
     }

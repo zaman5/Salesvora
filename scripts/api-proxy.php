@@ -236,19 +236,54 @@ function buildEnv($appDir) {
     // ("email:password" on one line) into the data dir, pass it through so a
     // fresh db.json can seed the first superadmin. Ignored once db.json exists.
     $adminFile = $dataDir . '/app_admin';
-    if (file_exists($adminFile)) {
-        $adminLine = trim((string)@file_get_contents($adminFile));
-        $sep = strpos($adminLine, ':');
-        if ($sep !== false) {
-            $adminEmail = substr($adminLine, 0, $sep);
-            $adminPass  = substr($adminLine, $sep + 1);
-            if ($adminEmail !== '' && $adminPass !== '') {
-                $envVars .= ' ADMIN_EMAIL=' . escapeshellarg($adminEmail);
-                $envVars .= ' ADMIN_PASSWORD=' . escapeshellarg($adminPass);
-            }
-        }
+    $seed = readCredentialFile($adminFile);
+    if ($seed) {
+        $envVars .= ' ADMIN_EMAIL=' . escapeshellarg($seed[0]);
+        $envVars .= ' ADMIN_PASSWORD=' . escapeshellarg($seed[1]);
+    }
+
+    // Password recovery for an account that ALREADY exists. app_admin above
+    // only seeds an empty database, so once the superadmin exists with a
+    // password that does not work there is otherwise no way back in — not by
+    // logging in, and not by seeding. Dropping app_admin_reset ("email:password")
+    // rewrites that account's password on the next start. The app deletes the
+    // file once applied, so the plaintext does not linger.
+    $resetFile = $dataDir . '/app_admin_reset';
+    $reset = readCredentialFile($resetFile);
+    if ($reset) {
+        $envVars .= ' ADMIN_RESET_EMAIL=' . escapeshellarg($reset[0]);
+        $envVars .= ' ADMIN_RESET_PASSWORD=' . escapeshellarg($reset[1]);
+        $envVars .= ' ADMIN_RESET_FILE=' . escapeshellarg($resetFile);
     }
     return $envVars;
+}
+
+/**
+ * Parse an "email:password" credential file into [email, password].
+ *
+ * Splits on the FIRST colon so passwords may contain colons.
+ *
+ * Both halves are trimmed of surrounding whitespace. Writing the file as
+ * "you@example.com: secret" — the way anyone naturally types a pair — used to
+ * store the password as " secret", which then never matched anything the user
+ * could type into the login form, with no error to explain why. Interior
+ * characters are untouched; a bootstrap password whose leading space is
+ * meaningful is not a real case, and losing one is far cheaper than an account
+ * nobody can ever sign into.
+ */
+function readCredentialFile($path) {
+    if (!file_exists($path)) return null;
+    $line = (string)@file_get_contents($path);
+    // Strip a UTF-8 BOM: file managers add one invisibly and it becomes part of
+    // the email address, so the seeded account can never be logged into.
+    $line = preg_replace('/^\xEF\xBB\xBF/', '', $line);
+    $line = trim($line, "\r\n \t");
+    $sep = strpos($line, ':');
+    if ($sep === false) return null;
+    $email = trim(substr($line, 0, $sep));
+    $pass  = trim(substr($line, $sep + 1));
+    if ($email === '' || $pass === '') return null;
+    return [$email, $pass];
 }
 
 /**
@@ -398,6 +433,10 @@ if (isset($_GET['debug'])) {
         // Emails and roles only — password digests are never exposed.
         'db_accounts'      => dbAccountSummary($dbPath),
         'admin_seed_file'  => $dataDir ? file_exists($dataDir . '/app_admin') : false,
+        // Present means a password reset is pending; it clears itself once the
+        // app applies it, so a value still showing true after a restart means
+        // the reset did not run (check log_tail).
+        'admin_reset_file' => $dataDir ? file_exists($dataDir . '/app_admin_reset') : false,
         // Tail of the Node log — the only view into a boot that fails on start.
         'log_path' => $logFile,
         'log_tail' => file_exists($logFile)
