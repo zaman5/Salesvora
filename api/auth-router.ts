@@ -5,11 +5,25 @@ import { getSessionCookieOptions } from "./lib/cookies";
 import { createRouter, authedQuery, publicQuery } from "./middleware";
 import { signSessionToken } from "./kimi/session";
 import {
-  upsertUser, findUserByEmail, updateUser,
+  upsertUser, findUserByEmail, updateUser, countAllUsers,
   verifyPassword, hashPassword, isHashedPassword,
 } from "./queries/users";
 import { env } from "./lib/env";
 import { z } from "zod";
+
+/**
+ * True when the store holds no user accounts at all — an installation that
+ * nobody can ever log into until a superadmin is seeded. A lookup failure is
+ * reported as "accounts exist" so a database blip can never be mistaken for a
+ * fresh install.
+ */
+async function hasNoAccounts(): Promise<boolean> {
+  try {
+    return (await countAllUsers()) === 0;
+  } catch {
+    return false;
+  }
+}
 
 export const authRouter = createRouter({
   me: authedQuery.query((opts) => opts.ctx.user),
@@ -76,6 +90,24 @@ export const authRouter = createRouter({
       // password. TRPCError carries the right status through.
       const user = await findUserByEmail(input.email);
       if (!user) {
+        // "Invalid email or password" is the right answer for a wrong
+        // credential, but it is actively misleading when the database holds no
+        // accounts at all — which is what a lost/recreated db.json leaves
+        // behind. Every login then fails identically and looks like a password
+        // problem, so the real cause (nothing to log in to) stays invisible.
+        // An empty user table is not a secret, and this branch is unreachable
+        // the moment a single account exists, so it leaks nothing.
+        if (await hasNoAccounts()) {
+          console.error(
+            "[login] Rejecting login: the database contains no user accounts. " +
+              "Seed a bootstrap superadmin (ADMIN_EMAIL / ADMIN_PASSWORD, or the app_admin file on Hostinger) and restart.",
+          );
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message:
+              "No accounts exist yet — this installation has not been set up. Seed the first superadmin before signing in.",
+          });
+        }
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
       }
 

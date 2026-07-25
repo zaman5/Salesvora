@@ -218,6 +218,28 @@ function startServer($appDir) {
     }
 }
 
+// Who can actually log in. Returns the account count plus each account's email
+// and role, or an error string when db.json is missing/unreadable/corrupt.
+// Deliberately never touches the password or sipCredentials fields.
+function dbAccountSummary($dbPath) {
+    if (!$dbPath || !file_exists($dbPath)) return ['error' => 'db.json not found'];
+    $raw = @file_get_contents($dbPath);
+    if ($raw === false) return ['error' => 'db.json unreadable'];
+    $data = json_decode($raw, true);
+    if (!is_array($data)) return ['error' => 'db.json is not valid JSON'];
+    $users = isset($data['users']) && is_array($data['users']) ? $data['users'] : [];
+    return [
+        'count'    => count($users),
+        'accounts' => array_values(array_map(function ($u) {
+            return [
+                'email'  => isset($u['email'])  ? $u['email']  : null,
+                'role'   => isset($u['role'])   ? $u['role']   : null,
+                'status' => isset($u['status']) ? $u['status'] : null,
+            ];
+        }, $users)),
+    ];
+}
+
 $appDir = findAppDir();
 
 // Debug endpoint — visit /api-proxy.php?debug=1 to diagnose
@@ -255,6 +277,14 @@ if (isset($_GET['debug'])) {
                 ];
               }, array_filter(glob($dataDir . '/*') ?: [], 'is_file')))
             : [],
+        // Account census. A db.json that exists and parses but holds ZERO users
+        // is the state a lost data directory leaves behind, and it is invisible
+        // from outside: every login just answers "invalid email or password",
+        // exactly like a typo. Reporting the count (and the bootstrap file's
+        // presence) turns "nobody can log in" into a one-request diagnosis.
+        // Emails and roles only — password digests are never exposed.
+        'db_accounts'      => dbAccountSummary($dbPath),
+        'admin_seed_file'  => $dataDir ? file_exists($dataDir . '/app_admin') : false,
         // Tail of the Node log — the only view into a boot that fails on start.
         'log_path' => $logFile,
         'log_tail' => file_exists($logFile)

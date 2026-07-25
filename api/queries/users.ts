@@ -34,6 +34,25 @@ export async function findAllUsers(companyId?: number) {
   }
 }
 
+/**
+ * Total number of accounts, counting every status.
+ *
+ * Deliberately NOT findAllUsers().length: that hides "inactive" rows, so an
+ * installation whose accounts had all been deactivated would look identical to
+ * one that was never set up. It also has to agree with seedAdminIntoEmptyDb in
+ * jsonDb.ts, which bootstraps on a raw empty user list — if the two disagreed,
+ * the login screen could claim the install needs seeding while the seeder
+ * refuses to touch it, which is a dead end with no way out.
+ */
+export async function countAllUsers(): Promise<number> {
+  try {
+    return (await getDb().query.users.findMany({ columns: { id: true } })).length;
+  } catch {
+    console.warn("[countAllUsers] DB offline, falling back to local JSON store.");
+    return readJsonDb().users.length;
+  }
+}
+
 export async function findUsersByCompany(companyId: number) {
   try {
     return await getDb().query.users.findMany({

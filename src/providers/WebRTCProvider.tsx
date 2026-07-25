@@ -9,7 +9,21 @@ type WebRTCContextValue = ReturnType<typeof useTelnyxRTC>;
 const WebRTCContext = createContext<WebRTCContextValue | null>(null);
 
 export function WebRTCProvider({ children }: { children: React.ReactNode }) {
-  const { data: dialerConfig } = trpc.integration.getDialerConfig.useQuery();
+  // This provider wraps the whole router, login screen included, so nothing
+  // below it may assume a session. Both calls it makes (getDialerConfig and
+  // the presence heartbeat) require one, and firing them anyway meant the
+  // login page issued a burst of guaranteed-401 requests — retried by react-
+  // query and repeated every 30s — which is what buried real errors in the
+  // console. Gate them on auth.me actually resolving to a user.
+  const { data: me } = trpc.auth.me.useQuery(undefined, {
+    retry: false,
+    staleTime: 1000 * 60 * 5,
+  });
+  const signedIn = Boolean(me);
+
+  const { data: dialerConfig } = trpc.integration.getDialerConfig.useQuery(undefined, {
+    enabled: signedIn,
+  });
 
   const rtc = useTelnyxRTC({
     enabled: Boolean(dialerConfig?.webrtc?.enabled),
@@ -22,17 +36,18 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
   const heartbeatMutation = trpc.user.heartbeat.useMutation();
   const onCall = rtc.callState === "active";
   useEffect(() => {
+    if (!signedIn) return;
     const send = () => {
       heartbeatMutation.mutate(
         { activity: onCall ? "on-call" : "online" },
-        { onError: () => { /* not logged in yet — ignore */ } },
+        { onError: () => { /* session ended mid-poll — the guard will redirect */ } },
       );
     };
     send();
     const timer = setInterval(send, 30_000);
     return () => clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onCall]);
+  }, [onCall, signedIn]);
 
   // Global muted state managed here so the ActiveCallBar can control it.
   const [isMuted, setIsMuted] = useState(false);
