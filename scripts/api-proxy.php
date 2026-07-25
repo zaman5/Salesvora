@@ -1,6 +1,23 @@
 <?php
 // Salesvora API Proxy — PHP 7.4+ compatible
-// Auto-starts Node.js and proxies /api/ requests
+//
+// This file does ONE job: forward /api traffic to the Node server on
+// 127.0.0.1:3000. LiteSpeed owns port 443 and there is no way to point a
+// vhost at a Node process on this plan, so something has to bridge the two,
+// and PHP is what the host will run for us.
+//
+// It used to do a second job — find the build, construct the server's
+// environment and spawn the process — and that is where essentially every
+// outage came from: the checkout locator silently resolved to a different
+// domain on the same account, the spawn was called with the wrong signature
+// for the one shell function the host leaves enabled, and each of those
+// surfaced identically as an unexplained 503. That logic now lives in
+// scripts/keepalive.cjs, run by cron every minute: ordinary JavaScript that
+// can be read, tested and executed by hand. All this file still knows about
+// process management is how to ask the supervisor to run early, so a request
+// arriving while Node is down does not have to wait out the cron minute.
+//
+// See README/deploy notes for the crontab line.
 
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
@@ -19,69 +36,21 @@ function accountHome() {
     return $home ?: null;
 }
 
-/** Every place this domain's deploy checkout could plausibly be. */
-function appDirCandidates() {
-    $suffix = '/.builds/source/repository';
-    $c = [];
-    // The proxy is copied into public_html, so the checkout normally sits
-    // directly beneath it. Checked first so THIS domain always wins.
-    $c[] = __DIR__ . $suffix;
-    if (!empty($_SERVER['DOCUMENT_ROOT'])) $c[] = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . $suffix;
-    // ...but the proxy may also be served from inside the checkout itself.
-    $c[] = __DIR__;
-    $c[] = dirname(__DIR__);
-    // Sibling domains on the same account, last: these belong to other sites.
-    foreach ((glob('/home/*/domains/*/public_html' . $suffix) ?: []) as $p) $c[] = $p;
-    return array_values(array_unique($c));
-}
-
-/** Path of the note recording the last checkout we successfully booted from. */
-function appDirMemoPath() {
+/** Where persistent data lives — outside the checkout, which every push wipes. */
+function dataDir() {
     $home = accountHome();
-    return $home ? $home . '/salesvora-data/app_dir' : null;
+    return $home ? $home . '/salesvora-data' : null;
 }
 
-/**
- * Locate the deploy checkout for THIS domain.
- *
- * Two bugs lived here. It used to glob and take $possible[0]; PHP sorts glob
- * results, so once a second domain existed on the account the first hit
- * alphabetically won and salesvora.online resolved to pawsphere.io. The fix
- * for that preferred __DIR__ — but it accepted the directory merely because
- * is_dir() was true, without checking a build was in it, and still fell back
- * to $possible[0] otherwise. That is how the proxy came to report
- * app_dir=pawsphere.io with boot_exists=false: a directory it can never start
- * Node from. startServer() then returns immediately, so once the running Node
- * exits nothing can ever bring the API back.
- *
- * A candidate is only accepted if it actually contains dist/boot.js. The
- * winner is remembered outside the checkout, so a deploy that is mid-flight
- * (checkout deleted and not yet re-cloned) still has somewhere to boot from
- * instead of falling back to another site's directory.
- */
-function findAppDir() {
-    $candidates = appDirCandidates();
-    foreach ($candidates as $p) {
-        if (file_exists($p . '/dist/boot.js')) {
-            $memo = appDirMemoPath();
-            if ($memo && is_dir(dirname($memo)) && trim((string)@file_get_contents($memo)) !== $p) {
-                @file_put_contents($memo, $p);
-            }
-            return $p;
-        }
-    }
-    // Nothing has a build right now — reuse the last checkout that did.
-    $memo = appDirMemoPath();
-    if ($memo && file_exists($memo)) {
-        $last = trim((string)@file_get_contents($memo));
-        if ($last !== '' && file_exists($last . '/dist/boot.js')) return $last;
-    }
-    // Truly nothing to run. Return a directory belonging to THIS domain rather
-    // than a sibling site's, so the debug output points at the real problem.
-    foreach ($candidates as $p) {
-        if (is_dir($p)) return $p;
-    }
-    return null;
+function logFilePath() {
+    $dir = dataDir();
+    return ($dir && is_dir($dir)) ? $dir . LOG_FILE : sys_get_temp_dir() . LOG_FILE;
+}
+
+/** The cron supervisor. Mirrored into the data dir by hostinger-deploy.cjs. */
+function supervisorPath() {
+    $dir = dataDir();
+    return $dir ? $dir . '/keepalive.cjs' : null;
 }
 
 /** Shell functions this host actually allows us to call. */
@@ -95,10 +64,10 @@ function availableShellFns() {
 /**
  * Run a command and return its stdout.
  *
- * proc_open takes (cmd, descriptors, &$pipes) — the old code called whichever
- * function it found as `$fn($cmd)`, which is only correct for exec/shell_exec.
- * On a host where proc_open is the ONLY one left enabled (which is the case on
- * this account) that call silently did nothing and Node was never launched.
+ * proc_open takes (cmd, descriptors, &$pipes) — calling it like shell_exec
+ * does nothing at all, silently. On this account proc_open is the ONLY one of
+ * the three left enabled, so getting that signature wrong meant nothing ever
+ * ran and there was no error to show for it.
  */
 function shellCapture($cmd) {
     $fns = availableShellFns();
@@ -141,7 +110,7 @@ function shellSpawn($cmd, $logFile) {
         $pipes = [];
         $proc = @proc_open($cmd, $desc, $pipes);
         if (!is_resource($proc)) return false;
-        proc_close($proc); // the wrapping sh backgrounds Node and exits at once
+        proc_close($proc);
         return true;
     }
     return false;
@@ -159,11 +128,7 @@ function findNode() {
     foreach (['/opt/alt/alt-nodejs*/root/usr/bin/node', '/opt/cpanel/ea-nodejs*/bin/node'] as $g) {
         foreach ((glob($g) ?: []) as $hit) $candidates[] = $hit;
     }
-    $home = getenv('HOME');
-    if (!$home && function_exists('posix_getpwuid')) {
-        $pw = @posix_getpwuid(@posix_geteuid());
-        if (!empty($pw['dir'])) $home = $pw['dir'];
-    }
+    $home = accountHome();
     if ($home) {
         foreach ((glob($home . '/.nvm/versions/node/*/bin/node') ?: []) as $hit) $candidates[] = $hit;
         $candidates[] = $home . '/bin/node';
@@ -184,21 +149,6 @@ function findNode() {
     return null;
 }
 
-/** Where persistent data lives — outside the checkout, which every push wipes. */
-function dataDir($appDir) {
-    if ($appDir && preg_match('#^(/home/[^/]+)/#', $appDir, $m)) return $m[1] . '/salesvora-data';
-    // Falling back to the account home keeps this working even when no
-    // checkout can be found at all, which is exactly when the data directory
-    // (holding the secret, the database and the fallback boot.js) matters most.
-    $home = accountHome();
-    return $home ? $home . '/salesvora-data' : null;
-}
-
-function logFilePath($appDir) {
-    $dir = dataDir($appDir);
-    return ($dir && is_dir($dir)) ? $dir . LOG_FILE : sys_get_temp_dir() . LOG_FILE;
-}
-
 // Check if Node.js is listening on the app port
 function isServerRunning() {
     $sock = @fsockopen('127.0.0.1', NODE_PORT, $errno, $errstr, 2);
@@ -206,142 +156,31 @@ function isServerRunning() {
     return false;
 }
 
-// Build the environment the Node process needs, creating the data dir and
-// generating the signing secret on first run.
-function buildEnv($appDir) {
-    $envVars = 'PORT=' . NODE_PORT . ' NODE_ENV=production';
-    $dataDir = dataDir($appDir);
-    if (!$dataDir) return $envVars;
-
-    if (!is_dir($dataDir)) @mkdir($dataDir, 0755, true);
-    // db.json and Mail Sender's SQLite file must live here: the checkout is
-    // replaced on every git push, so anywhere inside it loses data on deploy.
-    $envVars .= ' DB_JSON_PATH=' . escapeshellarg($dataDir . '/db.json');
-    $envVars .= ' MAIL_DB_PATH=' . escapeshellarg($dataDir . '/mailsender.db');
-
-    // APP_SECRET signs session tokens. The app refuses to boot in production
-    // without one (a known default key is forgeable). Rather than commit a
-    // secret to the repo, generate a strong random one on first run and persist
-    // it here, OUTSIDE the deploy checkout and the web root, so it survives
-    // every git push and stays private.
-    $secretFile = $dataDir . '/app_secret';
-    if (!file_exists($secretFile)) {
-        file_put_contents($secretFile, bin2hex(random_bytes(32))); // 256-bit
-        @chmod($secretFile, 0600);
-    }
-    $appSecret = trim((string)@file_get_contents($secretFile));
-    if ($appSecret !== '') $envVars .= ' APP_SECRET=' . escapeshellarg($appSecret);
-
-    // Optional bootstrap admin: if the operator drops an app_admin file
-    // ("email:password" on one line) into the data dir, pass it through so a
-    // fresh db.json can seed the first superadmin. Ignored once db.json exists.
-    $adminFile = $dataDir . '/app_admin';
-    $seed = readCredentialFile($adminFile);
-    if ($seed) {
-        $envVars .= ' ADMIN_EMAIL=' . escapeshellarg($seed[0]);
-        $envVars .= ' ADMIN_PASSWORD=' . escapeshellarg($seed[1]);
-    }
-
-    // Password recovery for an account that ALREADY exists. app_admin above
-    // only seeds an empty database, so once the superadmin exists with a
-    // password that does not work there is otherwise no way back in — not by
-    // logging in, and not by seeding. Dropping app_admin_reset ("email:password")
-    // rewrites that account's password on the next start. The app deletes the
-    // file once applied, so the plaintext does not linger.
-    $resetFile = $dataDir . '/app_admin_reset';
-    $reset = readCredentialFile($resetFile);
-    if ($reset) {
-        $envVars .= ' ADMIN_RESET_EMAIL=' . escapeshellarg($reset[0]);
-        $envVars .= ' ADMIN_RESET_PASSWORD=' . escapeshellarg($reset[1]);
-        $envVars .= ' ADMIN_RESET_FILE=' . escapeshellarg($resetFile);
-    }
-    return $envVars;
-}
-
 /**
- * Parse an "email:password" credential file into [email, password].
+ * Ask the supervisor to start Node now rather than at the next cron tick.
  *
- * Splits on the FIRST colon so passwords may contain colons.
- *
- * Both halves are trimmed of surrounding whitespace. Writing the file as
- * "you@example.com: secret" — the way anyone naturally types a pair — used to
- * store the password as " secret", which then never matched anything the user
- * could type into the login form, with no error to explain why. Interior
- * characters are untouched; a bootstrap password whose leading space is
- * meaningful is not a real case, and losing one is far cheaper than an account
- * nobody can ever sign into.
+ * Cron already guarantees the server comes back within a minute; this only
+ * shortens the wait for a request that happens to arrive during that window.
+ * Everything about HOW to start — which bundle, which environment, which log —
+ * belongs to keepalive.cjs and is deliberately not duplicated here.
  */
-function readCredentialFile($path) {
-    if (!file_exists($path)) return null;
-    $line = (string)@file_get_contents($path);
-    // Strip a UTF-8 BOM: file managers add one invisibly and it becomes part of
-    // the email address, so the seeded account can never be logged into.
-    $line = preg_replace('/^\xEF\xBB\xBF/', '', $line);
-    $line = trim($line, "\r\n \t");
-    $sep = strpos($line, ':');
-    if ($sep === false) return null;
-    $email = trim(substr($line, 0, $sep));
-    $pass  = trim(substr($line, $sep + 1));
-    if ($email === '' || $pass === '') return null;
-    return [$email, $pass];
-}
-
-/**
- * Every boot.js this proxy could start, best first.
- *
- * Hostinger DELETES .builds/source/repository once a deploy finishes, so the
- * checkout is not somewhere the server can be relied on to exist: the proxy
- * can only start Node during the brief window between the build and that
- * cleanup. Miss it — because Node crashed later, or was killed — and there is
- * no boot.js left anywhere to restart from, which is a silent one-way trip to
- * a permanently 503 API.
- *
- * The deploy therefore keeps a copy in the data directory, which nothing ever
- * cleans, and that is the fallback here. It works only because boot.js is now
- * a self-contained bundle (see hostinger-deploy.cjs) — the old external-
- * packages shim could not have run from outside the checkout at all.
- *
- * The checkout still wins when it exists: mid-deploy it is the freshest build,
- * and preferring it avoids booting a stale copy.
- */
-function bootScriptCandidates() {
-    $out = [];
-    foreach (appDirCandidates() as $d) $out[] = $d . '/dist/boot.js';
-    $home = accountHome();
-    if ($home) $out[] = $home . '/salesvora-data/boot.js';
-    return array_values(array_unique($out));
-}
-
-function findBootScript() {
-    foreach (bootScriptCandidates() as $p) {
-        if (file_exists($p)) return $p;
-    }
-    return null;
-}
-
-// Try to start Node.js server
-function startServer($appDir) {
-    $script = findBootScript();
-    if ($script === null) return;
+function triggerSupervisor() {
+    $supervisor = supervisorPath();
+    if (!$supervisor || !file_exists($supervisor)) return false;
 
     $node = findNode();
-    if ($node === null) return;
+    if ($node === null) return false;
 
-    // Run from the script's own directory. Every path the app actually needs
-    // (db.json, the mail database, the log) is passed as an absolute env var,
-    // so this only has to be somewhere that exists.
-    $workDir = dirname($script);
-    $logFile = logFilePath($appDir);
-    $cmd = 'cd ' . escapeshellarg($workDir) . ' && ' . buildEnv($appDir)
-         . ' nohup ' . escapeshellarg($node) . ' ' . escapeshellarg($script)
+    $logFile = logFilePath();
+    $cmd = 'nohup ' . escapeshellarg($node) . ' ' . escapeshellarg($supervisor)
          . ' >> ' . escapeshellarg($logFile) . ' 2>&1 &';
-
-    if (!shellSpawn($cmd, $logFile)) return;
+    if (!shellSpawn($cmd, $logFile)) return false;
 
     for ($i = 0; $i < 10; $i++) {
         sleep(1);
-        if (isServerRunning()) break;
+        if (isServerRunning()) return true;
     }
+    return false;
 }
 
 // Who can actually log in. Returns the account count plus each account's email
@@ -366,45 +205,41 @@ function dbAccountSummary($dbPath) {
     ];
 }
 
-$appDir = findAppDir();
-
 // Debug endpoint — visit /api-proxy.php?debug=1 to diagnose
 if (isset($_GET['debug'])) {
     header('Content-Type: application/json');
-    $dataDir = dataDir($appDir);
-    $logFile = logFilePath($appDir);
+    $dataDir = dataDir();
+    $logFile = logFilePath();
     $dbPath  = $dataDir ? $dataDir . '/db.json' : null;
     $mailDb  = $dataDir ? $dataDir . '/mailsender.db' : null;
+    $supervisor = supervisorPath();
+    $node = findNode();
+
+    // Ask the supervisor what IT sees. It owns build discovery now, so its
+    // answer is the authoritative one — a second implementation here could
+    // disagree with the thing actually starting the server, which is how the
+    // old proxy came to report a checkout it could never boot from.
+    $supervisorStatus = null;
+    if ($node && $supervisor && file_exists($supervisor)) {
+        $raw = shellCapture(escapeshellarg($node) . ' ' . escapeshellarg($supervisor) . ' --status');
+        $decoded = json_decode(trim($raw), true);
+        $supervisorStatus = is_array($decoded) ? $decoded : trim($raw);
+    }
+
     echo json_encode([
         'php_version'    => PHP_VERSION,
         'curl_available' => function_exists('curl_init'),
         'exec_available' => availableShellFns(),
-        'app_dir'        => $appDir,
-        'boot_exists'    => $appDir ? file_exists($appDir . '/dist/boot.js') : false,
-        // Why app_dir resolved where it did. When the API cannot restart, the
-        // question is always "which of these does the deploy actually write to,
-        // and can PHP see it" — guessing that from a single resolved path is
-        // impossible, so show the whole search with what each candidate offers.
-        'app_dir_search' => array_map(function ($p) {
-            return [
-                'path'      => $p,
-                'is_dir'    => is_dir($p),
-                'readable'  => @is_readable($p),
-                'has_build' => file_exists($p . '/dist/boot.js'),
-            ];
-        }, appDirCandidates()),
-        'app_dir_memo'   => ($m = appDirMemoPath()) && file_exists($m)
-            ? trim((string)@file_get_contents($m)) : null,
-        // Which boot.js a restart would actually use. boot_script === null is
-        // the fatal state: Node cannot be started again by any request.
-        'boot_script'    => findBootScript(),
-        'boot_script_search' => array_map(function ($p) {
-            return ['path' => $p, 'exists' => file_exists($p)];
-        }, bootScriptCandidates()),
         'script_dir'     => __DIR__,
         'document_root'  => isset($_SERVER['DOCUMENT_ROOT']) ? $_SERVER['DOCUMENT_ROOT'] : null,
         'server_running' => isServerRunning(),
-        'node_binary'    => findNode(),
+        'node_binary'    => $node,
+        // The supervisor and what it reports. supervisor_installed=false means
+        // cron has nothing to run and the API cannot restart itself; a
+        // boot_script of null inside supervisor_status is the same fatal state.
+        'supervisor_path'      => $supervisor,
+        'supervisor_installed' => $supervisor ? file_exists($supervisor) : false,
+        'supervisor_status'    => $supervisorStatus,
         // Persistent databases — must live OUTSIDE the deploy folder to survive pushes
         'data_dir'             => $dataDir,
         'data_dir_exists'      => $dataDir ? is_dir($dataDir) : false,
@@ -446,8 +281,8 @@ if (isset($_GET['debug'])) {
     exit;
 }
 
-if ($appDir && !isServerRunning()) {
-    startServer($appDir);
+if (!isServerRunning()) {
+    triggerSupervisor();
 }
 
 if (!isServerRunning()) {

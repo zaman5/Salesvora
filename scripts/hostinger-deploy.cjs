@@ -98,6 +98,23 @@ if (homeMatch && fs.existsSync(bootSrc)) {
     fs.renameSync(tmp, path.join(dataDir, 'boot.js'));
     const kb = Math.round(fs.statSync(path.join(dataDir, 'boot.js')).size / 1024);
     console.log(`[deploy] ✓ Server bundle mirrored to ${dataDir}/boot.js (${kb} kb)`);
+
+    // The cron supervisor lives beside it for the same reason: cron holds one
+    // fixed path, and it must keep resolving after the checkout is deleted.
+    // Mirroring it here means the crontab entry never has to change, and the
+    // supervisor updates itself with each deploy.
+    const kaSrc = path.join(cwd, 'scripts/keepalive.cjs');
+    if (fs.existsSync(kaSrc)) {
+      const kaTmp = path.join(dataDir, 'keepalive.cjs.tmp');
+      fs.copyFileSync(kaSrc, kaTmp);
+      fs.renameSync(kaTmp, path.join(dataDir, 'keepalive.cjs'));
+      console.log(`[deploy] ✓ Supervisor mirrored to ${dataDir}/keepalive.cjs`);
+      // Printed every deploy so the one manual step is never something anyone
+      // has to go looking for. Adding it twice is harmless — the supervisor
+      // exits immediately when the port already answers.
+      console.log('[deploy]   Cron entry (hPanel → Advanced → Cron Jobs, every minute):');
+      console.log(`[deploy]     ${process.execPath} ${dataDir}/keepalive.cjs`);
+    }
   } catch (err) {
     // Non-fatal: the checkout copy still works for this deploy's boot window.
     console.log(`[deploy] Note: could not mirror boot.js (${err.message}).`);
@@ -213,15 +230,20 @@ if (fs.existsSync(serverSrc)) {
 // Data is safe: db.json lives in ~/salesvora-data/, outside this checkout.
 try {
   const { execSync } = require('child_process');
+  // Match BOTH locations the server can run from. This pattern used to be
+  // "dist/boot.js", which stopped matching the moment the bundle could also be
+  // launched from ~/salesvora-data/boot.js — that path contains no "dist/", so
+  // pkill silently matched nothing, the old process kept the port, and every
+  // subsequent deploy served stale code while reporting success.
   // pkill exits 1 when nothing matched, which is the normal case on a first
   // deploy — `|| true` keeps that from being reported as a failure. Anything
   // else (pkill missing, no permission) is worth seeing.
-  execSync('pkill -f "dist/boot.js" || true', { stdio: 'ignore' });
-  console.log('[deploy] ✓ Old Node.js server stopped — will restart on next request.');
+  execSync('pkill -f "(dist|salesvora-data)/boot\\.js" || true', { stdio: 'ignore' });
+  console.log('[deploy] ✓ Old Node.js server stopped — cron restarts it within a minute.');
 } catch (err) {
   console.log(`[deploy] Note: could not run pkill (${err.message}).`);
   console.log('[deploy]   The previous Node process may still be serving the OLD build.');
-  console.log('[deploy]   Fix: SSH in and run  pkill -f dist/boot.js');
+  console.log('[deploy]   Fix: SSH in and run  pkill -f "(dist|salesvora-data)/boot\\.js"');
 }
 
 // Verify what actually landed. Without this the script reports success even
