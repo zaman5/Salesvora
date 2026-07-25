@@ -13,8 +13,9 @@ if (!isHostinger) {
   process.exit(0);
 }
 
-// Find public_html directory dynamically regardless of subdirectory depth
-const parts = cwd.split('/');
+// Find public_html directory dynamically regardless of subdirectory depth.
+// Normalise separators first so this is exercisable off-Linux too.
+const parts = cwd.replace(/\\/g, '/').split('/');
 const pubIndex = parts.indexOf('public_html');
 const dest = parts.slice(0, pubIndex + 1).join('/');
 
@@ -34,10 +35,56 @@ if (!fs.existsSync(src)) {
 fs.cpSync(src, dest, { recursive: true, force: true });
 console.log('[deploy] ✓ Static files copied to public_html/');
 
+// Permissions the web server needs: 0755 on directories, 0644 on files.
+//
+// This is not belt-and-braces — fs.cpSync copies the SOURCE mode onto the
+// destination, and because `dest` is public_html itself, the docroot inherits
+// whatever mode dist/public was built with. Under a restrictive umask that
+// leaves public_html unreadable by the web server, and LiteSpeed reports an
+// unreadable docroot as a bare "403 Forbidden". Reassert the modes explicitly
+// so a deploy can never lock the site out this way.
+const DIR_MODE = 0o755;
+const FILE_MODE = 0o644;
+
+function chmodTree(target) {
+  let stat;
+  try {
+    stat = fs.statSync(target);
+  } catch {
+    return; // vanished between readdir and stat — nothing to do
+  }
+  if (stat.isDirectory()) {
+    fs.chmodSync(target, DIR_MODE);
+    for (const entry of fs.readdirSync(target)) chmodTree(path.join(target, entry));
+  } else {
+    fs.chmodSync(target, FILE_MODE);
+  }
+}
+
+// Only walk what we just copied. public_html also contains the .builds/
+// checkout (source + node_modules) and recursing into that would be slow and
+// pointless — it is never served.
+fs.chmodSync(dest, DIR_MODE);
+for (const entry of fs.readdirSync(src)) chmodTree(path.join(dest, entry));
+console.log('[deploy] ✓ Permissions set (dirs 755, files 644)');
+
 // Create .htaccess — routes API calls through PHP proxy (no mod_proxy needed)
 const htaccess = `# Salesvora - React SPA + PHP API Proxy
 Options -MultiViews
+
+# Be explicit rather than relying on the server default: with no usable
+# DirectoryIndex and directory listing disabled, a request for "/" is answered
+# with 403 Forbidden, not 404.
+DirectoryIndex index.html
+
 RewriteEngine On
+
+# The deploy checkout lives at public_html/.builds/ — it holds the full source
+# tree, node_modules and .env, all of which would otherwise be downloadable.
+# Block it and every other dotfile, but keep /.well-known/ reachable so
+# certificate issuance and renewal still work.
+RewriteCond %{REQUEST_URI} !^/\\.well-known/
+RewriteRule (^|/)\\. - [F]
 
 # Serve existing static files directly
 RewriteCond %{REQUEST_FILENAME} -f [OR]
@@ -53,13 +100,17 @@ RewriteRule ^(.*)$ /api-proxy.php [L,QSA]
 RewriteRule ^ /index.html [L]
 `;
 
-fs.writeFileSync(path.join(dest, '.htaccess'), htaccess);
+const htaccessPath = path.join(dest, '.htaccess');
+fs.writeFileSync(htaccessPath, htaccess);
+fs.chmodSync(htaccessPath, FILE_MODE);
 console.log('[deploy] ✓ .htaccess created in public_html/');
 
 // Copy PHP proxy to public_html/
 const phpSrc = path.join(cwd, 'scripts/api-proxy.php');
 if (fs.existsSync(phpSrc)) {
-  fs.copyFileSync(phpSrc, path.join(dest, 'api-proxy.php'));
+  const phpDest = path.join(dest, 'api-proxy.php');
+  fs.copyFileSync(phpSrc, phpDest);
+  fs.chmodSync(phpDest, FILE_MODE);
   console.log('[deploy] ✓ api-proxy.php copied to public_html/');
 }
 
@@ -75,11 +126,36 @@ if (fs.existsSync(serverSrc)) {
 // Data is safe: db.json lives in ~/salesvora-data/, outside this checkout.
 try {
   const { execSync } = require('child_process');
+  // pkill exits 1 when nothing matched, which is the normal case on a first
+  // deploy — `|| true` keeps that from being reported as a failure. Anything
+  // else (pkill missing, no permission) is worth seeing.
   execSync('pkill -f "dist/boot.js" || true', { stdio: 'ignore' });
   console.log('[deploy] ✓ Old Node.js server stopped — will restart on next request.');
-} catch {
-  console.log('[deploy] Note: could not stop old Node.js server (may not be running).');
+} catch (err) {
+  console.log(`[deploy] Note: could not run pkill (${err.message}).`);
+  console.log('[deploy]   The previous Node process may still be serving the OLD build.');
+  console.log('[deploy]   Fix: SSH in and run  pkill -f dist/boot.js');
 }
 
-console.log('[deploy] ✓ Deployment complete!');
-console.log('[deploy] Site is now accessible at your domain.');
+// Verify what actually landed. Without this the script reports success even
+// when the docroot is in a state the web server will refuse to serve.
+let ok = true;
+const indexPath = path.join(dest, 'index.html');
+const mode = (p) => (fs.statSync(p).mode & 0o777).toString(8);
+
+if (fs.existsSync(indexPath)) {
+  console.log(`[deploy] ✓ index.html present (mode ${mode(indexPath)})`);
+} else {
+  ok = false;
+  console.error('[deploy] ✗ index.html is MISSING from public_html.');
+  console.error('[deploy]   The site will answer "403 Forbidden" until it exists.');
+}
+console.log(`[deploy] public_html mode: ${mode(dest)}`);
+
+if (ok) {
+  console.log('[deploy] ✓ Deployment complete!');
+  console.log('[deploy] Site is now accessible at your domain.');
+} else {
+  console.error('[deploy] ✗ Deployment finished with problems — see above.');
+  process.exitCode = 1;
+}
