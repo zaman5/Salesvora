@@ -26,7 +26,15 @@ async function hasNoAccounts(): Promise<boolean> {
 }
 
 export const authRouter = createRouter({
-  me: authedQuery.query((opts) => opts.ctx.user),
+  // "Who am I?" is a question a logged-out visitor is entitled to ask, and the
+  // honest answer is "nobody" — not an error. As an authedQuery this threw 401
+  // for every anonymous caller, and since useAuth() calls it on every page the
+  // login screen could not render without logging a red 401 to the console.
+  // That noise is indistinguishable from a real fault, which is exactly how a
+  // genuinely broken login sat hidden behind "normal" errors. Returning null
+  // keeps every caller working (they all branch on `!user`) and leaves 401 to
+  // mean something has actually gone wrong.
+  me: publicQuery.query((opts) => opts.ctx.user ?? null),
   // Dev-only convenience login that grants any role, including superadmin,
   // with zero credentials. Gated on an explicit opt-in (ALLOW_DEV_LOGIN=true)
   // rather than on NODE_ENV alone: on shared hosting NODE_ENV is frequently

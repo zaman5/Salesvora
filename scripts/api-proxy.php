@@ -8,30 +8,80 @@ ini_set('display_errors', 0);
 const NODE_PORT = 3000;
 const LOG_FILE  = '/salesvora.log';
 
+/** Home directory of the account, independent of any checkout location. */
+function accountHome() {
+    $home = getenv('HOME');
+    if (!$home && function_exists('posix_getpwuid')) {
+        $pw = @posix_getpwuid(@posix_geteuid());
+        if (!empty($pw['dir'])) $home = $pw['dir'];
+    }
+    if (!$home && preg_match('#^(/home/[^/]+)/#', __DIR__, $m)) $home = $m[1];
+    return $home ?: null;
+}
+
+/** Every place this domain's deploy checkout could plausibly be. */
+function appDirCandidates() {
+    $suffix = '/.builds/source/repository';
+    $c = [];
+    // The proxy is copied into public_html, so the checkout normally sits
+    // directly beneath it. Checked first so THIS domain always wins.
+    $c[] = __DIR__ . $suffix;
+    if (!empty($_SERVER['DOCUMENT_ROOT'])) $c[] = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . $suffix;
+    // ...but the proxy may also be served from inside the checkout itself.
+    $c[] = __DIR__;
+    $c[] = dirname(__DIR__);
+    // Sibling domains on the same account, last: these belong to other sites.
+    foreach ((glob('/home/*/domains/*/public_html' . $suffix) ?: []) as $p) $c[] = $p;
+    return array_values(array_unique($c));
+}
+
+/** Path of the note recording the last checkout we successfully booted from. */
+function appDirMemoPath() {
+    $home = accountHome();
+    return $home ? $home . '/salesvora-data/app_dir' : null;
+}
+
 /**
  * Locate the deploy checkout for THIS domain.
  *
- * This used to glob('/home/*\/domains/*\/public_html/.builds/source/repository')
- * and take $possible[0]. PHP sorts glob results, so as soon as a second domain
- * was added to the hosting account the first hit alphabetically won — the proxy
- * on salesvora.online resolved to pawsphere.io's checkout, found no dist/boot.js
- * there and never started Node, so every /api call failed. This file is copied
- * into public_html, so __DIR__ is already the right docroot; derive from that
- * and only fall back to the glob if the checkout is somewhere unexpected.
+ * Two bugs lived here. It used to glob and take $possible[0]; PHP sorts glob
+ * results, so once a second domain existed on the account the first hit
+ * alphabetically won and salesvora.online resolved to pawsphere.io. The fix
+ * for that preferred __DIR__ — but it accepted the directory merely because
+ * is_dir() was true, without checking a build was in it, and still fell back
+ * to $possible[0] otherwise. That is how the proxy came to report
+ * app_dir=pawsphere.io with boot_exists=false: a directory it can never start
+ * Node from. startServer() then returns immediately, so once the running Node
+ * exits nothing can ever bring the API back.
+ *
+ * A candidate is only accepted if it actually contains dist/boot.js. The
+ * winner is remembered outside the checkout, so a deploy that is mid-flight
+ * (checkout deleted and not yet re-cloned) still has somewhere to boot from
+ * instead of falling back to another site's directory.
  */
 function findAppDir() {
-    $suffix = '/.builds/source/repository';
-    $roots  = [__DIR__];
-    if (!empty($_SERVER['DOCUMENT_ROOT'])) $roots[] = rtrim($_SERVER['DOCUMENT_ROOT'], '/');
-    foreach ($roots as $root) {
-        if (is_dir($root . $suffix)) return $root . $suffix;
+    $candidates = appDirCandidates();
+    foreach ($candidates as $p) {
+        if (file_exists($p . '/dist/boot.js')) {
+            $memo = appDirMemoPath();
+            if ($memo && is_dir(dirname($memo)) && trim((string)@file_get_contents($memo)) !== $p) {
+                @file_put_contents($memo, $p);
+            }
+            return $p;
+        }
     }
-    // Last resort: prefer a match that actually has a build in it.
-    $possible = glob('/home/*/domains/*/public_html' . $suffix) ?: [];
-    foreach ($possible as $p) {
-        if (file_exists($p . '/dist/boot.js')) return $p;
+    // Nothing has a build right now — reuse the last checkout that did.
+    $memo = appDirMemoPath();
+    if ($memo && file_exists($memo)) {
+        $last = trim((string)@file_get_contents($memo));
+        if ($last !== '' && file_exists($last . '/dist/boot.js')) return $last;
     }
-    return !empty($possible) ? $possible[0] : null;
+    // Truly nothing to run. Return a directory belonging to THIS domain rather
+    // than a sibling site's, so the debug output points at the real problem.
+    foreach ($candidates as $p) {
+        if (is_dir($p)) return $p;
+    }
+    return null;
 }
 
 /** Shell functions this host actually allows us to call. */
@@ -255,6 +305,22 @@ if (isset($_GET['debug'])) {
         'exec_available' => availableShellFns(),
         'app_dir'        => $appDir,
         'boot_exists'    => $appDir ? file_exists($appDir . '/dist/boot.js') : false,
+        // Why app_dir resolved where it did. When the API cannot restart, the
+        // question is always "which of these does the deploy actually write to,
+        // and can PHP see it" — guessing that from a single resolved path is
+        // impossible, so show the whole search with what each candidate offers.
+        'app_dir_search' => array_map(function ($p) {
+            return [
+                'path'      => $p,
+                'is_dir'    => is_dir($p),
+                'readable'  => @is_readable($p),
+                'has_build' => file_exists($p . '/dist/boot.js'),
+            ];
+        }, appDirCandidates()),
+        'app_dir_memo'   => ($m = appDirMemoPath()) && file_exists($m)
+            ? trim((string)@file_get_contents($m)) : null,
+        'script_dir'     => __DIR__,
+        'document_root'  => isset($_SERVER['DOCUMENT_ROOT']) ? $_SERVER['DOCUMENT_ROOT'] : null,
         'server_running' => isServerRunning(),
         'node_binary'    => findNode(),
         // Persistent databases — must live OUTSIDE the deploy folder to survive pushes
