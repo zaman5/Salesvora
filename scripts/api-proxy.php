@@ -242,6 +242,19 @@ if (isset($_GET['debug'])) {
         'db_persistent_exists' => $dbPath ? file_exists($dbPath) : false,
         'db_size_bytes'        => ($dbPath && file_exists($dbPath)) ? filesize($dbPath) : 0,
         'mail_db_persistent_exists' => $mailDb ? file_exists($mailDb) : false,
+        // Everything in the data dir with sizes and mtimes. When db.json comes
+        // back missing this is what says whether a .bak or an older copy
+        // survived and is worth restoring, or whether the directory really was
+        // emptied. Names and sizes only — no contents are exposed.
+        'data_dir_files' => $dataDir && is_dir($dataDir)
+            ? array_values(array_map(function ($f) use ($dataDir) {
+                return [
+                    'name'  => basename($f),
+                    'bytes' => filesize($f),
+                    'mtime' => date('c', filemtime($f)),
+                ];
+              }, array_filter(glob($dataDir . '/*') ?: [], 'is_file')))
+            : [],
         // Tail of the Node log — the only view into a boot that fails on start.
         'log_path' => $logFile,
         'log_tail' => file_exists($logFile)

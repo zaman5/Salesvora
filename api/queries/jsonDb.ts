@@ -325,6 +325,29 @@ function migrateOwnerToSuperadmin(data: JsonDb): boolean {
   return false;
 }
 
+/**
+ * Recover a db.json that exists but has no accounts in it.
+ *
+ * Seeding only ever ran on the "file does not exist" path, which makes an empty
+ * db.json a dead end: the server comes up, nobody can log in, and setting
+ * ADMIN_EMAIL / ADMIN_PASSWORD afterwards has no effect because the file is
+ * already there. That is exactly the state salesvora.online was left in when
+ * its data directory came back empty and the first request created a fresh
+ * db.json with the credentials still unset — the only documented way out was
+ * to delete the database by hand, which is a dangerous habit to teach.
+ *
+ * Restricted to a genuinely empty user list, so this can never touch, overwrite
+ * or re-seed a database that has any account in it.
+ */
+function seedAdminIntoEmptyDb(data: JsonDb): boolean {
+  if (data.users.length > 0 || !env.canSeedAdmin) return false;
+  const seeded = seedAdminUsers(new Date().toISOString());
+  if (seeded.length === 0) return false;
+  data.users = seeded;
+  console.log(`[db] db.json had no accounts — seeded bootstrap superadmin: ${env.adminEmail}`);
+  return true;
+}
+
 export function readJsonDb(): JsonDb {
   logStorageMode();
   // File doesn't exist — first run. Seeds a superadmin only if ADMIN_EMAIL and
@@ -345,7 +368,9 @@ export function readJsonDb(): JsonDb {
     const content = fs.readFileSync(DB_PATH, "utf-8");
     const data = tryParse(content);
     if (data) {
-      if (migrateOwnerToSuperadmin(data)) writeJsonDb(data);
+      let dirty = migrateOwnerToSuperadmin(data);
+      if (seedAdminIntoEmptyDb(data)) dirty = true;
+      if (dirty) writeJsonDb(data);
       return data;
     }
   } catch { /* fall through to backup */ }
