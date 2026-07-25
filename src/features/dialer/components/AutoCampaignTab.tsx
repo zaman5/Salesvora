@@ -125,17 +125,21 @@ export function AutoCampaignTab() {
 
   const triggerAutoDialCall = async () => {
     if (!nextCampaignLead?.lead) return;
+    // An imported lead can be missing its phone number. Dialing "" just fails
+    // downstream with an opaque error, so surface it here instead.
+    const phone = nextCampaignLead.lead.phone;
+    if (!phone) { setCallError("This lead has no phone number."); return; }
     setCallStatus("calling"); setCallError(null);
     try {
       const activeCall = await initiateCallMutation.mutateAsync({
         leadId: nextCampaignLead.lead.id, campaignId: campIdVal, companyId,
-        toNumber: nextCampaignLead.lead.phone, fromNumber: selectedNumber || undefined, type: "auto",
+        toNumber: phone, fromNumber: selectedNumber || undefined, type: "auto",
       });
       setActiveCallId(activeCall.id);
       await updateLeadStatusMutation.mutateAsync({ campaignLeadId: nextCampaignLead.id, status: "in_progress" });
       if (webrtcOn) {
         if (rtc.status !== "registered") { setCallError("Browser calling not connected."); setCallStatus("idle"); return; }
-        const ok = rtc.makeCall(nextCampaignLead.lead.phone, selectedNumber || dialerConfig?.defaultCallerId || "");
+        const ok = rtc.makeCall(phone, selectedNumber || dialerConfig?.defaultCallerId || "");
         if (!ok) { setCallError(rtc.error || "Could not start browser call."); setCallStatus("idle"); return; }
         setCallStatus("connected"); setDuration(0);
         await updateStatusMutation.mutateAsync({ id: activeCall.id, status: "connected" });

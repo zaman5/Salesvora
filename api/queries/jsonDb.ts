@@ -3,6 +3,11 @@ import * as os from "os";
 import * as path from "path";
 import { hasDatabase } from "./connection";
 import { env } from "../lib/env";
+import type {
+  AIAgent, AIConversation, Call, CallDisposition, CallRecording, Campaign,
+  CampaignLead, Company, Lead, LeadList, LeadListAssignment,
+  LiveMonitorSession, SMSCampaign, SMSLog, User,
+} from "@db/schema";
 // Dependency-free hashing (Node crypto). The helper lives outside ./users to
 // avoid the users.ts <-> jsonDb.ts import cycle.
 import { hashPasswordSync } from "../lib/password";
@@ -150,20 +155,61 @@ export function logStorageMode() {
   }
 }
 
+/**
+ * How a column value looks once it has been through JSON.stringify:
+ *  - timestamps become ISO strings (JSON has no Date),
+ *  - enum columns become plain strings (nothing validates them on the way in).
+ * Everything else keeps its schema type.
+ */
+type JsonValue<V> = V extends Date ? string : V extends string ? string : V;
+
+/**
+ * A row as it lives in db.json.
+ *
+ * Fields are optional and unknown extras are allowed because this store is
+ * schemaless: rows written by an older build can be missing columns added
+ * later, and some carry fields MySQL keeps elsewhere (e.g. the password digest
+ * on users). `id` stays required — every lookup here goes through it.
+ */
+type JsonRow<T> = Partial<{ [K in keyof T]: JsonValue<T[K]> }> &
+  { id: number } &
+  Record<string, unknown>;
+
+/** A row's fields after the Date → ISO string conversion `serializeDates` does. */
+export type Serialized<T> = { [K in keyof T]: JsonValue<T[K]> };
+
+/**
+ * Normalise a row for the JSON store.
+ *
+ * Callers building rows from the Drizzle insert types hand us real `Date`s.
+ * JSON.stringify would turn those into ISO strings anyway, so without this the
+ * same row reads back as a `Date` before the next reload and a `string` after.
+ * Converting up front keeps in-memory and on-disk rows identical.
+ */
+export function serializeDates<T extends object>(row: T): Serialized<T> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[k] = v instanceof Date ? v.toISOString() : v;
+  }
+  return out as Serialized<T>;
+}
+
 export type JsonDb = {
-  users: unknown[];
-  companies: unknown[];
-  leadLists: unknown[];
-  leads: unknown[];
-  leadListAssignments: unknown[];
-  campaigns: unknown[];
-  campaignLeads: unknown[];
-  calls: unknown[];
-  callDispositions: unknown[];
-  callRecordings: unknown[];
-  smsCampaigns: unknown[];
-  smsLogs: unknown[];
-  aiAgents: unknown[];
+  users: JsonRow<User>[];
+  companies: JsonRow<Company>[];
+  leadLists: JsonRow<LeadList>[];
+  leads: JsonRow<Lead>[];
+  leadListAssignments: JsonRow<LeadListAssignment>[];
+  campaigns: JsonRow<Campaign>[];
+  campaignLeads: JsonRow<CampaignLead>[];
+  calls: JsonRow<Call>[];
+  callDispositions: JsonRow<CallDisposition>[];
+  callRecordings: JsonRow<CallRecording>[];
+  smsCampaigns: JsonRow<SMSCampaign>[];
+  smsLogs: JsonRow<SMSLog>[];
+  aiAgents: JsonRow<AIAgent>[];
+  aiConversations: JsonRow<AIConversation>[];
+  liveMonitorSessions: JsonRow<LiveMonitorSession>[];
 };
 
 const DB_PATH  = DB_PATH_RESOLVED;
@@ -174,6 +220,7 @@ const EMPTY = (): JsonDb => ({
   leadListAssignments: [], campaigns: [], campaignLeads: [],
   calls: [], callDispositions: [], callRecordings: [],
   smsCampaigns: [], smsLogs: [], aiAgents: [],
+  aiConversations: [], liveMonitorSessions: [],
 });
 
 /**
@@ -241,7 +288,7 @@ function defaultDb(): JsonDb {
 const KEYS: Array<keyof JsonDb> = [
   "users","companies","leadLists","leads","leadListAssignments",
   "campaigns","campaignLeads","calls","callDispositions","callRecordings",
-  "smsCampaigns","smsLogs","aiAgents",
+  "smsCampaigns","smsLogs","aiAgents","aiConversations","liveMonitorSessions",
 ];
 
 function tryParse(content: string): JsonDb | null {
@@ -265,7 +312,7 @@ function tryParse(content: string): JsonDb | null {
  * every admin. Returns true if it changed anything (caller should persist).
  */
 function migrateOwnerToSuperadmin(data: JsonDb): boolean {
-  const owner = (data.users as Array<{ unionId?: string; email?: string; role?: string }>).find(
+  const owner = data.users.find(
     // env.adminEmail is "" when ADMIN_EMAIL is unset — never match on that, or
     // any user with a blank email would be promoted to superadmin.
     (u) => u.unionId === "admin-default" || (env.adminEmail !== "" && u.email === env.adminEmail),

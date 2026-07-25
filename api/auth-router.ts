@@ -120,6 +120,15 @@ export const authRouter = createRouter({
         throw new Error("Your account is inactive or suspended");
       }
 
+      // The session token is keyed on unionId and every lookup that resolves a
+      // request back to an account goes through it. A row missing one (only
+      // reachable via a hand-edited db.json) could never be resolved again, so
+      // refuse to mint a token rather than hand out an unusable session.
+      if (!user.unionId) {
+        console.error(`[login] Account ${input.email} has no unionId — cannot issue a session.`);
+        throw new Error("Your account is not fully set up. Contact an administrator.");
+      }
+
       const token = await signSessionToken({
         unionId: user.unionId,
         clientId: "dev-app-id",

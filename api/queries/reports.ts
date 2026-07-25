@@ -187,6 +187,10 @@ export async function getCallVolumeByDate(companyId: number, days: number = 7) {
     // Group by Date YYYY-MM-DD
     const groups: Record<string, { date: string; total: number; connected: number }> = {};
     for (const c of companyCalls) {
+      // A row with no createdAt can't be bucketed by day — new Date(undefined)
+      // is an Invalid Date and .toISOString() on it throws, taking the whole
+      // report down. Skip it instead.
+      if (!c.createdAt) continue;
       const dateStr = new Date(c.createdAt).toISOString().split("T")[0];
       if (!groups[dateStr]) {
         groups[dateStr] = { date: dateStr, total: 0, connected: 0 };

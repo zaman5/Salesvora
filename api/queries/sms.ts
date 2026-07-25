@@ -1,7 +1,7 @@
 ﻿import { getDb, hasDatabase } from "./connection";
 import { smsCampaigns, smsLogs } from "@db/schema";
 import { eq, desc, sql, and, or, count } from "drizzle-orm";
-import { readJsonDb, writeJsonDb } from "./jsonDb";
+import { readJsonDb, writeJsonDb, serializeDates } from "./jsonDb";
 
 export async function findSMSCampaignsByCompany(companyId?: number) {
   try {
@@ -57,7 +57,7 @@ export async function createSMSCampaign(data: { name: string; companyId: number;
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    store.smsCampaigns.push(newCamp);
+    store.smsCampaigns.push(serializeDates(newCamp));
     writeJsonDb(store);
     return id;
   }
@@ -71,11 +71,11 @@ export async function updateSMSCampaign(id: number, data: Partial<{ name: string
     const store = readJsonDb();
     const idx = store.smsCampaigns.findIndex((sc: any) => sc.id == id);
     if (idx !== -1) {
-      store.smsCampaigns[idx] = {
+      store.smsCampaigns[idx] = serializeDates({
         ...store.smsCampaigns[idx],
         ...data,
         updatedAt: new Date().toISOString()
-      };
+      });
       writeJsonDb(store);
     }
   }
@@ -117,7 +117,7 @@ export async function createSMSLog(data: {
       ...data,
       createdAt: new Date().toISOString()
     };
-    store.smsLogs.push(newLog);
+    store.smsLogs.push(serializeDates(newLog));
     writeJsonDb(store);
     return id;
   }

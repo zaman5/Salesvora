@@ -2,7 +2,7 @@ import { getDb } from "./connection";
 import { campaigns, campaignLeads } from "@db/schema";
 import { eq, and, desc, count, sql } from "drizzle-orm";
 import type { InsertCampaignLead } from "@db/schema";
-import { readJsonDb, writeJsonDb } from "./jsonDb";
+import { readJsonDb, writeJsonDb, serializeDates } from "./jsonDb";
 
 export async function findCampaignsByCompany(companyId?: number) {
   try {
@@ -134,7 +134,7 @@ export async function addLeadsToCampaign(data: InsertCampaignLead[]) {
         attemptCount: 0,
         createdAt: new Date().toISOString()
       };
-      store.campaignLeads.push(newCL);
+      store.campaignLeads.push(serializeDates(newCL));
       ids.push(id);
     }
     
@@ -225,11 +225,11 @@ export async function updateCampaignLeadStatus(id: number, status: string, data?
     const store = readJsonDb();
     const idx = store.campaignLeads.findIndex((cl: any) => cl.id == id);
     if (idx !== -1) {
-      store.campaignLeads[idx] = {
+      store.campaignLeads[idx] = serializeDates({
         ...store.campaignLeads[idx],
-        status: status as any,
+        status,
         ...data
-      };
+      });
       writeJsonDb(store);
     }
   }

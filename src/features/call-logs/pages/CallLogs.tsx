@@ -23,18 +23,21 @@ import {
   Filter,
 } from "lucide-react";
 
+// Nullable where the calls table is nullable — these rows come straight from
+// the API, and a column with no value arrives as null, not undefined.
 type CallLog = {
   id: number;
   toNumber?: string;
-  fromNumber?: string;
-  status: string;
+  fromNumber?: string | null;
+  status?: string;
   type?: string;
   callerId?: number;
-  leadId?: number;
-  duration?: number;
-  recordingUrl?: string;
+  leadId?: number | null;
+  duration?: number | null;
+  recordingUrl?: string | null;
   dispositionId?: number | null;
-  createdAt?: string;
+  // A Date over the MySQL path, an ISO string over the JSON-store fallback.
+  createdAt?: string | Date;
 };
 type CallUser = { id: number; name?: string };
 type Disposition = { id: number; label?: string; category?: string };
@@ -85,14 +88,14 @@ export default function CallLogsPage() {
     return true;
   });
 
-  const formatDuration = (seconds: number) => {
+  const formatDuration = (seconds: number | null | undefined) => {
     if (!seconds) return "-";
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}m ${secs}s`;
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: string | undefined) => {
     switch (status) {
       case "connected":
       case "completed":
@@ -106,7 +109,7 @@ export default function CallLogsPage() {
     }
   };
 
-  const getDispositionBadge = (dispId: number | null) => {
+  const getDispositionBadge = (dispId: number | null | undefined) => {
     if (!dispId) return <Badge className="bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400 border-0">No Outcome</Badge>;
     const dispObj = (dispositions as Disposition[]).find((d) => d.id === dispId);
     const label = dispObj?.label || `Outcome #${dispId}`;
@@ -225,7 +228,7 @@ export default function CallLogsPage() {
                           log.status === "no_answer" ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400" :
                           "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
                         }>
-                          {log.status}
+                          {log.status ?? "unknown"}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">{getDispositionBadge(log.dispositionId)}</td>

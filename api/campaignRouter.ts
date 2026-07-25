@@ -81,9 +81,11 @@ export const campaignRouter = createRouter({
       if (campaignId && input.leadListId) {
         try {
           const listLeads = await findLeadsByList(input.leadListId);
-          const leadsArray = Array.isArray(listLeads) ? listLeads : (listLeads as { items?: unknown[] })?.items ?? [];
+          const leadsArray = Array.isArray(listLeads)
+            ? listLeads
+            : (listLeads as { items?: { id: number }[] })?.items ?? [];
           if (leadsArray.length > 0) {
-            const campaignLeadData = leadsArray.map((lead: { id: number }, index: number) => ({
+            const campaignLeadData = leadsArray.map((lead, index: number) => ({
               campaignId,
               leadId: lead.id,
               sequenceOrder: index + 1,
@@ -142,6 +144,11 @@ export const campaignRouter = createRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const campaign = await campaignInScope(ctx.user, input.campaignId);
+
+      // A campaign with no lead list has nothing to pull in.
+      if (!campaign.leadListId) {
+        return { count: 0, success: true };
+      }
 
       const leads = await findLeadsByList(campaign.leadListId);
       if (!leads || !Array.isArray(leads) || leads.length === 0) {

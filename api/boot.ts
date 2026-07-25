@@ -31,26 +31,37 @@ app.notFound((c) => {
   return c.html(fs.readFileSync(indexPath, "utf-8"));
 });
 
-const port = parseInt(process.env.PORT || "3000");
-console.log(`[boot] starting on port ${port} (NODE_ENV=${process.env.NODE_ENV ?? "development"})`);
+// The fully-wired app (static serving + SPA fallback installed above) so tests
+// can exercise it with app.request() without a socket being opened.
+export default app;
 
-// Mail Sender's Express sub-app runs in this same process (Hostinger only
-// keeps one Node process alive) — requests to /api/mail/* go straight to
-// Express, everything else goes through Hono as before.
-const honoListener = getRequestListener(app.fetch);
-const server = http.createServer((req, res) => {
-  if (req.url?.startsWith("/api/mail")) {
-    mailApp(req, res);
-  } else {
-    honoListener(req, res);
-  }
-});
+// Importing this module under a test runner must not bind a port — two suites
+// running in parallel would race for it, and the open handle keeps the runner
+// from exiting.
+if (process.env.NODE_ENV !== "test") startServer();
 
-server.listen(port, () => {
-  console.log(`[boot] ready — http://localhost:${port}/`);
-});
+function startServer() {
+  const port = parseInt(process.env.PORT || "3000");
+  console.log(`[boot] starting on port ${port} (NODE_ENV=${process.env.NODE_ENV ?? "development"})`);
 
-server.on("error", (err: NodeJS.ErrnoException) => {
-  console.error(`[boot] server error (${err.code}):`, err.message);
-  process.exit(1);
-});
+  // Mail Sender's Express sub-app runs in this same process (Hostinger only
+  // keeps one Node process alive) — requests to /api/mail/* go straight to
+  // Express, everything else goes through Hono as before.
+  const honoListener = getRequestListener(app.fetch);
+  const server = http.createServer((req, res) => {
+    if (req.url?.startsWith("/api/mail")) {
+      mailApp(req, res);
+    } else {
+      honoListener(req, res);
+    }
+  });
+
+  server.listen(port, () => {
+    console.log(`[boot] ready — http://localhost:${port}/`);
+  });
+
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    console.error(`[boot] server error (${err.code}):`, err.message);
+    process.exit(1);
+  });
+}
