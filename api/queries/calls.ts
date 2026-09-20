@@ -1,4 +1,4 @@
-﻿import { getDb, hasDatabase } from "./connection";
+import { getDb, hasDatabase } from "./connection";
 import { calls, callDispositions, callRecordings } from "@db/schema";
 import { eq, and, desc, count, sql, gte, lte } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
@@ -89,6 +89,44 @@ export async function findCallById(id: number) {
     warnJsonFallback("findCallById");
     const data = readJsonDb();
     return data.calls.find((c: any) => c.id == id) || null;
+  }
+}
+
+export async function findCallByCallSid(callSid: string) {
+  if (!callSid) return null;
+  try {
+    return await getDb().query.calls.findFirst({
+      where: eq(calls.callSid, callSid),
+    });
+  } catch {
+    warnJsonFallback("findCallByCallSid");
+    const data = readJsonDb();
+    return data.calls.find((c: any) => c.callSid === callSid) || null;
+  }
+}
+
+export async function findCallByTelnyxId(id: string) {
+  if (!id) return null;
+  const direct = await findCallByCallSid(id);
+  if (direct) return direct;
+  try {
+    const db = getDb();
+    const all = await db.query.calls.findMany({
+      orderBy: [desc(calls.createdAt)],
+      limit: 100,
+    });
+    return all.find((c: any) => {
+      const meta = c.customFields?.telnyx;
+      return meta?.callControlId === id || meta?.callLegId === id || meta?.callSessionId === id;
+    }) || null;
+  } catch {
+    warnJsonFallback("findCallByTelnyxId");
+    const data = readJsonDb();
+    return (data.calls || []).find((c: any) => {
+      if (c.callSid === id) return true;
+      const meta = c.customFields?.telnyx;
+      return meta?.callControlId === id || meta?.callLegId === id || meta?.callSessionId === id;
+    }) || null;
   }
 }
 

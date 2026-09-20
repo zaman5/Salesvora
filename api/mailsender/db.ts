@@ -46,15 +46,26 @@ function openDb(): SqliteLike {
       },
     };
   } catch {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const Database = require('better-sqlite3');
-    const raw = new Database(DB_PATH);
-    return {
-      exec: (sql: string) => raw.exec(sql),
-      pragma: (sql: string) => raw.pragma(sql),
-      prepare: (sql: string) => raw.prepare(sql),
-      transaction: (fn: any) => raw.transaction(fn),
-    };
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Database = require('better-sqlite3');
+      const raw = new Database(DB_PATH);
+      return {
+        exec: (sql: string) => raw.exec(sql),
+        pragma: (sql: string) => raw.pragma(sql),
+        prepare: (sql: string) => raw.prepare(sql),
+        transaction: (fn: any) => raw.transaction(fn),
+      };
+    } catch {
+      console.warn('[MailDB] Neither node:sqlite nor better-sqlite3 is available — falling back to mock driver.');
+      const noop = () => ({ all: () => [], get: () => null, run: () => ({ changes: 0, lastInsertRowid: 0 }) });
+      return {
+        exec: () => {},
+        pragma: () => {},
+        prepare: () => noop(),
+        transaction: (fn: any) => fn,
+      };
+    }
   }
 }
 

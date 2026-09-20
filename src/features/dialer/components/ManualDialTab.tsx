@@ -161,19 +161,23 @@ export function ManualDialTab() {
   // Handle answered inbound call
   useEffect(() => {
     if (!webrtcOn) return;
-    if (rtc.callState === "active" && rtc.callDirection === "inbound" && callStatus === "idle") {
+    if (rtc.callState === "active" && rtc.callDirection === "inbound") {
       setCallStatus("connected");
-      setDuration(0);
       setCallError(null);
-      initiateCallMutation.mutateAsync({
-        companyId, toNumber: rtc.incomingCallerNumber || "unknown",
-        fromNumber: selectedNumber || undefined, type: "inbound",
-      }).then((call) => {
-        if (call?.id) { setActiveCallId(call.id); updateStatusMutation.mutate({ id: call.id, status: "connected" }); }
-      }).catch(console.error);
+      if (rtc.activeInboundCallId && !activeCallId) {
+        setActiveCallId(rtc.activeInboundCallId);
+      } else if (!activeCallId && !rtc.activeInboundCallId && callStatus === "idle") {
+        setDuration(0);
+        initiateCallMutation.mutateAsync({
+          companyId, toNumber: rtc.incomingCallerNumber || "unknown",
+          fromNumber: selectedNumber || undefined, type: "inbound",
+        }).then((call) => {
+          if (call?.id) { setActiveCallId(call.id); updateStatusMutation.mutate({ id: call.id, status: "connected" }); }
+        }).catch(console.error);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rtc.callState, rtc.callDirection, webrtcOn]);
+  }, [rtc.callState, rtc.callDirection, rtc.activeInboundCallId, webrtcOn]);
 
   const finalizeRecording = async (): Promise<{ dataUrl: string; duration: number } | null> => {
     if (recorder.status === "recording" || recorder.status === "paused") {
