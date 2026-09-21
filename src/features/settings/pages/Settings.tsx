@@ -671,6 +671,7 @@ export default function SettingsPage() {
                         <Input
                           value={swForm.space}
                           onChange={(e) => setSwForm({ ...swForm, space: e.target.value })}
+                          autoComplete="off"
                           placeholder="salesvora.signalwire.com"
                           className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm"
                         />
@@ -685,6 +686,7 @@ export default function SettingsPage() {
                         <Input
                           value={swForm.projectId}
                           onChange={(e) => setSwForm({ ...swForm, projectId: e.target.value })}
+                          autoComplete="username"
                           placeholder="6e1caf1e-238f-4ab3-b618-d164507f1250"
                           className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm font-mono"
                         />
@@ -723,6 +725,7 @@ export default function SettingsPage() {
                         <Input
                           value={swForm.defaultCallerId}
                           onChange={(e) => setSwForm({ ...swForm, defaultCallerId: e.target.value })}
+                          autoComplete="tel"
                           placeholder="+15550002222"
                           className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm font-mono"
                         />
@@ -1012,6 +1015,7 @@ export default function SettingsPage() {
                         <Input
                           value={form.phoneNumber}
                           onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
+                          autoComplete="tel"
                           placeholder="+15550001111"
                           disabled={editingId !== null && editingId > 0}
                           className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 disabled:opacity-60"
@@ -1026,6 +1030,7 @@ export default function SettingsPage() {
                         <Input
                           value={form.sipUsername}
                           onChange={(e) => setForm({ ...form, sipUsername: e.target.value })}
+                          autoComplete="username"
                           placeholder="e.g. salesvora_agent"
                           className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"
                         />
@@ -1079,6 +1084,7 @@ export default function SettingsPage() {
                         <Input
                           value={form.sipHost}
                           onChange={(e) => setForm({ ...form, sipHost: e.target.value })}
+                          autoComplete="off"
                           placeholder="yourname.sip.telnyx.com"
                           className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"
                         />
@@ -1089,6 +1095,7 @@ export default function SettingsPage() {
                         <Input
                           value={form.connectionId}
                           onChange={(e) => setForm({ ...form, connectionId: e.target.value })}
+                          autoComplete="off"
                           placeholder="e.g. 2985974513046390685"
                           className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"
                         />
