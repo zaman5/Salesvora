@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
@@ -249,7 +249,12 @@ export default function SMSCampaignsPage() {
             </Button>
           </DialogTrigger>
           <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Create SMS Campaign</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Create SMS Campaign</DialogTitle>
+              <DialogDescription className="text-gray-500 dark:text-gray-400 text-sm">
+                Set up automated batch SMS dispatch to your lead lists.
+              </DialogDescription>
+            </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>
                 <Label className="text-gray-600 dark:text-gray-300">Campaign Name</Label>
@@ -809,6 +814,9 @@ export default function SMSCampaignsPage() {
                     </span>
                   )}
                 </DialogTitle>
+                <DialogDescription className="text-gray-500 dark:text-gray-400 text-xs">
+                  SMS conversation history and direct messaging
+                </DialogDescription>
               </DialogHeader>
 
               {/* Full message history — complete text, both directions */}

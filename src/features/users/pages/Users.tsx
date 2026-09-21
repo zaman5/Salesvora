@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -361,6 +362,9 @@ export default function UsersPage() {
           <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New User</DialogTitle>
+              <DialogDescription className="text-gray-500 dark:text-gray-400 text-sm">
+                Add a new team member and configure their role and permissions.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>
@@ -420,6 +424,9 @@ export default function UsersPage() {
           <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit User — {editingUser?.name}</DialogTitle>
+              <DialogDescription className="text-gray-500 dark:text-gray-400 text-sm">
+                Update account details, phone assignments, and lead list access.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>

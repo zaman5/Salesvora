@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -443,6 +443,9 @@ export default function CampaignsPage() {
           <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white max-w-lg">
             <DialogHeader>
               <DialogTitle>Create Campaign</DialogTitle>
+              <DialogDescription className="text-gray-500 dark:text-gray-400 text-sm">
+                Configure your outbound dialing campaign settings and lead list.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>
