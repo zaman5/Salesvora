@@ -70,55 +70,96 @@ function extractCallerNumber(call: AnyCall): string | null {
   return null;
 }
 
+function getOrCreateAudioSink(): HTMLAudioElement | null {
+  if (typeof document === "undefined") return null;
+  let el = document.getElementById(REMOTE_AUDIO_ID) as HTMLAudioElement | null;
+  if (!el) {
+    el = document.createElement("audio");
+    el.id = REMOTE_AUDIO_ID;
+    el.autoplay = true;
+    el.playsInline = true;
+    el.style.position = "fixed";
+    el.style.top = "-9999px";
+    el.style.left = "-9999px";
+    el.style.width = "1px";
+    el.style.height = "1px";
+    el.style.opacity = "0";
+    el.style.pointerEvents = "none";
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
 /**
  * Force the call's remote audio stream into the hidden <audio> element and
- * start playback. Safely retrieves remote stream from call.remoteStream or
- * RTCPeerConnection receivers/streams and ensures tracks are enabled.
+ * start playback. Safely hooks into RTCPeerConnection ontrack event, remoteStreams,
+ * and track receivers to ensure incoming audio is immediately audible.
  */
 function attachRemoteAudio(call: AnyCall | null) {
   if (!call || typeof document === "undefined") return;
-  const el = document.getElementById(REMOTE_AUDIO_ID) as HTMLAudioElement | null;
+  const el = getOrCreateAudioSink();
   if (!el) return;
 
-  // Retrieve remote stream from call.remoteStream or peerConnection
-  let stream: MediaStream | null = (call.remoteStream as MediaStream) || null;
-  if (!stream && call.peerConnection) {
-    const pc = call.peerConnection as RTCPeerConnection;
+  const bindStream = (stream: MediaStream) => {
+    if (!stream || !(stream instanceof MediaStream)) return;
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length === 0) return;
+    audioTracks.forEach((track) => {
+      track.enabled = true;
+    });
+    if (el.srcObject !== stream) {
+      el.srcObject = stream;
+    }
+    el.muted = false;
+    el.volume = 1.0;
+    const playPromise = el.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn("[WebRTC] Auto-play was prevented by browser policy:", err);
+      });
+    }
+  };
+
+  // 1. Direct stream property on call object
+  if (call.remoteStream instanceof MediaStream) {
+    bindStream(call.remoteStream);
+  }
+
+  // 2. Stream on call options
+  const opts = (call as unknown as { options?: Record<string, unknown> })?.options;
+  if (opts?.remoteStream instanceof MediaStream) {
+    bindStream(opts.remoteStream as MediaStream);
+  }
+
+  // 3. RTCPeerConnection stream & track receivers
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pc = (call.peerConnection || opts?.peerConnection || (call as any).pc) as RTCPeerConnection | undefined;
+  if (pc) {
+    // Listen for incoming media tracks in real time
+    if (!pc.ontrack) {
+      pc.ontrack = (event: RTCTrackEvent) => {
+        if (event.streams && event.streams[0]) {
+          bindStream(event.streams[0]);
+        } else if (event.track) {
+          bindStream(new MediaStream([event.track]));
+        }
+      };
+    }
+
     if (typeof pc.getRemoteStreams === "function") {
       const streams = pc.getRemoteStreams();
       if (streams && streams.length > 0) {
-        stream = streams[0];
+        bindStream(streams[0]);
       }
     }
-    if (!stream && typeof pc.getReceivers === "function") {
-      const tracks = pc.getReceivers().map((r) => r.track).filter((t): t is MediaStreamTrack => Boolean(t && t.kind === "audio"));
-      if (tracks.length > 0) {
-        stream = new MediaStream(tracks);
+    if (typeof pc.getReceivers === "function") {
+      const audioTracks = pc.getReceivers()
+        .map((r) => r.track)
+        .filter((t): t is MediaStreamTrack => Boolean(t && t.kind === "audio"));
+      if (audioTracks.length > 0) {
+        bindStream(new MediaStream(audioTracks));
       }
     }
-  }
-
-  if (!stream || !(stream instanceof MediaStream)) return;
-  
-  const audioTracks = stream.getAudioTracks();
-  if (audioTracks.length === 0) return;
-
-  // Ensure all audio tracks are enabled and unmuted
-  audioTracks.forEach((track) => {
-    track.enabled = true;
-  });
-
-  if (el.srcObject !== stream) {
-    el.srcObject = stream;
-  }
-  el.muted = false;
-  el.volume = 1.0;
-
-  const playPromise = el.play();
-  if (playPromise !== undefined) {
-    playPromise.catch((err) => {
-      console.warn("[WebRTC] Auto-play was prevented by browser policy:", err);
-    });
   }
 }
 
@@ -259,14 +300,19 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
                 setIncomingCallerNumber(extractCallerNumber(note.call) || "Unknown");
               }
               setCallState("ringing");
+              attachRemoteAudio(note.call);
+              const activeCall = note.call;
+              [100, 300, 700].forEach((ms) =>
+                setTimeout(() => { if (callRef.current === activeCall) attachRemoteAudio(activeCall); }, ms),
+              );
             } else if (s === "active") {
               setCallState("active");
               // Make sure the caller's audio actually reaches the speakers —
               // the remote stream can lag behind the "active" event, so retry
-              // a few times instead of attaching once and hoping.
+              // multiple times with immediate track binding.
               attachRemoteAudio(note.call);
               const activeCall = note.call;
-              [300, 1000, 2500].forEach((ms) =>
+              [100, 300, 700, 1500, 3000].forEach((ms) =>
                 setTimeout(() => { if (callRef.current === activeCall) attachRemoteAudio(activeCall); }, ms),
               );
               // Caller ID sometimes only becomes available once the call is
@@ -353,6 +399,9 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
     const caller = toE164(callerNumber);   // empty string = Telnyx picks default
 
     try {
+      // Unlock browser audio context / audio sink on user click
+      getOrCreateAudioSink()?.play().catch(() => {});
+
       callRef.current = clientRef.current.newCall({
         destinationNumber: dest,
         callerNumber:      caller || undefined, // omit if empty so Telnyx uses its default
@@ -361,6 +410,9 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
         remoteElement: REMOTE_AUDIO_ID,
       });
       setCallState("ringing");
+      if (callRef.current) {
+        attachRemoteAudio(callRef.current);
+      }
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not start the call.");
@@ -374,12 +426,16 @@ export function useTelnyxRTC({ enabled, login, password }: Options) {
 
   const answerCall = useCallback(() => {
     try {
+      // Unlock browser audio sink on answer click
+      getOrCreateAudioSink()?.play().catch(() => {});
+
       const call = callRef.current;
       if (call) {
         // Ensure audio routes to the remote audio element for inbound calls
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (call as any).remoteElement = REMOTE_AUDIO_ID;
         call.answer();
+        attachRemoteAudio(call);
       }
     } catch { /* noop */ }
     setCallState("active");
