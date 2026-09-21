@@ -86,7 +86,7 @@ export const callRouter = createRouter({
 
       if (activeProvider === "signalwire") {
         const sw = await getSignalWireConfig(companyId);
-        const useSwRest = Boolean(sw?.enabled && sw.projectId && sw.apiToken && !sw.webrtcEnabled);
+        const useSwRest = Boolean(sw?.enabled && sw.projectId && sw.apiToken);
         if (useSwRest && sw) {
           const from = input.fromNumber || sw.defaultCallerId || "";
           const origin = process.env.PUBLIC_APP_URL || "https://api.salesvora.com";
