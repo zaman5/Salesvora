@@ -114,6 +114,7 @@ export default function SMSCampaignsPage() {
   // ── Conversation viewer: full two-way thread with one number ──
   const [threadWith, setThreadWith] = useState<string | null>(null);
   const [replyMsg, setReplyMsg]     = useState("");
+  const [replyError, setReplyError] = useState<string | null>(null);
 
   const { data: thread = [], refetch: refetchThread } = trpc.sms.conversation.useQuery(
     { number: threadWith || "" },
@@ -121,7 +122,16 @@ export default function SMSCampaignsPage() {
   );
 
   const replyMutation = trpc.sms.sendDirect.useMutation({
-    onSuccess: () => { setReplyMsg(""); refetchThread(); },
+    onSuccess: (res) => {
+      if (res.success) {
+        setReplyMsg("");
+        setReplyError(null);
+        refetchThread();
+      } else if (res.error) {
+        setReplyError(res.error);
+      }
+    },
+    onError: (err) => setReplyError(err.message),
   });
 
   // Clear the unread badge: opening a chat (and any new inbound message that
@@ -146,13 +156,21 @@ export default function SMSCampaignsPage() {
     return fromNumbers[0] || "";
   })();
 
-  const handleSendReply = () => {
-    if (!threadWith || !replyMsg.trim()) return;
-    replyMutation.mutate({
-      toNumber: threadWith,
-      message: replyMsg,
-      fromNumber: threadOwnNumber || undefined,
-    });
+  const handleSendReply = async () => {
+    if (!replyMsg.trim() || !threadWith) return;
+    setReplyError(null);
+    try {
+      const res = await replyMutation.mutateAsync({
+        toNumber: threadWith,
+        message: replyMsg,
+        fromNumber: threadOwnNumber || undefined,
+      });
+      if (!res.success && res.error) {
+        setReplyError(res.error);
+      }
+    } catch (err: any) {
+      setReplyError(err.message || "Failed to send reply");
+    }
   };
 
   // Pre-select defaults
@@ -842,6 +860,11 @@ export default function SMSCampaignsPage() {
               </div>
 
               {/* Reply box */}
+              {replyError && (
+                <div className="bg-red-950/40 border border-red-800/60 rounded-md p-2 text-xs text-red-300">
+                  {replyError}
+                </div>
+              )}
               <div className="flex items-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-800">
                 <Textarea
                   value={replyMsg}

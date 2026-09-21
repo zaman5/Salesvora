@@ -184,7 +184,9 @@ export const smsRouter = createRouter({
         if (activeProvider === "signalwire") {
           const sw = companyId ? await getSignalWireConfig(companyId) : null;
           if (sw?.space && sw?.projectId && sw?.apiToken && sw?.enabled) {
-            const from = fromRaw || sw.defaultCallerId || "";
+            const from = (fromRaw && !fromRaw.includes("5550002222"))
+              ? fromRaw
+              : (sw.defaultCallerId || "+12082489823");
             if (from) {
               const result = await sendSignalWireSMS(sw.space, sw.projectId, sw.apiToken, {
                 from: toE164(from),
