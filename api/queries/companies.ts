@@ -1,4 +1,4 @@
-﻿import { getDb } from "./connection";
+import { getDb } from "./connection";
 import { companies } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { readJsonDb, writeJsonDb } from "./jsonDb";
@@ -62,8 +62,17 @@ export async function updateCompany(id: number, data: any) {
         ...data,
         updatedAt: new Date().toISOString(),
       };
-      writeJsonDb(store);
+    } else {
+      store.companies.push({
+        id,
+        name: "Default Company",
+        ...data,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
     }
+    writeJsonDb(store);
   }
 }
 

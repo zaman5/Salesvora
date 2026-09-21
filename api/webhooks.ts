@@ -501,10 +501,24 @@ webhooksApp.all("/signalwire/voice", async (c) => {
 
 // Outbound Connect Webhook (cXML returned when an outbound call connects)
 webhooksApp.all("/signalwire/outbound-connect", async (c) => {
-  const xml = generateVoiceCXml({
-    greeting: "Connecting your SalesVora call now.",
-  });
-  return c.text(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
+  try {
+    const params = await parseWebhookParams(c);
+    const to = params.To || params.Called || "";
+    const accountSid = params.AccountSid || "";
+    const { greeting, forwardSip } = await resolveSignalWireCompany(to, accountSid);
+
+    const xml = generateVoiceCXml({
+      greeting: greeting || "Connecting your SalesVora call now.",
+      forwardSip: forwardSip || undefined,
+    });
+    return c.text(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
+  } catch (err) {
+    console.error("[signalwire webhook] Error in /outbound-connect:", err);
+    const xml = generateVoiceCXml({
+      greeting: "Connecting your SalesVora call now.",
+    });
+    return c.text(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
+  }
 });
 
 // Call Status Changes Webhook

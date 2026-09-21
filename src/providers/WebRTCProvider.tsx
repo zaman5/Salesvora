@@ -127,8 +127,13 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
 
       {children}
 
-      {/* Hidden audio sink — required for Telnyx WebRTC to play remote audio */}
-      <audio id={rtc.remoteAudioId} autoPlay style={{ display: "none" }} />
+      {/* Audio sink — required for WebRTC to play remote caller/client audio */}
+      <audio
+        id={rtc.remoteAudioId}
+        autoPlay
+        playsInline
+        style={{ position: "fixed", top: -9999, left: -9999, width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+      />
 
       {/* Incoming call popup with ringtone */}
       {showIncoming && (

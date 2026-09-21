@@ -289,6 +289,12 @@ describe("Complete End-to-End Telephony Provider Testing", () => {
   // ─── 4. Call Router Outbound Call Placement with SignalWire ───
   it("places an outbound REST call via SignalWire when active provider is signalwire", async () => {
     const adminCaller = appRouter.createCaller(superAdminContext as any);
+    await adminCaller.integration.saveSignalWire({
+      space: "salesvora.signalwire.com",
+      projectId: "6e1caf1e-238f-4ab3-b618-d164507f1250",
+      apiToken: "PT_secret_token_live_123",
+      enabled: true,
+    });
     await adminCaller.integration.setActiveTelephonyProvider({ provider: "signalwire" });
 
     const agentCaller = appRouter.createCaller(callerContext as any);
@@ -306,6 +312,12 @@ describe("Complete End-to-End Telephony Provider Testing", () => {
   // ─── 5. SMS Router Message Dispatch with SignalWire ───
   it("sends an outbound SMS via SignalWire when active provider is signalwire", async () => {
     const adminCaller = appRouter.createCaller(superAdminContext as any);
+    await adminCaller.integration.saveSignalWire({
+      space: "salesvora.signalwire.com",
+      projectId: "6e1caf1e-238f-4ab3-b618-d164507f1250",
+      apiToken: "PT_secret_token_live_123",
+      enabled: true,
+    });
     await adminCaller.integration.setActiveTelephonyProvider({ provider: "signalwire" });
 
     const agentCaller = appRouter.createCaller(callerContext as any);

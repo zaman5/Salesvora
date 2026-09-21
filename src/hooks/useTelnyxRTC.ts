@@ -72,19 +72,54 @@ function extractCallerNumber(call: AnyCall): string | null {
 
 /**
  * Force the call's remote audio stream into the hidden <audio> element and
- * start playback. The SDK is supposed to do this via remoteElement, but on
- * answered inbound calls the stream sometimes arrives after the element was
- * wired (or the SDK skips it entirely) — leaving the agent unable to hear
- * the caller. Safe to call repeatedly; it only reassigns when needed.
+ * start playback. Safely retrieves remote stream from call.remoteStream or
+ * RTCPeerConnection receivers/streams and ensures tracks are enabled.
  */
 function attachRemoteAudio(call: AnyCall | null) {
   if (!call || typeof document === "undefined") return;
   const el = document.getElementById(REMOTE_AUDIO_ID) as HTMLAudioElement | null;
-  const stream = call.remoteStream;
-  if (!el || !(stream instanceof MediaStream) || stream.getAudioTracks().length === 0) return;
-  if (el.srcObject !== stream) el.srcObject = stream;
+  if (!el) return;
+
+  // Retrieve remote stream from call.remoteStream or peerConnection
+  let stream: MediaStream | null = (call.remoteStream as MediaStream) || null;
+  if (!stream && call.peerConnection) {
+    const pc = call.peerConnection as RTCPeerConnection;
+    if (typeof pc.getRemoteStreams === "function") {
+      const streams = pc.getRemoteStreams();
+      if (streams && streams.length > 0) {
+        stream = streams[0];
+      }
+    }
+    if (!stream && typeof pc.getReceivers === "function") {
+      const tracks = pc.getReceivers().map((r) => r.track).filter((t): t is MediaStreamTrack => Boolean(t && t.kind === "audio"));
+      if (tracks.length > 0) {
+        stream = new MediaStream(tracks);
+      }
+    }
+  }
+
+  if (!stream || !(stream instanceof MediaStream)) return;
+  
+  const audioTracks = stream.getAudioTracks();
+  if (audioTracks.length === 0) return;
+
+  // Ensure all audio tracks are enabled and unmuted
+  audioTracks.forEach((track) => {
+    track.enabled = true;
+  });
+
+  if (el.srcObject !== stream) {
+    el.srcObject = stream;
+  }
   el.muted = false;
-  el.play().catch(() => { /* autoplay may need the user gesture that answered the call */ });
+  el.volume = 1.0;
+
+  const playPromise = el.play();
+  if (playPromise !== undefined) {
+    playPromise.catch((err) => {
+      console.warn("[WebRTC] Auto-play was prevented by browser policy:", err);
+    });
+  }
 }
 
 // Telnyx sends errors as objects, strings, or Errors. Pull out something useful.

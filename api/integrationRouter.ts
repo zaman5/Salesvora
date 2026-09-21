@@ -23,7 +23,7 @@ import { listPhoneNumbers, addPhoneNumber, updatePhoneNumber, removePhoneNumber,
 // These endpoints only ever manage the superadmin's own company today, so
 // fall back to it explicitly rather than leaving them locked out.
 function companyScope(user: { role: string; companyId?: number | null }) {
-  return requireCompanyScope(user, user.companyId ?? undefined);
+  return requireCompanyScope(user, user.companyId ?? 1);
 }
 
 export const integrationRouter = createRouter({
