@@ -257,7 +257,7 @@ describe("Complete End-to-End Telephony Provider Testing", () => {
     const testSwRes = await caller.integration.testSignalWire({
       space: "salesvora.signalwire.com",
       projectId: "6e1caf1e-238f-4ab3-b618-d164507f1250",
-      apiToken: "PT_secret_token_live_123",
+      apiToken: "swapi_WpyYnZd5I7RcRQbHgtuHDiKtzN1GIBog5ncl",
     });
     expect(testSwRes.ok).toBe(true);
 

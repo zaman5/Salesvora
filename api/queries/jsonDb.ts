@@ -463,17 +463,23 @@ export function readJsonDb(): JsonDb {
 }
 
 export function writeJsonDb(data: JsonDb): void {
-  try {
-    const json = JSON.stringify(data, null, 2);
-    // Keep a rolling backup before every write so we can recover if the
-    // main write is interrupted (e.g. process killed mid-write).
-    if (fs.existsSync(DB_PATH)) {
-      try { fs.copyFileSync(DB_PATH, BAK_PATH); } catch { /* non-fatal */ }
+  const json = JSON.stringify(data, null, 2);
+  let attempts = 0;
+  while (attempts < 6) {
+    try {
+      if (fs.existsSync(DB_PATH)) {
+        try { fs.copyFileSync(DB_PATH, BAK_PATH); } catch { /* non-fatal */ }
+      }
+      fs.writeFileSync(DB_PATH, json, "utf-8");
+      return;
+    } catch (err: any) {
+      attempts++;
+      if (attempts >= 6) {
+        console.error("[jsonDb] Failed to write db.json after retries:", err);
+      } else {
+        const waitTill = Date.now() + 30;
+        while (Date.now() < waitTill) {}
+      }
     }
-    // Direct write — fs.renameSync over an existing file throws EPERM on
-    // Windows when the file is open, so we write directly instead.
-    fs.writeFileSync(DB_PATH, json, "utf-8");
-  } catch (err) {
-    console.error("[jsonDb] Failed to write db.json:", err);
   }
 }

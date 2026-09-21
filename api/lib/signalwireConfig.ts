@@ -61,6 +61,26 @@ export async function getSignalWireConfig(companyId: number): Promise<SignalWire
   const company = await findCompanyById(companyId);
   const settings = asSettings(company);
   const cfg = settings.signalwire as SignalWireConfig | undefined;
+  
+  const envSpace = process.env.SIGNALWIRE_SPACE || "";
+  const envProjectId = process.env.SIGNALWIRE_PROJECT_ID || "";
+  const envApiToken = process.env.SIGNALWIRE_API_TOKEN || "";
+  const envCallerId = process.env.SIGNALWIRE_CALLER_ID || "";
+
+  if (!cfg?.apiToken && envProjectId && envApiToken) {
+    return {
+      enabled: cfg?.enabled ?? true,
+      space: cfg?.space || envSpace || "salesvora.signalwire.com",
+      projectId: cfg?.projectId || envProjectId,
+      apiToken: envApiToken,
+      defaultCallerId: cfg?.defaultCallerId || envCallerId,
+      inboundGreeting: cfg?.inboundGreeting || "Thanks for calling SalesVora. Connecting you now.",
+      inboundForwardSip: cfg?.inboundForwardSip || "",
+      inboundForwardNumber: cfg?.inboundForwardNumber || "",
+      webrtcEnabled: cfg?.webrtcEnabled ?? true,
+    };
+  }
+
   return cfg ?? null;
 }
 
