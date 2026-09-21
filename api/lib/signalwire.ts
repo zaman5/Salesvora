@@ -46,25 +46,33 @@ function basicAuthHeader(projectId: string, apiToken: string): string {
 }
 
 async function parseSignalWireError(res: Response): Promise<string> {
+  let rawMsg = "";
   try {
     const text = await res.text();
     try {
       const json = JSON.parse(text);
-      if (json.message) return json.message;
-      if (json.error_message) return json.error_message;
-      if (json.description) return json.description;
+      rawMsg = json.message || json.error_message || json.description || "";
     } catch {
       if (text.includes("<Message>") && text.includes("</Message>")) {
         const match = text.match(/<Message>(.*?)<\/Message>/);
-        if (match && match[1]) return match[1];
+        if (match && match[1]) rawMsg = match[1];
       }
     }
   } catch {
     /* ignore */
   }
+
+  if (rawMsg) {
+    if (rawMsg.toLowerCase().includes("verified caller id") || rawMsg.toLowerCase().includes("trial")) {
+      return `SignalWire Trial Account: Recipient number is not verified. Add the number to "Verified Caller IDs" in your SignalWire Console, or upgrade the project by adding billing balance. (${rawMsg})`;
+    }
+    return rawMsg;
+  }
+
   if (res.status === 401) return "Invalid SignalWire Project ID or API Token (Unauthorized).";
   if (res.status === 403) return "Forbidden: Check account status and permissions on SignalWire.";
   if (res.status === 404) return "SignalWire resource or Space not found.";
+  if (res.status === 422) return "Unprocessable entity: Please check the phone number format or verify the number in SignalWire Console.";
   return `SignalWire request failed (HTTP ${res.status}).`;
 }
 
