@@ -25,7 +25,6 @@ import {
   Copy,
   Check,
   HelpCircle,
-  ExternalLink,
   ShieldCheck,
   Layers,
 } from "lucide-react";
@@ -84,7 +83,6 @@ type TestResult = {
   incomingMessage: string;
 };
 
-// id = 0 is the sentinel for the Telnyx-config-derived synthetic entry
 type DisplayEntry = {
   id: number;
   number: string;
@@ -272,7 +270,8 @@ export default function SettingsPage() {
     (form.sipPassword.trim() !== "" || (editingId !== null && !!telnyxQuery.data?.hasSipPassword)) &&
     (form.apiKey.trim() !== "" || !!telnyxQuery.data?.hasApiKey);
 
-  const handleTelnyxTest = async () => {
+  const handleTelnyxTest = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setTestResult({
       outgoing: "loading",
       incoming: "loading",
@@ -296,8 +295,8 @@ export default function SettingsPage() {
           incomingMessage: "Could not verify incoming — check SIP credentials",
         });
       }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Connection failed";
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Connection failed";
       setTestResult({
         outgoing: "error",
         incoming: "error",
@@ -307,7 +306,8 @@ export default function SettingsPage() {
     }
   };
 
-  const handleTelnyxSave = async () => {
+  const handleTelnyxSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     try {
       await saveTelnyxMutation.mutateAsync({
         apiKey: form.apiKey || undefined,
@@ -338,12 +338,13 @@ export default function SettingsPage() {
         closeForm();
         setSaveStatus({ type: "idle", message: "" });
       }, 1200);
-    } catch (e) {
-      setSaveStatus({ type: "error", message: e instanceof Error ? e.message : "Failed to save." });
+    } catch (err) {
+      setSaveStatus({ type: "error", message: err instanceof Error ? err.message : "Failed to save." });
     }
   };
 
-  const handleSignalWireTest = async () => {
+  const handleSignalWireTest = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setSwTestResult({
       status: "loading",
       message: "Testing SignalWire Space & Project authentication…",
@@ -375,7 +376,8 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSignalWireSave = async () => {
+  const handleSignalWireSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     try {
       await saveSignalWireMutation.mutateAsync({
         space: swForm.space,
@@ -390,7 +392,6 @@ export default function SettingsPage() {
         enabled: swForm.enabled,
       });
 
-      // If a default caller ID is given and not in numbers list, add it
       if (swForm.defaultCallerId && !phoneNumbers.some((p) => p.number === swForm.defaultCallerId)) {
         await addPhoneMutation.mutateAsync({
           number: swForm.defaultCallerId,
@@ -659,158 +660,161 @@ export default function SettingsPage() {
                   </div>
                 </CardHeader>
 
-                <CardContent className="space-y-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Space URL */}
-                    <div>
-                      <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                        SignalWire Space <span className="text-red-400">*</span>
-                      </Label>
-                      <Input
-                        value={swForm.space}
-                        onChange={(e) => setSwForm({ ...swForm, space: e.target.value })}
-                        placeholder="salesvora.signalwire.com"
-                        className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Your Space domain (e.g. salesvora.signalwire.com)</p>
-                    </div>
-
-                    {/* Project ID */}
-                    <div>
-                      <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                        Project ID <span className="text-red-400">*</span>
-                      </Label>
-                      <Input
-                        value={swForm.projectId}
-                        onChange={(e) => setSwForm({ ...swForm, projectId: e.target.value })}
-                        placeholder="6e1caf1e-238f-4ab3-b618-d164507f1250"
-                        className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm font-mono"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">From SignalWire dashboard → API Credentials → Project ID</p>
-                    </div>
-
-                    {/* API Token */}
-                    <div>
-                      <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                        API Token <span className="text-red-400">*</span>
-                      </Label>
-                      <Input
-                        type="password"
-                        value={swForm.apiToken}
-                        onChange={(e) => setSwForm({ ...swForm, apiToken: e.target.value })}
-                        placeholder={
-                          signalwireQuery.data?.hasApiToken
-                            ? `Saved: ${signalwireQuery.data.apiTokenPreview} (type to change)`
-                            : "PTxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                        }
-                        className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm font-mono"
-                      />
-                      {signalwireQuery.data?.hasApiToken && (
-                        <p className="text-xs text-green-500 mt-1 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" /> Token stored securely server-side. Leave blank to keep existing.
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Default Caller ID */}
-                    <div>
-                      <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                        Default Caller ID (Phone Number)
-                      </Label>
-                      <Input
-                        value={swForm.defaultCallerId}
-                        onChange={(e) => setSwForm({ ...swForm, defaultCallerId: e.target.value })}
-                        placeholder="+15550002222"
-                        className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm font-mono"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Purchased SignalWire number (E.164 format) for caller ID</p>
-                    </div>
-
-                    {/* SIP Credential URI */}
-                    <div>
-                      <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                        SIP Credential URI (LiveKit / Agent Bridge)
-                      </Label>
-                      <Input
-                        value={swForm.sipCredential}
-                        onChange={(e) => setSwForm({ ...swForm, sipCredential: e.target.value })}
-                        placeholder="livekit-agent@salesvora-d164507f1250.sip.signalwire.com"
-                        className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm font-mono"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">SIP endpoint for routing calls to agent session</p>
-                    </div>
-
-                    {/* Inbound Call Greeting */}
-                    <div>
-                      <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                        Inbound Call Greeting (Text-to-Speech)
-                      </Label>
-                      <Input
-                        value={swForm.inboundGreeting}
-                        onChange={(e) => setSwForm({ ...swForm, inboundGreeting: e.target.value })}
-                        placeholder="Thanks for calling SalesVora. Connecting you now."
-                        className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Spoken via cXML &lt;Say&gt; when a customer dials in</p>
-                    </div>
-                  </div>
-
-                  {/* Toggles */}
-                  <div className="border-t border-gray-200 dark:border-gray-800 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+                <CardContent>
+                  <form onSubmit={handleSignalWireSave} className="space-y-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Space URL */}
                       <div>
-                        <Label className="text-gray-800 dark:text-gray-200 text-sm font-medium">Enable SignalWire Telephony</Label>
-                        <p className="text-xs text-gray-500">Allow placing & receiving calls via SignalWire</p>
+                        <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                          SignalWire Space <span className="text-red-400">*</span>
+                        </Label>
+                        <Input
+                          value={swForm.space}
+                          onChange={(e) => setSwForm({ ...swForm, space: e.target.value })}
+                          placeholder="salesvora.signalwire.com"
+                          className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Your Space domain (e.g. salesvora.signalwire.com)</p>
                       </div>
-                      <Switch
-                        checked={swForm.enabled}
-                        onCheckedChange={(v) => setSwForm({ ...swForm, enabled: v })}
-                      />
-                    </div>
 
-                    <div className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+                      {/* Project ID */}
                       <div>
-                        <Label className="text-gray-800 dark:text-gray-200 text-sm font-medium">In-App Browser Calling (WebRTC)</Label>
-                        <p className="text-xs text-gray-500">Enable agents to dial directly in the CRM tab</p>
+                        <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                          Project ID <span className="text-red-400">*</span>
+                        </Label>
+                        <Input
+                          value={swForm.projectId}
+                          onChange={(e) => setSwForm({ ...swForm, projectId: e.target.value })}
+                          placeholder="6e1caf1e-238f-4ab3-b618-d164507f1250"
+                          className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm font-mono"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">From SignalWire dashboard → API Credentials → Project ID</p>
                       </div>
-                      <Switch
-                        checked={swForm.webrtcEnabled}
-                        onCheckedChange={(v) => setSwForm({ ...swForm, webrtcEnabled: v })}
-                      />
-                    </div>
-                  </div>
 
-                  {/* Live Test Results */}
-                  {swTestResult.status !== "idle" && (
-                    <div className={`p-3.5 rounded-xl border text-sm flex items-start gap-3 ${
-                      swTestResult.status === "ok"
-                        ? "bg-green-500/10 border-green-500/20 text-green-500"
-                        : swTestResult.status === "error"
-                        ? "bg-red-500/10 border-red-500/20 text-red-500"
-                        : "bg-blue-500/10 border-blue-500/20 text-blue-500"
-                    }`}>
-                      {swTestResult.status === "loading" && <Loader2 className="w-4 h-4 animate-spin shrink-0 mt-0.5" />}
-                      {swTestResult.status === "ok" && <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />}
-                      {swTestResult.status === "error" && <XCircle className="w-4 h-4 shrink-0 mt-0.5" />}
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-xs uppercase tracking-wide">
-                          {swTestResult.status === "ok" ? "Connection Verified" : swTestResult.status === "error" ? "Connection Failed" : "Testing…"}
-                        </p>
-                        <p className="text-xs mt-0.5 opacity-90">{swTestResult.message}</p>
+                      {/* API Token */}
+                      <div>
+                        <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                          API Token <span className="text-red-400">*</span>
+                        </Label>
+                        <Input
+                          type="password"
+                          autoComplete="current-password"
+                          value={swForm.apiToken}
+                          onChange={(e) => setSwForm({ ...swForm, apiToken: e.target.value })}
+                          placeholder={
+                            signalwireQuery.data?.hasApiToken
+                              ? `Saved: ${signalwireQuery.data.apiTokenPreview} (type to change)`
+                              : "PTxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                          }
+                          className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm font-mono"
+                        />
+                        {signalwireQuery.data?.hasApiToken && (
+                          <p className="text-xs text-green-500 mt-1 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> Token stored securely server-side. Leave blank to keep existing.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Default Caller ID */}
+                      <div>
+                        <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                          Default Caller ID (Phone Number)
+                        </Label>
+                        <Input
+                          value={swForm.defaultCallerId}
+                          onChange={(e) => setSwForm({ ...swForm, defaultCallerId: e.target.value })}
+                          placeholder="+15550002222"
+                          className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm font-mono"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Purchased SignalWire number (E.164 format) for caller ID</p>
+                      </div>
+
+                      {/* SIP Credential URI */}
+                      <div>
+                        <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                          SIP Credential URI (LiveKit / Agent Bridge)
+                        </Label>
+                        <Input
+                          value={swForm.sipCredential}
+                          onChange={(e) => setSwForm({ ...swForm, sipCredential: e.target.value })}
+                          placeholder="livekit-agent@salesvora-d164507f1250.sip.signalwire.com"
+                          className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm font-mono"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">SIP endpoint for routing calls to agent session</p>
+                      </div>
+
+                      {/* Inbound Call Greeting */}
+                      <div>
+                        <Label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                          Inbound Call Greeting (Text-to-Speech)
+                        </Label>
+                        <Input
+                          value={swForm.inboundGreeting}
+                          onChange={(e) => setSwForm({ ...swForm, inboundGreeting: e.target.value })}
+                          placeholder="Thanks for calling SalesVora. Connecting you now."
+                          className="bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-sm"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Spoken via cXML &lt;Say&gt; when a customer dials in</p>
                       </div>
                     </div>
-                  )}
 
-                  {/* Save Status Message */}
-                  {swStatus.type !== "idle" && (
-                    <div className={`p-3 rounded-lg border text-xs font-medium ${
-                      swStatus.type === "ok"
-                        ? "bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-400 border-green-500/20"
-                        : "bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400 border-red-500/20"
-                    }`}>
-                      {swStatus.message}
+                    {/* Toggles */}
+                    <div className="border-t border-gray-200 dark:border-gray-800 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+                        <div>
+                          <Label className="text-gray-800 dark:text-gray-200 text-sm font-medium">Enable SignalWire Telephony</Label>
+                          <p className="text-xs text-gray-500">Allow placing & receiving calls via SignalWire</p>
+                        </div>
+                        <Switch
+                          checked={swForm.enabled}
+                          onCheckedChange={(v) => setSwForm({ ...swForm, enabled: v })}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+                        <div>
+                          <Label className="text-gray-800 dark:text-gray-200 text-sm font-medium">In-App Browser Calling (WebRTC)</Label>
+                          <p className="text-xs text-gray-500">Enable agents to dial directly in the CRM tab</p>
+                        </div>
+                        <Switch
+                          checked={swForm.webrtcEnabled}
+                          onCheckedChange={(v) => setSwForm({ ...swForm, webrtcEnabled: v })}
+                        />
+                      </div>
                     </div>
-                  )}
+
+                    {/* Live Test Results */}
+                    {swTestResult.status !== "idle" && (
+                      <div className={`p-3.5 rounded-xl border text-sm flex items-start gap-3 ${
+                        swTestResult.status === "ok"
+                          ? "bg-green-500/10 border-green-500/20 text-green-500"
+                          : swTestResult.status === "error"
+                          ? "bg-red-500/10 border-red-500/20 text-red-500"
+                          : "bg-blue-500/10 border-blue-500/20 text-blue-500"
+                      }`}>
+                        {swTestResult.status === "loading" && <Loader2 className="w-4 h-4 animate-spin shrink-0 mt-0.5" />}
+                        {swTestResult.status === "ok" && <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />}
+                        {swTestResult.status === "error" && <XCircle className="w-4 h-4 shrink-0 mt-0.5" />}
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-xs uppercase tracking-wide">
+                            {swTestResult.status === "ok" ? "Connection Verified" : swTestResult.status === "error" ? "Connection Failed" : "Testing…"}
+                          </p>
+                          <p className="text-xs mt-0.5 opacity-90">{swTestResult.message}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Save Status Message */}
+                    {swStatus.type !== "idle" && (
+                      <div className={`p-3 rounded-lg border text-xs font-medium ${
+                        swStatus.type === "ok"
+                          ? "bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-400 border-green-500/20"
+                          : "bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400 border-red-500/20"
+                      }`}>
+                        {swStatus.message}
+                      </div>
+                    )}
+                  </form>
                 </CardContent>
               </Card>
 
@@ -990,12 +994,12 @@ export default function SettingsPage() {
 
                 {/* Add / Edit form */}
                 {showForm && (
-                  <div className="space-y-5 border border-gray-300 dark:border-gray-700 rounded-xl p-5 bg-gray-100/20 dark:bg-gray-800/20">
+                  <form onSubmit={handleTelnyxSave} className="space-y-5 border border-gray-300 dark:border-gray-700 rounded-xl p-5 bg-gray-100/20 dark:bg-gray-800/20">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-semibold text-gray-900 dark:text-white">
                         {editingId === null ? "New Phone Credential" : "Edit Phone Credential"}
                       </p>
-                      <Button variant="ghost" size="sm" onClick={closeForm} className="h-7 w-7 p-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                      <Button type="button" variant="ghost" size="sm" onClick={closeForm} className="h-7 w-7 p-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
                         <X className="w-4 h-4" />
                       </Button>
                     </div>
@@ -1034,6 +1038,7 @@ export default function SettingsPage() {
                         </Label>
                         <Input
                           type="password"
+                          autoComplete="current-password"
                           value={form.sipPassword}
                           onChange={(e) => setForm({ ...form, sipPassword: e.target.value })}
                           placeholder={
@@ -1054,6 +1059,7 @@ export default function SettingsPage() {
                         </Label>
                         <Input
                           type="password"
+                          autoComplete="current-password"
                           value={form.apiKey}
                           onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
                           placeholder={
@@ -1112,6 +1118,7 @@ export default function SettingsPage() {
                             </p>
                           </div>
                           <Button
+                            type="button"
                             onClick={handleTelnyxTest}
                             disabled={testTelnyxMutation.isPending}
                             className="bg-green-600 hover:bg-green-700 shrink-0"
@@ -1148,7 +1155,7 @@ export default function SettingsPage() {
 
                     <div className="flex gap-2 pt-1">
                       <Button
-                        onClick={handleTelnyxSave}
+                        type="submit"
                         disabled={
                           saveTelnyxMutation.isPending ||
                           addPhoneMutation.isPending ||
@@ -1161,11 +1168,11 @@ export default function SettingsPage() {
                           ? "Saving…"
                           : "Save Credential"}
                       </Button>
-                      <Button variant="outline" onClick={closeForm} className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+                      <Button type="button" variant="outline" onClick={closeForm} className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                         Cancel
                       </Button>
                     </div>
-                  </div>
+                  </form>
                 )}
               </CardContent>
             </Card>
@@ -1371,7 +1378,8 @@ function InboundSmsWebhookCard({
 
   const webhookUrl = typeof window !== "undefined" ? `${window.location.origin}/api/webhooks/telnyx` : "/api/webhooks/telnyx";
 
-  const handleSave = async () => {
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     try {
       await saveMutation.mutateAsync({
         connectionId: telnyxData?.connectionId || "",
@@ -1380,8 +1388,8 @@ function InboundSmsWebhookCard({
       });
       setStatus({ type: "ok", message: "Webhook public key saved." });
       setTimeout(() => setStatus({ type: "idle", message: "" }), 2000);
-    } catch (e) {
-      setStatus({ type: "error", message: e instanceof Error ? e.message : "Failed to save." });
+    } catch (err) {
+      setStatus({ type: "error", message: err instanceof Error ? err.message : "Failed to save." });
     }
   };
 
@@ -1393,42 +1401,44 @@ function InboundSmsWebhookCard({
           Telnyx Inbound SMS Webhook
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-          To receive replies from clients, add this URL as the webhook for your Telnyx Messaging Profile
-          (Telnyx portal → Messaging → your profile → Inbound Settings → Webhook URL):
-        </p>
-        <div className="flex items-center gap-2">
-          <Input readOnly value={webhookUrl} className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-mono text-xs" />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 shrink-0"
-            onClick={() => navigator.clipboard?.writeText(webhookUrl)}
-          >
-            Copy
-          </Button>
-        </div>
-        <div>
-          <Label className="text-gray-600 dark:text-gray-300 text-xs">Telnyx Public Key (optional, verifies webhook signatures)</Label>
-          <Input
-            value={publicKey}
-            onChange={(e) => setPublicKey(e.target.value)}
-            placeholder="From Telnyx portal → Account Settings → Public Key"
-            className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-xs font-mono"
-          />
-          <p className="text-[11px] text-gray-500 mt-1">
-            Without this, inbound messages are still accepted but not signature-verified. Set it once you've
-            copied your account's public key from the Telnyx portal.
+      <CardContent>
+        <form onSubmit={handleSave} className="space-y-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+            To receive replies from clients, add this URL as the webhook for your Telnyx Messaging Profile
+            (Telnyx portal → Messaging → your profile → Inbound Settings → Webhook URL):
           </p>
-        </div>
-        <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={handleSave} disabled={saveMutation.isPending}>
-          {saveMutation.isPending ? "Saving…" : "Save"}
-        </Button>
-        {status.type !== "idle" && (
-          <p className={`text-xs ${status.type === "ok" ? "text-green-400" : "text-red-400"}`}>{status.message}</p>
-        )}
+          <div className="flex items-center gap-2">
+            <Input readOnly value={webhookUrl} className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-mono text-xs" />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 shrink-0"
+              onClick={() => navigator.clipboard?.writeText(webhookUrl)}
+            >
+              Copy
+            </Button>
+          </div>
+          <div>
+            <Label className="text-gray-600 dark:text-gray-300 text-xs">Telnyx Public Key (optional, verifies webhook signatures)</Label>
+            <Input
+              value={publicKey}
+              onChange={(e) => setPublicKey(e.target.value)}
+              placeholder="From Telnyx portal → Account Settings → Public Key"
+              className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1 text-xs font-mono"
+            />
+            <p className="text-[11px] text-gray-500 mt-1">
+              Without this, inbound messages are still accepted but not signature-verified. Set it once you've
+              copied your account's public key from the Telnyx portal.
+            </p>
+          </div>
+          <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-700" disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? "Saving…" : "Save"}
+          </Button>
+          {status.type !== "idle" && (
+            <p className={`text-xs ${status.type === "ok" ? "text-green-400" : "text-red-400"}`}>{status.message}</p>
+          )}
+        </form>
       </CardContent>
     </Card>
   );
