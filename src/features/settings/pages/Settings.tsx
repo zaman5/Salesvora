@@ -93,7 +93,7 @@ type DisplayEntry = {
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "superadmin";
+  const isAdmin = user?.role === "superadmin" || user?.role === "admin";
 
   const [activeTab, setActiveTab] = useState<"signalwire" | "telnyx">("signalwire");
 

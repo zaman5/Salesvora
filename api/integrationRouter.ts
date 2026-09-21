@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, superAdminQuery, callerQuery } from "./middleware";
+import { createRouter, adminQuery, superAdminQuery, callerQuery } from "./middleware";
 import { requireCompanyScope, resolveCompanyScope } from "./lib/authz";
 import { nanoid } from "nanoid";
 import {
@@ -27,22 +27,20 @@ function companyScope(user: { role: string; companyId?: number | null }) {
 }
 
 export const integrationRouter = createRouter({
-  // ─── Phone numbers (caller IDs) — superadmin-only: connecting phone
-  // numbers to Telnyx/SIP and assigning them to admins/callers is a
-  // platform-level action, not something individual admins configure. ───
-  listPhoneNumbers: superAdminQuery.query(async ({ ctx }) => {
+  // ─── Phone numbers (caller IDs) — admin & superadmin accessible ───
+  listPhoneNumbers: adminQuery.query(async ({ ctx }) => {
     const companyId = companyScope(ctx.user);
     return listPhoneNumbers(companyId);
   }),
 
-  addPhoneNumber: superAdminQuery
+  addPhoneNumber: adminQuery
     .input(z.object({ number: z.string().min(3), label: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const companyId = companyScope(ctx.user);
       return addPhoneNumber(companyId, input);
     }),
 
-  updatePhoneNumber: superAdminQuery
+  updatePhoneNumber: adminQuery
     .input(z.object({ id: z.number(), label: z.string().optional(), number: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const companyId = companyScope(ctx.user);
@@ -50,21 +48,21 @@ export const integrationRouter = createRouter({
     }),
 
   // callerId here is really "assignedTo" — any user id (admin or caller).
-  assignPhoneNumber: superAdminQuery
+  assignPhoneNumber: adminQuery
     .input(z.object({ id: z.number(), callerId: z.number().nullable() }))
     .mutation(async ({ ctx, input }) => {
       const companyId = companyScope(ctx.user);
       return assignPhoneNumber(companyId, input.id, input.callerId);
     }),
 
-  removePhoneNumber: superAdminQuery
+  removePhoneNumber: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const companyId = companyScope(ctx.user);
       return removePhoneNumber(companyId, input.id);
     }),
 
-  togglePhoneNumber: superAdminQuery
+  togglePhoneNumber: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const companyId = companyScope(ctx.user);
@@ -149,7 +147,7 @@ export const integrationRouter = createRouter({
       },
       // Per-caller WebRTC credentials
       webrtc: {
-        enabled: isSwActive ? Boolean(swCfg?.webrtcEnabled && isSwEnabled) : Boolean(cfg?.webrtcEnabled && webrtcLogin && webrtcPassword),
+        enabled: isSwActive ? false : Boolean(cfg?.webrtcEnabled && webrtcLogin && webrtcPassword),
         login:    webrtcLogin,
         password: webrtcPassword,
         isShared: !hasDedicatedSip, // true = all callers share one credential (risky)
@@ -158,7 +156,7 @@ export const integrationRouter = createRouter({
   }),
 
   // Current saved Telnyx config for the caller's company (API key masked).
-  getTelnyx: superAdminQuery.query(async ({ ctx }) => {
+  getTelnyx: adminQuery.query(async ({ ctx }) => {
     const companyId = companyScope(ctx.user);
     const cfg = await getTelnyxConfig(companyId);
     return maskTelnyxConfig(cfg);
@@ -166,7 +164,7 @@ export const integrationRouter = createRouter({
 
   // Validate an API key against Telnyx and return the account's SIP connections.
   // If apiKey is omitted, the already-saved key is used.
-  testTelnyx: superAdminQuery
+  testTelnyx: adminQuery
     .input(z.object({ apiKey: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const companyId = companyScope(ctx.user);
@@ -200,7 +198,7 @@ export const integrationRouter = createRouter({
   // Outbound" if needed), saves its id in settings, and attaches it to the
   // configured connection plus every per-caller "Salesvora — …" credential
   // connection that's missing one.
-  repairVoiceSetup: superAdminQuery.mutation(async ({ ctx }) => {
+  repairVoiceSetup: adminQuery.mutation(async ({ ctx }) => {
     const companyId = companyScope(ctx.user);
     const cfg = await getTelnyxConfig(companyId);
     if (!cfg?.apiKey) {
@@ -255,7 +253,7 @@ export const integrationRouter = createRouter({
   //          unassigned numbers route to the superadmin's connection only.
   // The browser sends its origin because the PHP proxy on Hostinger rewrites
   // the Host header — the server can't derive the public URL from the request.
-  repairInboundSetup: superAdminQuery
+  repairInboundSetup: adminQuery
     .input(z.object({ origin: z.string().url() }))
     .mutation(async ({ ctx, input }) => {
       const companyId = companyScope(ctx.user);
@@ -408,25 +406,21 @@ export const integrationRouter = createRouter({
     }),
 
   // Persist the Telnyx configuration for the caller's company.
-  saveTelnyx: superAdminQuery
+  saveTelnyx: adminQuery
     .input(z.object({
-      apiKey: z.string().optional(), // omit to keep the existing key
-      connectionId: z.string().default(""),
-      connectionName: z.string().optional(),
-      outboundVoiceProfileId: z.string().nullable().optional(),
-      outboundVoiceProfile: z.string().optional(),
-      defaultCallerId: z.string().optional(),
-      webrtcEnabled: z.boolean().optional(),
+      apiKey: z.string().optional(),
       sipUsername: z.string().optional(),
       sipPassword: z.string().optional(),
       sipHost: z.string().optional(),
-      ipAddress: z.string().optional(),
-      port: z.number().optional(),
-      channelLimit: z.number().optional(),
-      destinationFormat: z.string().optional(),
-      originationFormat: z.string().optional(),
+      connectionId: z.string().optional(),
+      connectionName: z.string().optional(),
+      outboundVoiceProfileId: z.string().optional(),
+      messagingProfileId: z.string().optional(),
+      publicKey: z.string().optional(),
+      defaultCallerId: z.string().optional(),
       assignedNumbers: z.array(z.string()).optional(),
-      webhookPublicKey: z.string().optional(),
+      channelLimit: z.number().nullable().optional(),
+      webrtcEnabled: z.boolean().optional(),
       enabled: z.boolean().default(false),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -436,7 +430,7 @@ export const integrationRouter = createRouter({
     }),
 
   // ─── Active Telephony Provider Selection ───
-  getTelephonyProvider: superAdminQuery.query(async ({ ctx }) => {
+  getTelephonyProvider: adminQuery.query(async ({ ctx }) => {
     const companyId = companyScope(ctx.user);
     const activeProvider = await getActiveTelephonyProvider(companyId);
     const telnyx = maskTelnyxConfig(await getTelnyxConfig(companyId));
@@ -448,7 +442,7 @@ export const integrationRouter = createRouter({
     };
   }),
 
-  setActiveTelephonyProvider: superAdminQuery
+  setActiveTelephonyProvider: adminQuery
     .input(z.object({ provider: z.enum(["telnyx", "signalwire"]) }))
     .mutation(async ({ ctx, input }) => {
       const companyId = companyScope(ctx.user);
@@ -457,13 +451,13 @@ export const integrationRouter = createRouter({
     }),
 
   // ─── SignalWire Integration Endpoints ───
-  getSignalWire: superAdminQuery.query(async ({ ctx }) => {
+  getSignalWire: adminQuery.query(async ({ ctx }) => {
     const companyId = companyScope(ctx.user);
     const cfg = await getSignalWireConfig(companyId);
     return maskSignalWireConfig(cfg);
   }),
 
-  saveSignalWire: superAdminQuery
+  saveSignalWire: adminQuery
     .input(z.object({
       space: z.string().optional(),
       projectId: z.string().optional(),
@@ -487,7 +481,7 @@ export const integrationRouter = createRouter({
       return maskSignalWireConfig(saved);
     }),
 
-  testSignalWire: superAdminQuery
+  testSignalWire: adminQuery
     .input(z.object({
       space: z.string().optional(),
       projectId: z.string().optional(),

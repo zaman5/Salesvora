@@ -328,14 +328,42 @@ export function ManualDialTab() {
 
       {/* ── LEFT: Dial Pad ── */}
       <div className="space-y-3">
-        {webrtcOn && (
-          <div className="space-y-1">
-            <p className="text-xs">
-              <span className={rtc.status === "registered" ? "text-green-400" : rtc.status === "connecting" ? "text-yellow-400" : "text-red-400"}>
-                ● {rtc.status === "registered" ? "Ready" : rtc.status === "connecting" ? "Connecting…" : "Not connected"}
+        {/* Active Telephony Provider & Status Indicator */}
+        <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-700 dark:text-gray-300">Engine:</span>
+            <Badge variant="outline" className={`font-mono text-[11px] ${
+              dialerConfig?.provider === "signalwire"
+                ? "border-blue-500/40 bg-blue-500/10 text-blue-400 font-bold"
+                : "border-green-500/40 bg-green-500/10 text-green-400 font-bold"
+            }`}>
+              {dialerConfig?.provider === "signalwire" ? "SignalWire" : "Telnyx"}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {dialerConfig?.provider === "signalwire" ? (
+              <span className="flex items-center gap-1.5 text-green-400 font-medium text-[11px]">
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                {dialerConfig.signalwire?.space || "Cloud PSTN Ready"}
               </span>
-              {rtc.error && <span className="text-red-400"> — {rtc.error}</span>}
-            </p>
+            ) : webrtcOn ? (
+              <span className={`flex items-center gap-1 text-[11px] ${
+                rtc.status === "registered" ? "text-green-400 font-medium" : rtc.status === "connecting" ? "text-yellow-400" : "text-red-400"
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${
+                  rtc.status === "registered" ? "bg-green-400" : rtc.status === "connecting" ? "bg-yellow-400" : "bg-red-400"
+                }`} />
+                {rtc.status === "registered" ? "SIP Ready" : rtc.status === "connecting" ? "Connecting…" : "Not connected"}
+              </span>
+            ) : (
+              <span className="text-gray-400 text-[11px]">Server Calling Ready</span>
+            )}
+          </div>
+        </div>
+
+        {dialerConfig?.provider === "telnyx" && webrtcOn && (
+          <div className="space-y-1">
+            {rtc.error && <p className="text-xs text-red-400">Error: {rtc.error}</p>}
             {/* Warn if all callers share one SIP credential (concurrent calling issue) */}
             {(dialerConfig as any)?.webrtc?.isShared && rtc.status === "registered" && (
               <p className="text-[11px] text-amber-400 flex items-start gap-1 leading-relaxed">
