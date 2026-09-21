@@ -97,16 +97,24 @@ export async function testSignalWireConnection(
     }
 
     const text = await res.text();
-    let body: { incoming_phone_numbers?: Array<Record<string, unknown>> } = {};
+    let body: { incoming_phone_numbers?: Array<Record<string, unknown>> } | null = null;
     if (text && text.trim()) {
       try {
         body = JSON.parse(text);
       } catch {
-        body = {};
+        body = null;
       }
     }
 
-    const numbers: SignalWirePhoneNumber[] = (body.incoming_phone_numbers || []).map((n) => ({
+    if (!body || typeof body !== "object" || !Array.isArray(body.incoming_phone_numbers)) {
+      return {
+        ok: false,
+        status: res.status,
+        message: `Could not verify credentials: Space "${cleanSpace}" returned an invalid response. Please verify your Space URL (e.g. "your-space.signalwire.com"), Project ID, and API Token.`,
+      };
+    }
+
+    const numbers: SignalWirePhoneNumber[] = body.incoming_phone_numbers.map((n) => ({
       id: String(n.sid ?? n.id ?? ""),
       phoneNumber: String(n.phone_number ?? ""),
       friendlyName: String(n.friendly_name ?? ""),
@@ -199,24 +207,35 @@ export async function placeSignalWireCall(
 
     const text = await res.text();
     let body: Record<string, unknown> = {};
+    let sid = "";
+    let status = "initiated";
+
     if (text && text.trim()) {
       try {
         body = JSON.parse(text);
+        sid = String(body.sid || body.call_sid || "");
+        status = String(body.status || "initiated");
       } catch {
         const sidMatch = text.match(/<Sid>(.*?)<\/Sid>/) || text.match(/<CallSid>(.*?)<\/CallSid>/);
         const statusMatch = text.match(/<Status>(.*?)<\/Status>/);
-        body = {
-          sid: sidMatch ? sidMatch[1] : "",
-          status: statusMatch ? statusMatch[1] : "initiated",
-        };
+        sid = sidMatch ? sidMatch[1] : "";
+        status = statusMatch ? statusMatch[1] : "initiated";
       }
+    }
+
+    if (!sid) {
+      return {
+        ok: false,
+        status: res.status,
+        message: `SignalWire did not return a valid Call SID from "${cleanSpace}". Please verify your Space URL, Project ID, API Token, and Caller ID number.`,
+      };
     }
 
     return {
       ok: true,
       data: {
-        callSid: String(body.sid || body.call_sid || `SW_${Date.now()}`),
-        status: String(body.status || "initiated"),
+        callSid: sid,
+        status,
         direction: String(body.direction || "outbound-api"),
         from: String(body.from || params.from),
         to: String(body.to || params.to),
@@ -279,24 +298,35 @@ export async function sendSignalWireSMS(
 
     const text = await res.text();
     let body: Record<string, unknown> = {};
+    let sid = "";
+    let status = "sent";
+
     if (text && text.trim()) {
       try {
         body = JSON.parse(text);
+        sid = String(body.sid || body.message_sid || "");
+        status = String(body.status || "sent");
       } catch {
         const sidMatch = text.match(/<Sid>(.*?)<\/Sid>/) || text.match(/<MessageSid>(.*?)<\/MessageSid>/);
         const statusMatch = text.match(/<Status>(.*?)<\/Status>/);
-        body = {
-          sid: sidMatch ? sidMatch[1] : "",
-          status: statusMatch ? statusMatch[1] : "sent",
-        };
+        sid = sidMatch ? sidMatch[1] : "";
+        status = statusMatch ? statusMatch[1] : "sent";
       }
+    }
+
+    if (!sid) {
+      return {
+        ok: false,
+        status: res.status,
+        message: `SignalWire did not return a valid Message SID from "${cleanSpace}". Please verify your Space URL, Project ID, API Token, and phone number.`,
+      };
     }
 
     return {
       ok: true,
       data: {
-        messageSid: String(body.sid || body.message_sid || `SM_${Date.now()}`),
-        status: String(body.status || "sent"),
+        messageSid: sid,
+        status,
         from: String(body.from || params.from),
         to: String(body.to || params.to),
       },

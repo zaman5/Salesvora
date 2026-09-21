@@ -361,9 +361,16 @@ export function ManualDialTab() {
           </div>
         </div>
 
+        {dialerConfig?.provider === "signalwire" && (
+          <div className="px-3 py-2 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">
+            <p className="font-semibold mb-0.5">SignalWire Server REST Mode Active</p>
+            SignalWire triggers server-to-phone PSTN calls. To talk directly from your browser headset, switch to <span className="font-semibold">Telnyx WebRTC</span> in Settings.
+          </div>
+        )}
+
         {dialerConfig?.provider === "telnyx" && webrtcOn && (
           <div className="space-y-1">
-            {rtc.error && <p className="text-xs text-red-400">Error: {rtc.error}</p>}
+            {rtc.error && <p className="text-xs text-red-400 font-medium">SIP Error: {rtc.error}</p>}
             {/* Warn if all callers share one SIP credential (concurrent calling issue) */}
             {(dialerConfig as any)?.webrtc?.isShared && rtc.status === "registered" && (
               <p className="text-[11px] text-amber-400 flex items-start gap-1 leading-relaxed">
