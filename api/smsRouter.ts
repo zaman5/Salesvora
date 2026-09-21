@@ -4,6 +4,8 @@ import { createRouter, adminQuery, authedQuery, callerQuery, superAdminQuery } f
 import { listCompanyScope, assertSameCompany, isSuperAdmin } from "./lib/authz";
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { sendSMS, toE164 } from "./lib/telnyx";
+import { getSignalWireConfig, getActiveTelephonyProvider } from "./lib/signalwireConfig";
+import { sendSignalWireSMS } from "./lib/signalwire";
 import { listPhoneNumbers } from "./lib/phoneNumbers";
 import { sameNumber } from "./lib/telnyxWebhook";
 import { listContacts, setContactName } from "./lib/contacts";
@@ -176,22 +178,43 @@ export const smsRouter = createRouter({
       const to = toE164(input.toNumber);
       const fromRaw = input.fromNumber || "";
 
-      // Attempt real SMS delivery via Telnyx if configured
+      // Attempt real SMS delivery via active provider (SignalWire or Telnyx) if configured
       try {
-        const cfg = companyId ? await getTelnyxConfig(companyId) : null;
-        if (cfg?.apiKey && cfg?.enabled) {
-          const from = fromRaw || cfg.defaultCallerId || "";
-          if (from) {
-            const result = await sendSMS(cfg.apiKey, {
-              from: toE164(from),
-              to,
-              text: input.message,
-            });
-            if (result.ok) {
-              providerMsgId = result.data.id;
-            } else {
-              success = false;
-              error = result.message;
+        const activeProvider = companyId ? await getActiveTelephonyProvider(companyId) : "telnyx";
+        if (activeProvider === "signalwire") {
+          const sw = companyId ? await getSignalWireConfig(companyId) : null;
+          if (sw?.space && sw?.projectId && sw?.apiToken && sw?.enabled) {
+            const from = fromRaw || sw.defaultCallerId || "";
+            if (from) {
+              const result = await sendSignalWireSMS(sw.space, sw.projectId, sw.apiToken, {
+                from: toE164(from),
+                to,
+                text: input.message,
+              });
+              if (result.ok) {
+                providerMsgId = result.data.messageSid;
+              } else {
+                success = false;
+                error = result.message;
+              }
+            }
+          }
+        } else {
+          const cfg = companyId ? await getTelnyxConfig(companyId) : null;
+          if (cfg?.apiKey && cfg?.enabled) {
+            const from = fromRaw || cfg.defaultCallerId || "";
+            if (from) {
+              const result = await sendSMS(cfg.apiKey, {
+                from: toE164(from),
+                to,
+                text: input.message,
+              });
+              if (result.ok) {
+                providerMsgId = result.data.id;
+              } else {
+                success = false;
+                error = result.message;
+              }
             }
           }
         }

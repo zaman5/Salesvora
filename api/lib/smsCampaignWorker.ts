@@ -5,6 +5,8 @@ import {
 import { findLeadsByList } from "../queries/leads";
 import { getTelnyxConfig } from "./telnyxConfig";
 import { sendSMS, toE164 } from "./telnyx";
+import { getSignalWireConfig, getActiveTelephonyProvider } from "./signalwireConfig";
+import { sendSignalWireSMS } from "./signalwire";
 
 const TICK_MS = 20_000;
 const MAX_BATCH_NO_DELAY = 10;
@@ -111,11 +113,14 @@ async function processCampaign(campaignIn: any) {
   }
 
   const companyId = campaign.companyId;
+  const activeProvider = companyId ? await getActiveTelephonyProvider(companyId) : "telnyx";
   const cfg = companyId ? await getTelnyxConfig(companyId) : null;
+  const sw = companyId ? await getSignalWireConfig(companyId) : null;
 
   for (const lead of batch) {
     const to = toE164(lead.phone);
-    const fromRaw = campaign.fromNumber || cfg?.defaultCallerId || "";
+    const defaultFrom = activeProvider === "signalwire" ? (sw?.defaultCallerId || "") : (cfg?.defaultCallerId || "");
+    const fromRaw = campaign.fromNumber || defaultFrom;
     const text = personalize(campaign.messageTemplate, lead);
 
     let success = true;
@@ -123,13 +128,29 @@ async function processCampaign(campaignIn: any) {
     let providerMsgId: string | undefined;
 
     try {
-      if (cfg?.apiKey && cfg?.enabled && fromRaw) {
-        const result = await sendSMS(cfg.apiKey, { from: toE164(fromRaw), to, text });
-        if (result.ok) {
-          providerMsgId = result.data.id;
-        } else {
-          success = false;
-          error = result.message;
+      if (activeProvider === "signalwire") {
+        if (sw?.space && sw?.projectId && sw?.apiToken && sw?.enabled && fromRaw) {
+          const result = await sendSignalWireSMS(sw.space, sw.projectId, sw.apiToken, {
+            from: toE164(fromRaw),
+            to,
+            text,
+          });
+          if (result.ok) {
+            providerMsgId = result.data.messageSid;
+          } else {
+            success = false;
+            error = result.message;
+          }
+        }
+      } else {
+        if (cfg?.apiKey && cfg?.enabled && fromRaw) {
+          const result = await sendSMS(cfg.apiKey, { from: toE164(fromRaw), to, text });
+          if (result.ok) {
+            providerMsgId = result.data.id;
+          } else {
+            success = false;
+            error = result.message;
+          }
         }
       }
     } catch (err) {

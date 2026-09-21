@@ -4,6 +4,8 @@ import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware
 import { resolveCompanyScope, requireCompanyScope, assertSameCompany } from "./lib/authz";
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { placeCall } from "./lib/telnyx";
+import { getSignalWireConfig, getActiveTelephonyProvider } from "./lib/signalwireConfig";
+import { placeSignalWireCall } from "./lib/signalwire";
 import {
   findCallsByCompany, findCallsByCaller, findCallById,
   findActiveCallByCaller, createCall, updateCall,
@@ -67,7 +69,7 @@ export const callRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       // NEVER fall back to the client-supplied companyId: doing so let a user
       // with no company of their own place real, billed calls on another
-      // tenant's Telnyx account.
+      // tenant's account.
       const companyId = resolveCompanyScope(ctx.user, input.companyId);
       if (companyId == null) {
         throw new TRPCError({
@@ -76,43 +78,67 @@ export const callRouter = createRouter({
         });
       }
 
-      // If this company has Telnyx SIP trunking configured and enabled, place a
-      // real outbound call through Telnyx Call Control and use the returned
-      // call_control_id as our callSid. Otherwise fall back to a local SID so
-      // the app still works without a provider connected.
+      const activeProvider = await getActiveTelephonyProvider(companyId);
       let callSid = `CALL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       let providerStatus: "initiated" | "failed" = "initiated";
       let providerError: string | undefined;
-      const telnyxMeta: Record<string, unknown> = {};
+      const providerMeta: Record<string, unknown> = {};
 
-      const telnyx = await getTelnyxConfig(companyId);
-      // Only use the REST Call Control API when WebRTC browser-calling is NOT the
-      // chosen mode. (Browser calling places audio directly from the agent's
-      // browser, so the server must not also try to dial via REST — and a SIP
-      // trunk connection id is not valid for the Call Control API anyway.)
-      const useRestDialing = Boolean(
-        telnyx?.enabled && telnyx.apiKey && telnyx.connectionId && !telnyx.webrtcEnabled,
-      );
-      if (useRestDialing && telnyx) {
-        const from = input.fromNumber || telnyx.defaultCallerId || "";
-        const result = await placeCall(telnyx.apiKey, {
-          connectionId: telnyx.connectionId,
-          to: input.toNumber,
-          from,
-        });
-        if (result.ok) {
-          callSid = result.data.callControlId || callSid;
-          telnyxMeta.telnyx = {
-            provider: "telnyx",
-            callControlId: result.data.callControlId,
-            callLegId: result.data.callLegId,
-            callSessionId: result.data.callSessionId,
+      if (activeProvider === "signalwire") {
+        const sw = await getSignalWireConfig(companyId);
+        const useSwRest = Boolean(sw?.enabled && sw.projectId && sw.apiToken && !sw.webrtcEnabled);
+        if (useSwRest && sw) {
+          const from = input.fromNumber || sw.defaultCallerId || "";
+          const origin = process.env.PUBLIC_APP_URL || "https://api.salesvora.com";
+          const connectUrl = `${origin.replace(/\/+$/, "")}/api/webhooks/signalwire/outbound-connect`;
+          const statusUrl = `${origin.replace(/\/+$/, "")}/api/webhooks/signalwire/status`;
+
+          const result = await placeSignalWireCall(sw.space, sw.projectId, sw.apiToken, {
+            from,
+            to: input.toNumber,
+            url: connectUrl,
+            statusCallback: statusUrl,
+          });
+
+          if (result.ok) {
+            callSid = result.data.callSid || callSid;
+            providerMeta.signalwire = {
+              provider: "signalwire",
+              callSid: result.data.callSid,
+              status: result.data.status,
+            };
+          } else {
+            providerStatus = "failed";
+            providerError = result.message;
+            providerMeta.signalwire = { provider: "signalwire", error: result.message };
+          }
+        }
+      } else {
+        const telnyx = await getTelnyxConfig(companyId);
+        const useRestDialing = Boolean(
+          telnyx?.enabled && telnyx.apiKey && telnyx.connectionId && !telnyx.webrtcEnabled,
+        );
+        if (useRestDialing && telnyx) {
+          const from = input.fromNumber || telnyx.defaultCallerId || "";
+          const result = await placeCall(telnyx.apiKey, {
             connectionId: telnyx.connectionId,
-          };
-        } else {
-          providerStatus = "failed";
-          providerError = result.message;
-          telnyxMeta.telnyx = { provider: "telnyx", error: result.message };
+            to: input.toNumber,
+            from,
+          });
+          if (result.ok) {
+            callSid = result.data.callControlId || callSid;
+            providerMeta.telnyx = {
+              provider: "telnyx",
+              callControlId: result.data.callControlId,
+              callLegId: result.data.callLegId,
+              callSessionId: result.data.callSessionId,
+              connectionId: telnyx.connectionId,
+            };
+          } else {
+            providerStatus = "failed";
+            providerError = result.message;
+            providerMeta.telnyx = { provider: "telnyx", error: result.message };
+          }
         }
       }
 
@@ -127,7 +153,7 @@ export const callRouter = createRouter({
         toNumber: input.toNumber,
         fromNumber: input.fromNumber,
         status: providerStatus,
-        customFields: { ...(input.customFields || {}), ...telnyxMeta },
+        customFields: { ...(input.customFields || {}), ...providerMeta },
         startedAt: new Date(),
       });
       return { id, callSid, success: providerStatus !== "failed", error: providerError };

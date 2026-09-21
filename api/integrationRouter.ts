@@ -10,6 +10,11 @@ import {
 } from "./lib/telnyx";
 import { findAllUsers, updateUser } from "./queries/users";
 import { getTelnyxConfig, saveTelnyxConfig, maskTelnyxConfig } from "./lib/telnyxConfig";
+import {
+  getSignalWireConfig, saveSignalWireConfig, maskSignalWireConfig,
+  getActiveTelephonyProvider, setActiveTelephonyProvider, type TelephonyProvider,
+} from "./lib/signalwireConfig";
+import { testSignalWireConnection, listSignalWirePhoneNumbers, issueSignalWireSubscriberToken } from "./lib/signalwire";
 import { sameNumber } from "./lib/telnyxWebhook";
 import { listPhoneNumbers, addPhoneNumber, updatePhoneNumber, removePhoneNumber, togglePhoneNumber, assignPhoneNumber, numbersForCaller } from "./lib/phoneNumbers";
 
@@ -71,7 +76,9 @@ export const integrationRouter = createRouter({
   // have no business calling it.
   getDialerConfig: callerQuery.query(async ({ ctx }) => {
     const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? undefined);
+    const activeProvider = companyId ? await getActiveTelephonyProvider(companyId) : "telnyx";
     const cfg = companyId ? await getTelnyxConfig(companyId) : null;
+    const swCfg = companyId ? await getSignalWireConfig(companyId) : null;
     const isSuper = ctx.user.role === "superadmin";
     const numbers = new Set<string>();
 
@@ -81,7 +88,11 @@ export const integrationRouter = createRouter({
     // assigned yet, they see unassigned pool numbers but NEVER numbers
     // assigned to someone else and NEVER the global defaults.
     if (isSuper) {
-      if (cfg?.defaultCallerId) numbers.add(cfg.defaultCallerId);
+      if (activeProvider === "signalwire" && swCfg?.defaultCallerId) {
+        numbers.add(swCfg.defaultCallerId);
+      } else if (cfg?.defaultCallerId) {
+        numbers.add(cfg.defaultCallerId);
+      }
       for (const n of cfg?.assignedNumbers ?? []) numbers.add(n);
     }
 
@@ -94,17 +105,18 @@ export const integrationRouter = createRouter({
     }
 
     // If a non-superadmin still has no numbers (nothing assigned, no pool)
-    // fall back to the global default so they can at least make calls.
-    if (!isSuper && numbers.size === 0 && cfg?.defaultCallerId) {
-      numbers.add(cfg.defaultCallerId);
+    // fall back to the active provider default so they can at least make calls.
+    if (!isSuper && numbers.size === 0) {
+      if (activeProvider === "signalwire" && swCfg?.defaultCallerId) {
+        numbers.add(swCfg.defaultCallerId);
+      } else if (cfg?.defaultCallerId) {
+        numbers.add(cfg.defaultCallerId);
+      }
     }
+
     // Per-caller SIP credentials — each caller registers independently so
     // multiple callers can be on calls at the same time without kicking each
-    // other off. A user only ever receives their OWN stored credential: the
-    // company-wide shared sipPassword is a secret that must not be handed to
-    // every authenticated account, so there is no fallback to it. The
-    // superadmin is the account that owns/configures that shared credential,
-    // so they alone still see it (unchanged behaviour for the operator).
+    // other off.
     const userSip = (ctx.user as any)?.sipCredentials as
       { username?: string; password?: string; domain?: string } | undefined | null;
     const hasDedicatedSip =
@@ -113,16 +125,31 @@ export const integrationRouter = createRouter({
     const webrtcLogin    = hasDedicatedSip ? (userSip!.username ?? "") : (isSuper ? (cfg?.sipUsername ?? "") : "");
     const webrtcPassword = hasDedicatedSip ? (userSip!.password ?? "") : (isSuper ? (cfg?.sipPassword ?? "") : "");
 
+    const isSwActive = activeProvider === "signalwire";
+    const isSwEnabled = Boolean(swCfg?.enabled && swCfg?.projectId && swCfg?.apiToken);
+    const isTelnyxEnabled = Boolean(cfg?.enabled && cfg?.apiKey && cfg?.connectionId);
+
     return {
-      enabled: Boolean(cfg?.enabled && cfg?.apiKey && cfg?.connectionId),
-      defaultCallerId: cfg?.defaultCallerId ?? "",
+      provider: activeProvider,
+      enabled: isSwActive ? isSwEnabled : isTelnyxEnabled,
+      defaultCallerId: isSwActive ? (swCfg?.defaultCallerId || "") : (cfg?.defaultCallerId ?? ""),
       fromNumbers: Array.from(numbers),
-      connectionName: cfg?.connectionName ?? "",
+      connectionName: isSwActive ? (swCfg?.space || "SignalWire") : (cfg?.connectionName ?? ""),
       channelLimit: cfg?.channelLimit ?? null,
-      // Per-caller WebRTC credentials — each caller registers with their own
-      // SIP username so concurrent calls don't interfere.
+      signalwire: {
+        space: swCfg?.space ?? "",
+        projectId: swCfg?.projectId ?? "",
+        sipCredential: swCfg?.sipCredential ?? "",
+        enabled: isSwEnabled,
+        webrtcEnabled: Boolean(swCfg?.webrtcEnabled),
+      },
+      telnyx: {
+        enabled: isTelnyxEnabled,
+        connectionName: cfg?.connectionName ?? "",
+      },
+      // Per-caller WebRTC credentials
       webrtc: {
-        enabled: Boolean(cfg?.webrtcEnabled && webrtcLogin && webrtcPassword),
+        enabled: isSwActive ? Boolean(swCfg?.webrtcEnabled && isSwEnabled) : Boolean(cfg?.webrtcEnabled && webrtcLogin && webrtcPassword),
         login:    webrtcLogin,
         password: webrtcPassword,
         isShared: !hasDedicatedSip, // true = all callers share one credential (risky)
@@ -407,4 +434,91 @@ export const integrationRouter = createRouter({
       const saved = await saveTelnyxConfig(companyId, input);
       return maskTelnyxConfig(saved);
     }),
+
+  // ─── Active Telephony Provider Selection ───
+  getTelephonyProvider: superAdminQuery.query(async ({ ctx }) => {
+    const companyId = companyScope(ctx.user);
+    const activeProvider = await getActiveTelephonyProvider(companyId);
+    const telnyx = maskTelnyxConfig(await getTelnyxConfig(companyId));
+    const signalwire = maskSignalWireConfig(await getSignalWireConfig(companyId));
+    return {
+      activeProvider,
+      telnyx,
+      signalwire,
+    };
+  }),
+
+  setActiveTelephonyProvider: superAdminQuery
+    .input(z.object({ provider: z.enum(["telnyx", "signalwire"]) }))
+    .mutation(async ({ ctx, input }) => {
+      const companyId = companyScope(ctx.user);
+      const active = await setActiveTelephonyProvider(companyId, input.provider);
+      return { activeProvider: active };
+    }),
+
+  // ─── SignalWire Integration Endpoints ───
+  getSignalWire: superAdminQuery.query(async ({ ctx }) => {
+    const companyId = companyScope(ctx.user);
+    const cfg = await getSignalWireConfig(companyId);
+    return maskSignalWireConfig(cfg);
+  }),
+
+  saveSignalWire: superAdminQuery
+    .input(z.object({
+      space: z.string().optional(),
+      projectId: z.string().optional(),
+      apiToken: z.string().optional(),
+      sipCredential: z.string().optional(),
+      sipUsername: z.string().optional(),
+      sipPassword: z.string().optional(),
+      defaultCallerId: z.string().optional(),
+      inboundGreeting: z.string().optional(),
+      inboundForwardSip: z.string().optional(),
+      inboundForwardNumber: z.string().optional(),
+      webrtcEnabled: z.boolean().optional(),
+      webhookVoiceUrl: z.string().optional(),
+      webhookStatusUrl: z.string().optional(),
+      webhookSmsUrl: z.string().optional(),
+      enabled: z.boolean().default(false),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const companyId = companyScope(ctx.user);
+      const saved = await saveSignalWireConfig(companyId, input);
+      return maskSignalWireConfig(saved);
+    }),
+
+  testSignalWire: superAdminQuery
+    .input(z.object({
+      space: z.string().optional(),
+      projectId: z.string().optional(),
+      apiToken: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const companyId = companyScope(ctx.user);
+      const saved = await getSignalWireConfig(companyId);
+      const space = input.space?.trim() || saved?.space || "salesvora.signalwire.com";
+      const projectId = input.projectId?.trim() || saved?.projectId || "";
+      const apiToken = input.apiToken?.trim() || saved?.apiToken || "";
+
+      if (!projectId || !apiToken) {
+        return { ok: false as const, message: "SignalWire Project ID and API Token are required to test connection." };
+      }
+
+      return testSignalWireConnection(space, projectId, apiToken);
+    }),
+
+  getSignalWireSubscriberToken: callerQuery
+    .mutation(async ({ ctx }) => {
+      const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? undefined);
+      if (!companyId) {
+        return { ok: false as const, message: "No company associated with user." };
+      }
+      const cfg = await getSignalWireConfig(companyId);
+      if (!cfg?.space || !cfg?.projectId || !cfg?.apiToken) {
+        return { ok: false as const, message: "SignalWire is not configured for your company." };
+      }
+      const reference = ctx.user.email || `user-${ctx.user.id}@salesvora.com`;
+      return issueSignalWireSubscriberToken(cfg.space, cfg.projectId, cfg.apiToken, reference);
+    }),
 });
+
