@@ -383,7 +383,7 @@ async function parseWebhookParams(c: any): Promise<Record<string, string>> {
   }
 }
 
-async function resolveSignalWireCompany(to?: string, accountSid?: string): Promise<{ companyId: number; defaultCallerId?: string; greeting?: string; forwardSip?: string }> {
+async function resolveSignalWireCompany(to?: string, accountSid?: string): Promise<{ companyId: number; defaultCallerId?: string; greeting?: string; forwardSip?: string; forwardNumber?: string }> {
   const all = (await findAllCompanies()) as Array<{ id: number; settings?: any }>;
 
   // 1. Match by Project ID (AccountSid)
@@ -396,6 +396,7 @@ async function resolveSignalWireCompany(to?: string, accountSid?: string): Promi
           defaultCallerId: sw.defaultCallerId,
           greeting: sw.inboundGreeting,
           forwardSip: sw.inboundForwardSip || sw.sipCredential,
+          forwardNumber: sw.inboundForwardNumber,
         };
       }
     }
@@ -411,6 +412,7 @@ async function resolveSignalWireCompany(to?: string, accountSid?: string): Promi
           defaultCallerId: sw.defaultCallerId,
           greeting: sw.inboundGreeting,
           forwardSip: sw.inboundForwardSip || sw.sipCredential,
+          forwardNumber: sw.inboundForwardNumber,
         };
       }
       const phones = await listPhoneNumbers(comp.id);
@@ -420,6 +422,7 @@ async function resolveSignalWireCompany(to?: string, accountSid?: string): Promi
           defaultCallerId: sw?.defaultCallerId,
           greeting: sw?.inboundGreeting,
           forwardSip: sw?.inboundForwardSip || sw?.sipCredential,
+          forwardNumber: sw?.inboundForwardNumber,
         };
       }
     }
@@ -434,6 +437,7 @@ async function resolveSignalWireCompany(to?: string, accountSid?: string): Promi
         defaultCallerId: sw.defaultCallerId,
         greeting: sw.inboundGreeting,
         forwardSip: sw.inboundForwardSip || sw.sipCredential,
+        forwardNumber: sw.inboundForwardNumber,
       };
     }
   }
@@ -451,7 +455,7 @@ webhooksApp.all("/signalwire/voice", async (c) => {
     const callSid = params.CallSid || "";
     const accountSid = params.AccountSid || "";
 
-    const { companyId, greeting, forwardSip } = await resolveSignalWireCompany(to, accountSid);
+    const { companyId, greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
 
     // Find lead & caller
     const lead = from ? await findLeadByPhone(companyId, from).catch(() => null) : null;
@@ -487,6 +491,7 @@ webhooksApp.all("/signalwire/voice", async (c) => {
     const xml = generateVoiceCXml({
       greeting: greeting || "Thanks for calling SalesVora. Connecting you now.",
       forwardSip: forwardSip || undefined,
+      forwardNumber: forwardNumber || undefined,
     });
 
     return c.text(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
@@ -505,11 +510,12 @@ webhooksApp.all("/signalwire/outbound-connect", async (c) => {
     const params = await parseWebhookParams(c);
     const to = params.To || params.Called || "";
     const accountSid = params.AccountSid || "";
-    const { greeting, forwardSip } = await resolveSignalWireCompany(to, accountSid);
+    const { greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
 
     const xml = generateVoiceCXml({
       greeting: greeting || "Connecting your SalesVora call now.",
       forwardSip: forwardSip || undefined,
+      forwardNumber: forwardNumber || undefined,
     });
     return c.text(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
   } catch (err) {

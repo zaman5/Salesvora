@@ -150822,7 +150822,8 @@ async function resolveSignalWireCompany(to, accountSid) {
           companyId: comp.id,
           defaultCallerId: sw.defaultCallerId,
           greeting: sw.inboundGreeting,
-          forwardSip: sw.inboundForwardSip || sw.sipCredential
+          forwardSip: sw.inboundForwardSip || sw.sipCredential,
+          forwardNumber: sw.inboundForwardNumber
         };
       }
     }
@@ -150835,7 +150836,8 @@ async function resolveSignalWireCompany(to, accountSid) {
           companyId: comp.id,
           defaultCallerId: sw.defaultCallerId,
           greeting: sw.inboundGreeting,
-          forwardSip: sw.inboundForwardSip || sw.sipCredential
+          forwardSip: sw.inboundForwardSip || sw.sipCredential,
+          forwardNumber: sw.inboundForwardNumber
         };
       }
       const phones = await listPhoneNumbers(comp.id);
@@ -150844,7 +150846,8 @@ async function resolveSignalWireCompany(to, accountSid) {
           companyId: comp.id,
           defaultCallerId: sw?.defaultCallerId,
           greeting: sw?.inboundGreeting,
-          forwardSip: sw?.inboundForwardSip || sw?.sipCredential
+          forwardSip: sw?.inboundForwardSip || sw?.sipCredential,
+          forwardNumber: sw?.inboundForwardNumber
         };
       }
     }
@@ -150856,7 +150859,8 @@ async function resolveSignalWireCompany(to, accountSid) {
         companyId: comp.id,
         defaultCallerId: sw.defaultCallerId,
         greeting: sw.inboundGreeting,
-        forwardSip: sw.inboundForwardSip || sw.sipCredential
+        forwardSip: sw.inboundForwardSip || sw.sipCredential,
+        forwardNumber: sw.inboundForwardNumber
       };
     }
   }
@@ -150869,7 +150873,7 @@ webhooksApp.all("/signalwire/voice", async (c) => {
     const to = params.To || params.Called || "";
     const callSid = params.CallSid || "";
     const accountSid = params.AccountSid || "";
-    const { companyId, greeting, forwardSip } = await resolveSignalWireCompany(to, accountSid);
+    const { companyId, greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
     const lead = from ? await findLeadByPhone(companyId, from).catch(() => null) : null;
     const users3 = await findAllUsers(companyId);
     const callerId = users3.find((u) => u.role === "admin" || u.role === "superadmin")?.id ?? users3[0]?.id ?? 1;
@@ -150898,7 +150902,8 @@ webhooksApp.all("/signalwire/voice", async (c) => {
     }
     const xml = generateVoiceCXml({
       greeting: greeting || "Thanks for calling SalesVora. Connecting you now.",
-      forwardSip: forwardSip || void 0
+      forwardSip: forwardSip || void 0,
+      forwardNumber: forwardNumber || void 0
     });
     return c.text(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
   } catch (err) {
@@ -150914,10 +150919,11 @@ webhooksApp.all("/signalwire/outbound-connect", async (c) => {
     const params = await parseWebhookParams(c);
     const to = params.To || params.Called || "";
     const accountSid = params.AccountSid || "";
-    const { greeting, forwardSip } = await resolveSignalWireCompany(to, accountSid);
+    const { greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
     const xml = generateVoiceCXml({
       greeting: greeting || "Connecting your SalesVora call now.",
-      forwardSip: forwardSip || void 0
+      forwardSip: forwardSip || void 0,
+      forwardNumber: forwardNumber || void 0
     });
     return c.text(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
   } catch (err) {
