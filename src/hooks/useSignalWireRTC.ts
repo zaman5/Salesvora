@@ -138,57 +138,82 @@ export function useSignalWireRTC({ enabled }: Options) {
           subsRef.current.push(errSub);
         }
 
-        // Listen for connection ready state
+        const markReady = () => {
+          if (!isMounted) return;
+          setStatus("registered");
+          setError(null);
+        };
+
+        // Listen for connection states
+        if (client.isConnected$) {
+          const connSub = client.isConnected$.subscribe((conn: boolean) => {
+            if (conn) markReady();
+          });
+          subsRef.current.push(connSub);
+        }
+
+        if (client.isRegistered$) {
+          const regSub = client.isRegistered$.subscribe((reg: boolean) => {
+            if (reg) markReady();
+          });
+          subsRef.current.push(regSub);
+        }
+
         if (client.ready$) {
           const readySub = client.ready$.subscribe((isReady: boolean) => {
-            if (isMounted && isReady) {
-              setStatus("registered");
-              setError(null);
-
-              // Listen for incoming calls once session is ready
-              const session = client.session;
-              if (session?.calls$) {
-                const callsSub = session.calls$.subscribe((callsMap: Record<string, any>) => {
-                  if (!isMounted || !callsMap) return;
-                  const calls = Object.values(callsMap);
-                  const inbound = calls.find(
-                    (c) => c && (c.displayDirection === "inbound" || (c.from && c !== callRef.current))
-                  );
-                  if (inbound && callState === "idle") {
-                    callRef.current = inbound;
-                    setCallDirection("inbound");
-                    setIncomingCallerNumber(inbound.from || inbound.caller_id_number || "Incoming Caller");
-                    setCallState("ringing");
-
-                    if (inbound.remoteStream$) {
-                      const streamSub = inbound.remoteStream$.subscribe((stream: MediaStream) => {
-                        attachRemoteAudio(stream);
-                      });
-                      subsRef.current.push(streamSub);
-                    }
-
-                    if (inbound.status$) {
-                      const statusSub = inbound.status$.subscribe((st: string) => {
-                        if (st === "connected" || st === "active") {
-                          setCallState("active");
-                          if (inbound.remoteStream) attachRemoteAudio(inbound.remoteStream);
-                        } else if (st === "destroyed" || st === "disconnecting" || st === "ended") {
-                          setCallState("ended");
-                          setCallDirection(null);
-                          setIncomingCallerNumber(null);
-                          callRef.current = null;
-                        }
-                      });
-                      subsRef.current.push(statusSub);
-                    }
-                  }
-                });
-                subsRef.current.push(callsSub);
-              }
-            }
+            if (isReady) markReady();
           });
           subsRef.current.push(readySub);
         }
+
+        if (client.isConnected || client.isRegistered) {
+          markReady();
+        }
+
+        // Listen for incoming calls once session is available
+        const setupCallsListener = () => {
+          const session = client.session;
+          if (session?.calls$) {
+            const callsSub = session.calls$.subscribe((callsMap: Record<string, any>) => {
+              if (!isMounted || !callsMap) return;
+              const calls = Object.values(callsMap);
+              const inbound = calls.find(
+                (c) => c && (c.displayDirection === "inbound" || (c.from && c !== callRef.current))
+              );
+              if (inbound && callState === "idle") {
+                callRef.current = inbound;
+                setCallDirection("inbound");
+                setIncomingCallerNumber(inbound.from || inbound.caller_id_number || "Incoming Caller");
+                setCallState("ringing");
+
+                if (inbound.remoteStream$) {
+                  const streamSub = inbound.remoteStream$.subscribe((stream: MediaStream) => {
+                    attachRemoteAudio(stream);
+                  });
+                  subsRef.current.push(streamSub);
+                }
+
+                if (inbound.status$) {
+                  const statusSub = inbound.status$.subscribe((st: string) => {
+                    if (st === "connected" || st === "active") {
+                      setCallState("active");
+                      if (inbound.remoteStream) attachRemoteAudio(inbound.remoteStream);
+                    } else if (st === "destroyed" || st === "disconnecting" || st === "ended") {
+                      setCallState("ended");
+                      setCallDirection(null);
+                      setIncomingCallerNumber(null);
+                      callRef.current = null;
+                    }
+                  });
+                  subsRef.current.push(statusSub);
+                }
+              }
+            });
+            subsRef.current.push(callsSub);
+          }
+        };
+
+        setupCallsListener();
       } catch (err) {
         if (!isMounted) return;
         console.error("[SignalWire WebRTC Init Failed]", err);
@@ -207,8 +232,8 @@ export function useSignalWireRTC({ enabled }: Options) {
   }, [enabled]);
 
   const makeCall = useCallback(async (destinationNumber: string, callerNumber?: string) => {
-    if (!clientRef.current || status !== "registered") {
-      setError("SignalWire browser calling is not connected yet.");
+    if (!clientRef.current) {
+      setError("SignalWire browser calling is not initialized.");
       return false;
     }
 

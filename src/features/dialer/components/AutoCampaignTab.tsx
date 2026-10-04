@@ -138,10 +138,19 @@ export function AutoCampaignTab() {
       setActiveCallId(activeCall.id);
       await updateLeadStatusMutation.mutateAsync({ campaignLeadId: nextCampaignLead.id, status: "in_progress" });
       if (webrtcOn) {
-        if (rtc.status !== "registered") { setCallError("Browser calling not connected."); setCallStatus("idle"); return; }
-        const ok = rtc.makeCall(phone, selectedNumber || dialerConfig?.defaultCallerId || "");
-        if (!ok) { setCallError(rtc.error || "Could not start browser call."); setCallStatus("idle"); return; }
-        setCallStatus("connected"); setDuration(0);
+        if (rtc.status === "error" || (rtc.status === "off" && rtc.error)) {
+          setCallError(rtc.error || "Browser calling not connected.");
+          setCallStatus("idle");
+          return;
+        }
+        const ok = await rtc.makeCall(phone, selectedNumber || dialerConfig?.defaultCallerId || "");
+        if (!ok) {
+          setCallError(rtc.error || "Could not start browser call.");
+          setCallStatus("idle");
+          return;
+        }
+        setCallStatus("connected");
+        setDuration(0);
         await updateStatusMutation.mutateAsync({ id: activeCall.id, status: "connected" });
       } else {
         setTimeout(async () => {

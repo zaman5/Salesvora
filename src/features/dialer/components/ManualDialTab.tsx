@@ -220,10 +220,19 @@ export function ManualDialTab() {
       }
       setActiveCallId(activeCall.id);
       if (webrtcOn) {
-        if (rtc.status !== "registered") { setCallError(rtc.error || "Browser calling still connecting."); setCallStatus("idle"); return; }
-        const ok = rtc.makeCall(toNumber, selectedNumber || dialerConfig?.defaultCallerId || "");
-        if (!ok) { setCallError(rtc.error || "Could not start browser call."); setCallStatus("idle"); return; }
-        setCallStatus("connected"); setDuration(0);
+        if (rtc.status === "error" || (rtc.status === "off" && rtc.error)) {
+          setCallError(rtc.error || "Browser calling not connected.");
+          setCallStatus("idle");
+          return;
+        }
+        const ok = await rtc.makeCall(toNumber, selectedNumber || dialerConfig?.defaultCallerId || "");
+        if (!ok) {
+          setCallError(rtc.error || "Could not start browser call.");
+          setCallStatus("idle");
+          return;
+        }
+        setCallStatus("connected");
+        setDuration(0);
         await updateStatusMutation.mutateAsync({ id: activeCall.id, status: "connected" });
         return;
       }
