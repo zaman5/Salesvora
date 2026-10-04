@@ -37,6 +37,7 @@ db/migrations/*.sql
 db.json
 db.json.bak
 db.json.tmp
+db.json.corrupt*
 # Original standalone Mailsender app (881MB incl. node_modules). Its code now
 # lives merged in api/mailsender/ and src/features/mailsender/, so the folder is
 # a local reference copy only — committing it would bloat the repo.

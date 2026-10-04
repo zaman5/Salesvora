@@ -40,8 +40,8 @@ describe("SignalWire Configuration & Provider Switching", () => {
     const saved = await saveSignalWireConfig(1, {
       space: "salesvora.signalwire.com",
       projectId: "6e1caf1e-238f-4ab3-b618-d164507f1250",
-      apiToken: "PT_secret_token_1234567890",
-      defaultCallerId: "+15550002222",
+      apiToken: "swapi_WpyYnZd5I7RcRQbHgtuHDiKtzN1GIBog5ncl",
+      defaultCallerId: "+12082489823",
       enabled: true,
     });
 

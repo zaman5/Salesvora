@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { cors } from "hono/cors";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
@@ -9,6 +10,19 @@ import { getStorageInfo } from "./queries/jsonDb";
 import { startSMSCampaignWorker } from "./lib/smsCampaignWorker";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
+
+// Enable CORS so requests from other origins/ports (or OPTIONS preflights) succeed
+app.use(
+  "*",
+  cors({
+    origin: (origin) => origin || "*",
+    credentials: true,
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowHeaders: ["Content-Type", "Authorization", "x-trpc-source"],
+    exposeHeaders: ["Content-Length"],
+    maxAge: 600,
+  }),
+);
 
 // Background sender for SMS campaigns (send window / daily limit / random
 // delay all live in campaign.settings) — this process is long-lived in both
@@ -24,14 +38,18 @@ app.get("/health", (c) => c.json({ status: "ok", time: new Date().toISOString(),
 // Inbound Telnyx webhooks (SMS, etc.) — see api/webhooks.ts.
 app.route("/api/webhooks", webhooksApp);
 
-app.use("/api/trpc/*", async (c) => {
+const trpcHandler = async (c: any) => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",
     req: c.req.raw,
     router: appRouter,
     createContext,
   });
-});
+};
+
+app.all("/api/trpc/*", trpcHandler);
+app.all("/api/trpc", trpcHandler);
+
 app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 
 export default app;

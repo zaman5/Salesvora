@@ -242,9 +242,9 @@ describe("Complete End-to-End Telephony Provider Testing", () => {
     const savedSw = await caller.integration.saveSignalWire({
       space: "salesvora.signalwire.com",
       projectId: "6e1caf1e-238f-4ab3-b618-d164507f1250",
-      apiToken: "PT_secret_token_live_123",
+      apiToken: "swapi_WpyYnZd5I7RcRQbHgtuHDiKtzN1GIBog5ncl",
       sipCredential: "livekit-agent@salesvora-d164507f1250.sip.signalwire.com",
-      defaultCallerId: "+15550002222",
+      defaultCallerId: "+12082489823",
       inboundGreeting: "Welcome to SalesVora!",
       enabled: true,
       webrtcEnabled: true,
@@ -276,7 +276,7 @@ describe("Complete End-to-End Telephony Provider Testing", () => {
     const dialerConfigSw = await dialerCaller.integration.getDialerConfig();
     expect(dialerConfigSw.provider).toBe("signalwire");
     expect(dialerConfigSw.enabled).toBe(true);
-    expect(dialerConfigSw.defaultCallerId).toBe("+15550002222");
+    expect(dialerConfigSw.defaultCallerId).toBe("+12082489823");
     expect(dialerConfigSw.signalwire.space).toBe("salesvora.signalwire.com");
     expect(dialerConfigSw.signalwire.enabled).toBe(true);
 
