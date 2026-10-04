@@ -147,7 +147,7 @@ export const integrationRouter = createRouter({
       },
       // Per-caller WebRTC credentials
       webrtc: {
-        enabled: isSwActive ? false : Boolean(cfg?.webrtcEnabled && webrtcLogin && webrtcPassword),
+        enabled: isSwActive ? Boolean(swCfg?.webrtcEnabled ?? swCfg?.enabled) : Boolean(cfg?.webrtcEnabled && webrtcLogin && webrtcPassword),
         login:    webrtcLogin,
         password: webrtcPassword,
         isShared: !hasDedicatedSip, // true = all callers share one credential (risky)

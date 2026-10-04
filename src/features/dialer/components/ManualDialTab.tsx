@@ -341,19 +341,19 @@ export function ManualDialTab() {
             </Badge>
           </div>
           <div className="flex items-center gap-1.5">
-            {dialerConfig?.provider === "signalwire" ? (
-              <span className="flex items-center gap-1.5 text-green-400 font-medium text-[11px]">
-                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                {dialerConfig.signalwire?.space || "Cloud PSTN Ready"}
-              </span>
-            ) : webrtcOn ? (
+            {webrtcOn ? (
               <span className={`flex items-center gap-1 text-[11px] ${
                 rtc.status === "registered" ? "text-green-400 font-medium" : rtc.status === "connecting" ? "text-yellow-400" : "text-red-400"
               }`}>
                 <span className={`w-2 h-2 rounded-full ${
                   rtc.status === "registered" ? "bg-green-400" : rtc.status === "connecting" ? "bg-yellow-400" : "bg-red-400"
                 }`} />
-                {rtc.status === "registered" ? "SIP Ready" : rtc.status === "connecting" ? "Connecting…" : "Not connected"}
+                {rtc.status === "registered" ? (dialerConfig?.provider === "signalwire" ? "🟢 SignalWire WebRTC Ready" : "🟢 SIP Ready") : rtc.status === "connecting" ? "Connecting…" : "Not connected"}
+              </span>
+            ) : dialerConfig?.provider === "signalwire" ? (
+              <span className="flex items-center gap-1.5 text-green-400 font-medium text-[11px]">
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                {dialerConfig.signalwire?.space || "Cloud PSTN Ready"}
               </span>
             ) : (
               <span className="text-gray-400 text-[11px]">Server Calling Ready</span>
@@ -361,10 +361,16 @@ export function ManualDialTab() {
           </div>
         </div>
 
-        {dialerConfig?.provider === "signalwire" && (
+        {dialerConfig?.provider === "signalwire" && !webrtcOn && (
           <div className="px-3 py-2 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">
             <p className="font-semibold mb-0.5">SignalWire Server REST Mode Active</p>
-            SignalWire triggers server-to-phone PSTN calls. To talk directly from your browser headset, switch to <span className="font-semibold">Telnyx WebRTC</span> in Settings.
+            SignalWire triggers server-to-phone PSTN calls. To talk directly from your browser headset, enable <span className="font-semibold">In-App Browser Calling (WebRTC)</span> in Settings.
+          </div>
+        )}
+
+        {dialerConfig?.provider === "signalwire" && webrtcOn && (
+          <div className="space-y-1">
+            {rtc.error && <p className="text-xs text-red-400 font-medium">SignalWire Error: {rtc.error}</p>}
           </div>
         )}
 

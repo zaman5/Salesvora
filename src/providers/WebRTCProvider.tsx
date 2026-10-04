@@ -1,10 +1,11 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { trpc } from "@/providers/trpc";
 import { useTelnyxRTC } from "@/hooks/useTelnyxRTC";
+import { useSignalWireRTC } from "@/hooks/useSignalWireRTC";
 import { IncomingCallBanner } from "@/components/IncomingCallBanner";
 import { ActiveCallBar } from "@/components/ActiveCallBar";
 
-type WebRTCContextValue = ReturnType<typeof useTelnyxRTC> & {
+type WebRTCContextValue = (ReturnType<typeof useTelnyxRTC> | ReturnType<typeof useSignalWireRTC>) & {
   activeInboundCallId?: number | null;
 };
 
@@ -23,11 +24,20 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
     enabled: signedIn,
   });
 
-  const rtc = useTelnyxRTC({
-    enabled: Boolean(dialerConfig?.webrtc?.enabled),
+  const isSignalWire = dialerConfig?.provider === "signalwire";
+  const webrtcEnabled = Boolean(dialerConfig?.webrtc?.enabled);
+
+  const telnyxRtc = useTelnyxRTC({
+    enabled: !isSignalWire && webrtcEnabled,
     login:    dialerConfig?.webrtc?.login    ?? "",
     password: dialerConfig?.webrtc?.password ?? "",
   });
+
+  const signalWireRtc = useSignalWireRTC({
+    enabled: isSignalWire && webrtcEnabled,
+  });
+
+  const rtc = isSignalWire ? signalWireRtc : telnyxRtc;
 
   // Track global inbound call record in DB so incoming calls answered from ANY page are never missed
   const [activeInboundCallId, setActiveInboundCallId] = useState<number | null>(null);

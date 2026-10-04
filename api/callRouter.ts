@@ -86,7 +86,7 @@ export const callRouter = createRouter({
 
       if (activeProvider === "signalwire") {
         const sw = await getSignalWireConfig(companyId);
-        const useSwRest = Boolean(sw?.enabled && sw.projectId && sw.apiToken);
+        const useSwRest = Boolean(sw?.enabled && sw.projectId && sw.apiToken && !sw.webrtcEnabled);
         if (useSwRest && sw) {
           const from = (input.fromNumber && !input.fromNumber.includes("5550002222"))
             ? input.fromNumber

@@ -148109,7 +148109,7 @@ var callRouter = createRouter({
     const providerMeta = {};
     if (activeProvider === "signalwire") {
       const sw = await getSignalWireConfig(companyId);
-      const useSwRest = Boolean(sw?.enabled && sw.projectId && sw.apiToken);
+      const useSwRest = Boolean(sw?.enabled && sw.projectId && sw.apiToken && !sw.webrtcEnabled);
       if (useSwRest && sw) {
         const from = input.fromNumber && !input.fromNumber.includes("5550002222") ? input.fromNumber : sw.defaultCallerId || "+12082489823";
         const host = ctx.req?.headers?.get("x-forwarded-host") || ctx.req?.headers?.get("host");
@@ -150133,7 +150133,7 @@ var integrationRouter = createRouter({
       },
       // Per-caller WebRTC credentials
       webrtc: {
-        enabled: isSwActive ? false : Boolean(cfg?.webrtcEnabled && webrtcLogin && webrtcPassword),
+        enabled: isSwActive ? Boolean(swCfg?.webrtcEnabled ?? swCfg?.enabled) : Boolean(cfg?.webrtcEnabled && webrtcLogin && webrtcPassword),
         login: webrtcLogin,
         password: webrtcPassword,
         isShared: !hasDedicatedSip
