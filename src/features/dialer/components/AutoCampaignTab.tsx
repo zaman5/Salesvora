@@ -143,9 +143,11 @@ export function AutoCampaignTab() {
           setCallStatus("idle");
           return;
         }
-        const ok = await rtc.makeCall(phone, selectedNumber || dialerConfig?.defaultCallerId || "");
-        if (!ok) {
-          setCallError(rtc.error || "Could not start browser call.");
+        const res = await rtc.makeCall(phone, selectedNumber || dialerConfig?.defaultCallerId || "");
+        const isOk = typeof res === "object" ? res.ok : Boolean(res);
+        const errText = typeof res === "object" && !res.ok ? res.error : rtc.error;
+        if (!isOk) {
+          setCallError(errText || "Could not start browser call.");
           setCallStatus("idle");
           return;
         }

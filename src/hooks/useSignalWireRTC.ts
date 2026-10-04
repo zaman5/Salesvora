@@ -233,8 +233,9 @@ export function useSignalWireRTC({ enabled }: Options) {
 
   const makeCall = useCallback(async (destinationNumber: string, callerNumber?: string) => {
     if (!clientRef.current) {
-      setError("SignalWire browser calling is not initialized.");
-      return false;
+      const msg = "SignalWire browser calling client is not initialized.";
+      setError(msg);
+      return { ok: false, error: msg };
     }
 
     const toE164 = (raw: string) => {
@@ -245,13 +246,30 @@ export function useSignalWireRTC({ enabled }: Options) {
       if (hasPlus) return `+${digits}`;
       if (digits.length === 10) return `+1${digits}`;
       if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-      return digits;
+      return `+${digits}`;
     };
 
     const dest = toE164(destinationNumber);
-    const caller = callerNumber ? toE164(callerNumber) : undefined;
+    if (!dest || dest.length < 4) {
+      const msg = "Please enter a valid phone number to dial.";
+      setError(msg);
+      return { ok: false, error: msg };
+    }
 
     try {
+      // Check microphone permission first for clear user feedback
+      if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+        try {
+          const testStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          testStream.getTracks().forEach((t) => t.stop());
+        } catch (micErr) {
+          const micMsg = micErr instanceof Error ? micErr.message : "Microphone permission denied";
+          const friendly = `Microphone access required: ${micMsg}. Please click the lock icon in your address bar and allow microphone access.`;
+          setError(friendly);
+          return { ok: false, error: friendly };
+        }
+      }
+
       getOrCreateAudioSink()?.play().catch(() => {});
 
       const client = clientRef.current;
@@ -261,7 +279,6 @@ export function useSignalWireRTC({ enabled }: Options) {
       const call = await client.dial(dest, {
         audio: true,
         video: false,
-        callerId: caller,
       });
 
       callRef.current = call;
@@ -292,14 +309,15 @@ export function useSignalWireRTC({ enabled }: Options) {
         subsRef.current.push(statusSub);
       }
 
-      return true;
+      return { ok: true };
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : "Could not start call.";
       console.error("[SignalWire dial error]", e);
-      setError(e instanceof Error ? e.message : "Could not start call.");
+      setError(errMsg);
       setCallState("idle");
-      return false;
+      return { ok: false, error: errMsg };
     }
-  }, [status]);
+  }, []);
 
   const sendDTMF = useCallback((digit: string) => {
     try {
