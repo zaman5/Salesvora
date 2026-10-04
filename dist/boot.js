@@ -148110,7 +148110,10 @@ var callRouter = createRouter({
       const useSwRest = Boolean(sw?.enabled && sw.projectId && sw.apiToken);
       if (useSwRest && sw) {
         const from = input.fromNumber && !input.fromNumber.includes("5550002222") ? input.fromNumber : sw.defaultCallerId || "+12082489823";
-        const origin = process.env.PUBLIC_APP_URL || "https://api.salesvora.com";
+        const host = ctx.req?.headers?.get("x-forwarded-host") || ctx.req?.headers?.get("host");
+        const proto = ctx.req?.headers?.get("x-forwarded-proto") || "https";
+        const dynamicOrigin = host ? `${proto}://${host}` : "https://salesvora.online";
+        const origin = process.env.PUBLIC_APP_URL && process.env.PUBLIC_APP_URL !== "https://api.salesvora.com" ? process.env.PUBLIC_APP_URL : dynamicOrigin;
         const connectUrl = `${origin.replace(/\/+$/, "")}/api/webhooks/signalwire/outbound-connect`;
         const statusUrl = `${origin.replace(/\/+$/, "")}/api/webhooks/signalwire/status`;
         const result = await placeSignalWireCall(sw.space, sw.projectId, sw.apiToken, {
