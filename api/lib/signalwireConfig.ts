@@ -65,17 +65,19 @@ export async function getSignalWireConfig(companyId: number): Promise<SignalWire
   const envSpace = process.env.SIGNALWIRE_SPACE || "";
   const envProjectId = process.env.SIGNALWIRE_PROJECT_ID || "";
   const envApiToken = process.env.SIGNALWIRE_API_TOKEN || "";
-  const envCallerId = process.env.SIGNALWIRE_CALLER_ID || "";
+  const envCallerId = process.env.SIGNALWIRE_PHONE_NUMBER || process.env.SIGNALWIRE_CALLER_ID || "";
+  const envSipEndpoint = process.env.SIGNALWIRE_SIP_ENDPOINT || "";
 
-  if (!cfg?.apiToken && envProjectId && envApiToken) {
+  if (envProjectId && envApiToken) {
     return {
       enabled: cfg?.enabled ?? true,
       space: cfg?.space || envSpace || "salesvora.signalwire.com",
       projectId: cfg?.projectId || envProjectId,
-      apiToken: envApiToken,
+      apiToken: cfg?.apiToken || envApiToken,
+      sipCredential: cfg?.sipCredential || envSipEndpoint || "livekit-agent@salesvora-d164507f1250.sip.signalwire.com",
       defaultCallerId: cfg?.defaultCallerId || envCallerId,
       inboundGreeting: cfg?.inboundGreeting || "Thanks for calling SalesVora. Connecting you now.",
-      inboundForwardSip: cfg?.inboundForwardSip || "",
+      inboundForwardSip: cfg?.inboundForwardSip || envSipEndpoint || "",
       inboundForwardNumber: cfg?.inboundForwardNumber || "",
       webrtcEnabled: cfg?.webrtcEnabled ?? true,
     };
