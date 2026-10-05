@@ -86,8 +86,8 @@ export const callRouter = createRouter({
 
       if (activeProvider === "signalwire") {
         const sw = await getSignalWireConfig(companyId);
-        const useSwRest = Boolean(sw?.enabled && sw.projectId && sw.apiToken && !sw.webrtcEnabled);
-        if (useSwRest && sw) {
+        const useSwCall = Boolean(sw?.enabled && sw.projectId && sw.apiToken);
+        if (useSwCall && sw) {
           const from = (input.fromNumber && !input.fromNumber.includes("5550002222"))
             ? input.fromNumber
             : (sw.defaultCallerId || "+12082489823");
@@ -97,7 +97,9 @@ export const callRouter = createRouter({
           const origin = (process.env.PUBLIC_APP_URL && process.env.PUBLIC_APP_URL !== "https://api.salesvora.com")
             ? process.env.PUBLIC_APP_URL
             : dynamicOrigin;
-          const connectUrl = `${origin.replace(/\/+$/, "")}/api/webhooks/signalwire/outbound-connect`;
+          
+          const room = (input.customFields?.room as string) || `conf_${companyId}_${ctx.user.id}_${Date.now()}`;
+          const connectUrl = `${origin.replace(/\/+$/, "")}/api/webhooks/signalwire/outbound-connect?room=${encodeURIComponent(room)}`;
           const statusUrl = `${origin.replace(/\/+$/, "")}/api/webhooks/signalwire/status`;
 
           const result = await placeSignalWireCall(sw.space, sw.projectId, sw.apiToken, {
@@ -113,6 +115,7 @@ export const callRouter = createRouter({
               provider: "signalwire",
               callSid: result.data.callSid,
               status: result.data.status,
+              room,
             };
           } else {
             providerStatus = "failed";

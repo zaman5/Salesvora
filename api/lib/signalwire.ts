@@ -406,6 +406,7 @@ export function generateVoiceCXml(options: {
   greeting?: string;
   forwardSip?: string;
   forwardNumber?: string;
+  conference?: string;
   record?: boolean;
 }): string {
   const parts: string[] = ['<?xml version="1.0" encoding="UTF-8"?>', "<Response>"];
@@ -421,7 +422,13 @@ export function generateVoiceCXml(options: {
     parts.push(`  <Say>${safeGreeting}</Say>`);
   }
 
-  if (options.forwardSip && options.forwardSip.trim()) {
+  if (options.conference && options.conference.trim()) {
+    const safeConf = options.conference.trim().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const recordAttr = options.record ? ' record="record-from-start"' : "";
+    parts.push(`  <Dial${recordAttr}>`);
+    parts.push(`    <Conference startConferenceOnEnter="true" endConferenceOnExit="true">${safeConf}</Conference>`);
+    parts.push("  </Dial>");
+  } else if (options.forwardSip && options.forwardSip.trim()) {
     let sipUri = options.forwardSip.trim();
     if (!sipUri.startsWith("sip:")) sipUri = `sip:${sipUri}`;
     const safeSip = sipUri.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

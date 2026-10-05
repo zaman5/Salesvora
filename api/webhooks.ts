@@ -510,12 +510,14 @@ webhooksApp.all("/signalwire/outbound-connect", async (c) => {
     const params = await parseWebhookParams(c);
     const to = params.To || params.Called || "";
     const accountSid = params.AccountSid || "";
+    const room = c.req.query("room") || params.room || "";
     const { greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
 
     const xml = generateVoiceCXml({
-      greeting: greeting || "Connecting your SalesVora call now.",
-      forwardSip: forwardSip || undefined,
-      forwardNumber: forwardNumber || undefined,
+      greeting: greeting || undefined,
+      conference: room || undefined,
+      forwardSip: !room ? (forwardSip || undefined) : undefined,
+      forwardNumber: !room ? (forwardNumber || undefined) : undefined,
     });
     return c.text(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
   } catch (err) {

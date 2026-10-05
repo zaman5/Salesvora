@@ -147734,7 +147734,13 @@ function generateVoiceCXml(options) {
     const safeGreeting = options.greeting.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
     parts.push(`  <Say>${safeGreeting}</Say>`);
   }
-  if (options.forwardSip && options.forwardSip.trim()) {
+  if (options.conference && options.conference.trim()) {
+    const safeConf = options.conference.trim().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const recordAttr = options.record ? ' record="record-from-start"' : "";
+    parts.push(`  <Dial${recordAttr}>`);
+    parts.push(`    <Conference startConferenceOnEnter="true" endConferenceOnExit="true">${safeConf}</Conference>`);
+    parts.push("  </Dial>");
+  } else if (options.forwardSip && options.forwardSip.trim()) {
     let sipUri = options.forwardSip.trim();
     if (!sipUri.startsWith("sip:")) sipUri = `sip:${sipUri}`;
     const safeSip = sipUri.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -148109,14 +148115,15 @@ var callRouter = createRouter({
     const providerMeta = {};
     if (activeProvider === "signalwire") {
       const sw = await getSignalWireConfig(companyId);
-      const useSwRest = Boolean(sw?.enabled && sw.projectId && sw.apiToken && !sw.webrtcEnabled);
-      if (useSwRest && sw) {
+      const useSwCall = Boolean(sw?.enabled && sw.projectId && sw.apiToken);
+      if (useSwCall && sw) {
         const from = input.fromNumber && !input.fromNumber.includes("5550002222") ? input.fromNumber : sw.defaultCallerId || "+12082489823";
         const host = ctx.req?.headers?.get("x-forwarded-host") || ctx.req?.headers?.get("host");
         const proto = ctx.req?.headers?.get("x-forwarded-proto") || "https";
         const dynamicOrigin = host ? `${proto}://${host}` : "https://salesvora.online";
         const origin = process.env.PUBLIC_APP_URL && process.env.PUBLIC_APP_URL !== "https://api.salesvora.com" ? process.env.PUBLIC_APP_URL : dynamicOrigin;
-        const connectUrl = `${origin.replace(/\/+$/, "")}/api/webhooks/signalwire/outbound-connect`;
+        const room = input.customFields?.room || `conf_${companyId}_${ctx.user.id}_${Date.now()}`;
+        const connectUrl = `${origin.replace(/\/+$/, "")}/api/webhooks/signalwire/outbound-connect?room=${encodeURIComponent(room)}`;
         const statusUrl = `${origin.replace(/\/+$/, "")}/api/webhooks/signalwire/status`;
         const result = await placeSignalWireCall(sw.space, sw.projectId, sw.apiToken, {
           from,
@@ -148129,7 +148136,8 @@ var callRouter = createRouter({
           providerMeta.signalwire = {
             provider: "signalwire",
             callSid: result.data.callSid,
-            status: result.data.status
+            status: result.data.status,
+            room
           };
         } else {
           providerStatus = "failed";
@@ -150921,11 +150929,13 @@ webhooksApp.all("/signalwire/outbound-connect", async (c) => {
     const params = await parseWebhookParams(c);
     const to = params.To || params.Called || "";
     const accountSid = params.AccountSid || "";
+    const room = c.req.query("room") || params.room || "";
     const { greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
     const xml = generateVoiceCXml({
-      greeting: greeting || "Connecting your SalesVora call now.",
-      forwardSip: forwardSip || void 0,
-      forwardNumber: forwardNumber || void 0
+      greeting: greeting || void 0,
+      conference: room || void 0,
+      forwardSip: !room ? forwardSip || void 0 : void 0,
+      forwardNumber: !room ? forwardNumber || void 0 : void 0
     });
     return c.text(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
   } catch (err) {
