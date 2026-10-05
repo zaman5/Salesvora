@@ -147698,7 +147698,24 @@ async function issueSignalWireSubscriberToken(space, projectId, apiToken, refere
   }
   const cleanSpace = normalizeSpace(space);
   const endpoint = `https://${cleanSpace}/api/fabric/subscribers/tokens`;
+  const subEndpoint = `https://${cleanSpace}/api/fabric/subscribers`;
   try {
+    try {
+      await fetch(subEndpoint, {
+        method: "POST",
+        headers: {
+          Authorization: basicAuthHeader(projectId, apiToken),
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: JSON.stringify({
+          email: reference.includes("@") ? reference : `${reference}@salesvora.com`,
+          first_name: "SalesVora",
+          last_name: "Agent"
+        })
+      });
+    } catch {
+    }
     const res = await fetch(endpoint, {
       method: "POST",
       headers: {

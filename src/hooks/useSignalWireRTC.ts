@@ -123,7 +123,9 @@ export function useSignalWireRTC({ enabled }: Options) {
         if (!isMounted) return;
 
         const provider = new StaticCredentialProvider({ token: tokenRes.data.token });
-        const client = new SignalWire(provider);
+        const client = new SignalWire(provider, {
+          skipRegister: true,
+        });
         clientRef.current = client;
 
         // Listen for errors
