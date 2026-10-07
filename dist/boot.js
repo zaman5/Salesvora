@@ -290,10 +290,10 @@ var require_dist = __commonJS({
 // node_modules/dotenv/lib/main.js
 var require_main = __commonJS({
   "node_modules/dotenv/lib/main.js"(exports, module) {
-    var fs4 = __require("fs");
-    var path4 = __require("path");
+    var fs5 = __require("fs");
+    var path5 = __require("path");
     var os2 = __require("os");
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     var TIPS = [
       "\u25C8 encrypted .env [www.dotenvx.com]",
       "\u25C8 secrets for agents [www.dotenvx.com]",
@@ -422,7 +422,7 @@ var require_main = __commonJS({
       if (options && options.path && options.path.length > 0) {
         if (Array.isArray(options.path)) {
           for (const filepath of options.path) {
-            if (fs4.existsSync(filepath)) {
+            if (fs5.existsSync(filepath)) {
               possibleVaultPath = filepath.endsWith(".vault") ? filepath : `${filepath}.vault`;
             }
           }
@@ -430,15 +430,15 @@ var require_main = __commonJS({
           possibleVaultPath = options.path.endsWith(".vault") ? options.path : `${options.path}.vault`;
         }
       } else {
-        possibleVaultPath = path4.resolve(process.cwd(), ".env.vault");
+        possibleVaultPath = path5.resolve(process.cwd(), ".env.vault");
       }
-      if (fs4.existsSync(possibleVaultPath)) {
+      if (fs5.existsSync(possibleVaultPath)) {
         return possibleVaultPath;
       }
       return null;
     }
     function _resolveHome(envPath) {
-      return envPath[0] === "~" ? path4.join(os2.homedir(), envPath.slice(1)) : envPath;
+      return envPath[0] === "~" ? path5.join(os2.homedir(), envPath.slice(1)) : envPath;
     }
     function _configVault(options) {
       const debug = parseBoolean(process.env.DOTENV_CONFIG_DEBUG || options && options.debug);
@@ -455,7 +455,7 @@ var require_main = __commonJS({
       return { parsed };
     }
     function configDotenv(options) {
-      const dotenvPath = path4.resolve(process.cwd(), ".env");
+      const dotenvPath = path5.resolve(process.cwd(), ".env");
       let encoding = "utf8";
       let processEnv = process.env;
       if (options && options.processEnv != null) {
@@ -483,13 +483,13 @@ var require_main = __commonJS({
       }
       let lastError;
       const parsedAll = {};
-      for (const path5 of optionPaths) {
+      for (const path6 of optionPaths) {
         try {
-          const parsed = DotenvModule.parse(fs4.readFileSync(path5, { encoding }));
+          const parsed = DotenvModule.parse(fs5.readFileSync(path6, { encoding }));
           DotenvModule.populate(parsedAll, parsed, options);
         } catch (e) {
           if (debug) {
-            _debug(`failed to load ${path5} ${e.message}`);
+            _debug(`failed to load ${path6} ${e.message}`);
           }
           lastError = e;
         }
@@ -502,7 +502,7 @@ var require_main = __commonJS({
         const shortPaths = [];
         for (const filePath of optionPaths) {
           try {
-            const relative = path4.relative(process.cwd(), filePath);
+            const relative = path5.relative(process.cwd(), filePath);
             shortPaths.push(relative);
           } catch (e) {
             if (debug) {
@@ -537,7 +537,7 @@ var require_main = __commonJS({
       const authTag = ciphertext.subarray(-16);
       ciphertext = ciphertext.subarray(12, -16);
       try {
-        const aesgcm = crypto5.createDecipheriv("aes-256-gcm", key, nonce);
+        const aesgcm = crypto6.createDecipheriv("aes-256-gcm", key, nonce);
         aesgcm.setAuthTag(authTag);
         return `${aesgcm.update(ciphertext)}${aesgcm.final()}`;
       } catch (error48) {
@@ -12717,9 +12717,9 @@ var require_binlog_dump = __commonJS({
 var require_auth_41 = __commonJS({
   "node_modules/mysql2/lib/auth_41.js"(exports) {
     "use strict";
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     function sha1(msg, msg1, msg2) {
-      const hash2 = crypto5.createHash("sha1");
+      const hash2 = crypto6.createHash("sha1");
       hash2.update(msg);
       if (msg1) {
         hash2.update(msg1);
@@ -14595,7 +14595,7 @@ var require_sha256_password = __commonJS({
   "node_modules/mysql2/lib/auth_plugins/sha256_password.js"(exports, module) {
     "use strict";
     var PLUGIN_NAME = "sha256_password";
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     var { xorRotating } = require_auth_41();
     var Tls = __require("tls");
     var REQUEST_SERVER_KEY_PACKET = Buffer.from([1]);
@@ -14604,7 +14604,7 @@ var require_sha256_password = __commonJS({
     var STATE_FINAL = -1;
     function encrypt(password, scramble, key) {
       const stage1 = xorRotating(Buffer.from(`${password}\0`, "utf8"), scramble);
-      return crypto5.publicEncrypt(
+      return crypto6.publicEncrypt(
         {
           key,
           oaepHash: "sha1"
@@ -14656,7 +14656,7 @@ var require_caching_sha2_password = __commonJS({
   "node_modules/mysql2/lib/auth_plugins/caching_sha2_password.js"(exports, module) {
     "use strict";
     var PLUGIN_NAME = "caching_sha2_password";
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     var { xor: xor2, xorRotating } = require_auth_41();
     var REQUEST_SERVER_KEY_PACKET = Buffer.from([2]);
     var FAST_AUTH_SUCCESS_PACKET = Buffer.from([3]);
@@ -14666,7 +14666,7 @@ var require_caching_sha2_password = __commonJS({
     var STATE_WAIT_SERVER_KEY = 2;
     var STATE_FINAL = -1;
     function sha256(msg) {
-      const hash2 = crypto5.createHash("sha256");
+      const hash2 = crypto6.createHash("sha256");
       hash2.update(msg);
       return hash2.digest();
     }
@@ -14681,11 +14681,11 @@ var require_caching_sha2_password = __commonJS({
     }
     function encrypt(password, scramble, key) {
       const stage1 = xorRotating(Buffer.from(`${password}\0`, "utf8"), scramble);
-      return crypto5.publicEncrypt(
+      return crypto6.publicEncrypt(
         {
           key,
           oaepHash: "sha1",
-          padding: crypto5.constants.RSA_PKCS1_OAEP_PADDING
+          padding: crypto6.constants.RSA_PKCS1_OAEP_PADDING
         },
         stage1
       );
@@ -16133,12 +16133,12 @@ var require_query2 = __commonJS({
         this._fields.push([]);
         return this.readField;
       }
-      _streamLocalInfile(connection, path4) {
+      _streamLocalInfile(connection, path5) {
         if (this._streamFactory) {
-          this._localStream = this._streamFactory(path4);
+          this._localStream = this._streamFactory(path5);
         } else {
           this._localStreamError = new Error(
-            `As a result of LOCAL INFILE command server wants to read ${path4} file, but as of v2.0 you must provide streamFactory option returning ReadStream.`
+            `As a result of LOCAL INFILE command server wants to read ${path5} file, but as of v2.0 you must provide streamFactory option returning ReadStream.`
           );
           connection.writePacket(EmptyPacket);
           return this.infileOk;
@@ -21681,7 +21681,7 @@ var init_operations = __esm({
 function mapResultRow(columns, row, joinsNotNullableMap) {
   const nullifyMap = {};
   const result = columns.reduce(
-    (result2, { path: path4, field }, columnIndex) => {
+    (result2, { path: path5, field }, columnIndex) => {
       let decoder2;
       if (is(field, Column)) {
         decoder2 = field;
@@ -21693,8 +21693,8 @@ function mapResultRow(columns, row, joinsNotNullableMap) {
         decoder2 = field.sql.decoder;
       }
       let node = result2;
-      for (const [pathChunkIndex, pathChunk] of path4.entries()) {
-        if (pathChunkIndex < path4.length - 1) {
+      for (const [pathChunkIndex, pathChunk] of path5.entries()) {
+        if (pathChunkIndex < path5.length - 1) {
           if (!(pathChunk in node)) {
             node[pathChunk] = {};
           }
@@ -21702,8 +21702,8 @@ function mapResultRow(columns, row, joinsNotNullableMap) {
         } else {
           const rawValue = row[columnIndex];
           const value = node[pathChunk] = rawValue === null ? null : decoder2.mapFromDriverValue(rawValue);
-          if (joinsNotNullableMap && is(field, Column) && path4.length === 2) {
-            const objectName = path4[0];
+          if (joinsNotNullableMap && is(field, Column) && path5.length === 2) {
+            const objectName = path5[0];
             if (!(objectName in nullifyMap)) {
               nullifyMap[objectName] = value === null ? getTableName(field.table) : false;
             } else if (typeof nullifyMap[objectName] === "string" && nullifyMap[objectName] !== getTableName(field.table)) {
@@ -28035,6 +28035,9 @@ function resolveDbPath() {
     }
   }
   return cwdDbPath;
+}
+function getDbPath() {
+  return DB_PATH_RESOLVED;
 }
 function getStorageInfo() {
   const persistent = Boolean(env.dbJsonPath) || DB_PATH_RESOLVED.replace(/\\/g, "/").includes("salesvora-data");
@@ -40061,11 +40064,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup(path4) {
-      if (!path4 || typeof path4 !== "string") {
+    function lookup(path5) {
+      if (!path5 || typeof path5 !== "string") {
         return false;
       }
-      var extension2 = extname("x." + path4).toLowerCase().slice(1);
+      var extension2 = extname("x." + path5).toLowerCase().slice(1);
       if (!extension2) {
         return false;
       }
@@ -43738,13 +43741,13 @@ var require_view = __commonJS({
   "node_modules/express/lib/view.js"(exports, module) {
     "use strict";
     var debug = require_src()("express:view");
-    var path4 = __require("node:path");
-    var fs4 = __require("node:fs");
-    var dirname2 = path4.dirname;
-    var basename = path4.basename;
-    var extname = path4.extname;
-    var join3 = path4.join;
-    var resolve2 = path4.resolve;
+    var path5 = __require("node:path");
+    var fs5 = __require("node:fs");
+    var dirname2 = path5.dirname;
+    var basename = path5.basename;
+    var extname = path5.extname;
+    var join3 = path5.join;
+    var resolve2 = path5.resolve;
     module.exports = View2;
     function View2(name, options) {
       var opts = options || {};
@@ -43773,17 +43776,17 @@ var require_view = __commonJS({
       this.path = this.lookup(fileName);
     }
     View2.prototype.lookup = function lookup(name) {
-      var path5;
+      var path6;
       var roots = [].concat(this.root);
       debug('lookup "%s"', name);
-      for (var i = 0; i < roots.length && !path5; i++) {
+      for (var i = 0; i < roots.length && !path6; i++) {
         var root = roots[i];
         var loc = resolve2(root, name);
         var dir2 = dirname2(loc);
         var file2 = basename(loc);
-        path5 = this.resolve(dir2, file2);
+        path6 = this.resolve(dir2, file2);
       }
-      return path5;
+      return path6;
     };
     View2.prototype.render = function render(options, callback) {
       var sync = true;
@@ -43805,21 +43808,21 @@ var require_view = __commonJS({
     };
     View2.prototype.resolve = function resolve3(dir2, file2) {
       var ext = this.ext;
-      var path5 = join3(dir2, file2);
-      var stat = tryStat(path5);
+      var path6 = join3(dir2, file2);
+      var stat = tryStat(path6);
       if (stat && stat.isFile()) {
-        return path5;
+        return path6;
       }
-      path5 = join3(dir2, basename(file2, ext), "index" + ext);
-      stat = tryStat(path5);
+      path6 = join3(dir2, basename(file2, ext), "index" + ext);
+      stat = tryStat(path6);
       if (stat && stat.isFile()) {
-        return path5;
+        return path6;
       }
     };
-    function tryStat(path5) {
-      debug('stat "%s"', path5);
+    function tryStat(path6) {
+      debug('stat "%s"', path6);
       try {
-        return fs4.statSync(path5);
+        return fs5.statSync(path6);
       } catch (e) {
         return void 0;
       }
@@ -43936,14 +43939,14 @@ var require_etag = __commonJS({
   "node_modules/etag/index.js"(exports, module) {
     "use strict";
     module.exports = etag;
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     var Stats = __require("fs").Stats;
     var toString = Object.prototype.toString;
     function entitytag(entity) {
       if (entity.length === 0) {
         return '"0-2jmj7l5rSw0yVb/vlWAYkK/YBwk"';
       }
-      var hash2 = crypto5.createHash("sha1").update(entity, "utf8").digest("base64").substring(0, 27);
+      var hash2 = crypto6.createHash("sha1").update(entity, "utf8").digest("base64").substring(0, 27);
       var len = typeof entity === "string" ? Buffer.byteLength(entity, "utf8") : entity.length;
       return '"' + len.toString(16) + "-" + hash2 + '"';
     }
@@ -45059,15 +45062,15 @@ var require_dist4 = __commonJS({
       let index2 = 0;
       function consumeUntil(end) {
         const output = [];
-        let path4 = "";
+        let path5 = "";
         function writePath() {
-          if (!path4)
+          if (!path5)
             return;
           output.push({
             type: "text",
-            value: encodePath(path4)
+            value: encodePath(path5)
           });
-          path4 = "";
+          path5 = "";
         }
         while (index2 < chars.length) {
           const value = chars[index2++];
@@ -45079,7 +45082,7 @@ var require_dist4 = __commonJS({
             if (index2 === chars.length) {
               throw new PathError(`Unexpected end after \\ at index ${index2}`, str);
             }
-            path4 += chars[index2++];
+            path5 += chars[index2++];
             continue;
           }
           if (value === ":" || value === "*") {
@@ -45123,7 +45126,7 @@ var require_dist4 = __commonJS({
           if (value === "}" || value === "(" || value === ")" || value === "[" || value === "]" || value === "+" || value === "?" || value === "!") {
             throw new PathError(`Unexpected ${value} at index ${index2 - 1}`, str);
           }
-          path4 += value;
+          path5 += value;
         }
         if (end) {
           throw new PathError(`Unexpected end at index ${index2}, expected ${end}`, str);
@@ -45133,17 +45136,17 @@ var require_dist4 = __commonJS({
       }
       return new TokenData(consumeUntil(""), str);
     }
-    function compile(path4, options = {}) {
+    function compile(path5, options = {}) {
       const { encode: encode5 = encodeURIComponent, delimiter = DEFAULT_DELIMITER } = options;
-      const data = typeof path4 === "object" ? path4 : parse7(path4, options);
+      const data = typeof path5 === "object" ? path5 : parse7(path5, options);
       const fn = tokensToFunction(data.tokens, delimiter, encode5);
-      return function path5(params = {}) {
+      return function path6(params = {}) {
         const missing = [];
-        const path6 = fn(params, missing);
+        const path7 = fn(params, missing);
         if (missing.length) {
           throw new TypeError(`Missing parameters: ${missing.join(", ")}`);
         }
-        return path6;
+        return path7;
       };
     }
     function tokensToFunction(tokens, delimiter, encode5) {
@@ -45205,9 +45208,9 @@ var require_dist4 = __commonJS({
         return encodeValue(value);
       };
     }
-    function match2(path4, options = {}) {
+    function match2(path5, options = {}) {
       const { decode: decode4 = decodeURIComponent, delimiter = DEFAULT_DELIMITER } = options;
-      const { regexp, keys } = pathToRegexp(path4, options);
+      const { regexp, keys } = pathToRegexp(path5, options);
       const decoders = keys.map((key) => {
         if (decode4 === false)
           return NOOP_VALUE;
@@ -45219,7 +45222,7 @@ var require_dist4 = __commonJS({
         const m = regexp.exec(input);
         if (!m)
           return false;
-        const path5 = m[0];
+        const path6 = m[0];
         const params = /* @__PURE__ */ Object.create(null);
         for (let i = 1; i < m.length; i++) {
           if (m[i] === void 0)
@@ -45228,21 +45231,21 @@ var require_dist4 = __commonJS({
           const decoder2 = decoders[i - 1];
           params[key.name] = decoder2(m[i]);
         }
-        return { path: path5, params };
+        return { path: path6, params };
       };
     }
-    function pathToRegexp(path4, options = {}) {
+    function pathToRegexp(path5, options = {}) {
       const { delimiter = DEFAULT_DELIMITER, end = true, sensitive = false, trailing = true } = options;
       const keys = [];
       let source = "";
       let combinations = 0;
-      function process3(path5) {
-        if (Array.isArray(path5)) {
-          for (const p of path5)
+      function process3(path6) {
+        if (Array.isArray(path6)) {
+          for (const p of path6)
             process3(p);
           return;
         }
-        const data = typeof path5 === "object" ? path5 : parse7(path5, options);
+        const data = typeof path6 === "object" ? path6 : parse7(path6, options);
         flatten(data.tokens, 0, [], (tokens) => {
           if (combinations >= 256) {
             throw new PathError("Too many path combinations", data.originalPath);
@@ -45253,7 +45256,7 @@ var require_dist4 = __commonJS({
           combinations++;
         });
       }
-      process3(path4);
+      process3(path5);
       let pattern = `^(?:${source})`;
       if (trailing)
         pattern += "(?:" + escape2(delimiter) + "$)?";
@@ -45393,18 +45396,18 @@ var require_layer = __commonJS({
     var TRAILING_SLASH_REGEXP = /\/+$/;
     var MATCHING_GROUP_REGEXP = /\((?:\?<(.*?)>)?(?!\?)/g;
     module.exports = Layer;
-    function Layer(path4, options, fn) {
+    function Layer(path5, options, fn) {
       if (!(this instanceof Layer)) {
-        return new Layer(path4, options, fn);
+        return new Layer(path5, options, fn);
       }
-      debug("new %o", path4);
+      debug("new %o", path5);
       const opts = options || {};
       this.handle = fn;
       this.keys = [];
       this.name = fn.name || "<anonymous>";
       this.params = void 0;
       this.path = void 0;
-      this.slash = path4 === "/" && opts.end === false;
+      this.slash = path5 === "/" && opts.end === false;
       function matcher(_path) {
         if (_path instanceof RegExp) {
           const keys = [];
@@ -45443,7 +45446,7 @@ var require_layer = __commonJS({
           decode: decodeParam
         });
       }
-      this.matchers = Array.isArray(path4) ? path4.map(matcher) : [matcher(path4)];
+      this.matchers = Array.isArray(path5) ? path5.map(matcher) : [matcher(path5)];
     }
     Layer.prototype.handleError = function handleError(error48, req, res, next) {
       const fn = this.handle;
@@ -45483,9 +45486,9 @@ var require_layer = __commonJS({
         next(err);
       }
     };
-    Layer.prototype.match = function match2(path4) {
+    Layer.prototype.match = function match2(path5) {
       let match3;
-      if (path4 != null) {
+      if (path5 != null) {
         if (this.slash) {
           this.params = {};
           this.path = "";
@@ -45493,7 +45496,7 @@ var require_layer = __commonJS({
         }
         let i = 0;
         while (!match3 && i < this.matchers.length) {
-          match3 = this.matchers[i](path4);
+          match3 = this.matchers[i](path5);
           i++;
         }
       }
@@ -45521,13 +45524,13 @@ var require_layer = __commonJS({
         throw err;
       }
     }
-    function loosen(path4) {
-      if (path4 instanceof RegExp || path4 === "/") {
-        return path4;
+    function loosen(path5) {
+      if (path5 instanceof RegExp || path5 === "/") {
+        return path5;
       }
-      return Array.isArray(path4) ? path4.map(function(p) {
+      return Array.isArray(path5) ? path5.map(function(p) {
         return loosen(p);
-      }) : String(path4).replace(TRAILING_SLASH_REGEXP, "");
+      }) : String(path5).replace(TRAILING_SLASH_REGEXP, "");
     }
   }
 });
@@ -45543,9 +45546,9 @@ var require_route = __commonJS({
     var flatten = Array.prototype.flat;
     var methods = METHODS2.map((method) => method.toLowerCase());
     module.exports = Route;
-    function Route(path4) {
-      debug("new %o", path4);
-      this.path = path4;
+    function Route(path5) {
+      debug("new %o", path5);
+      this.path = path5;
       this.stack = [];
       this.methods = /* @__PURE__ */ Object.create(null);
     }
@@ -45753,8 +45756,8 @@ var require_router = __commonJS({
         if (++sync > 100) {
           return setImmediate(next, err);
         }
-        const path4 = getPathname(req);
-        if (path4 == null) {
+        const path5 = getPathname(req);
+        if (path5 == null) {
           return done(layerError);
         }
         let layer;
@@ -45762,7 +45765,7 @@ var require_router = __commonJS({
         let route;
         while (match2 !== true && idx < stack.length) {
           layer = stack[idx++];
-          match2 = matchLayer(layer, path4);
+          match2 = matchLayer(layer, path5);
           route = layer.route;
           if (typeof match2 !== "boolean") {
             layerError = layerError || match2;
@@ -45800,18 +45803,18 @@ var require_router = __commonJS({
           } else if (route) {
             layer.handleRequest(req, res, next);
           } else {
-            trimPrefix(layer, layerError, layerPath, path4);
+            trimPrefix(layer, layerError, layerPath, path5);
           }
           sync = 0;
         });
       }
-      function trimPrefix(layer, layerError, layerPath, path4) {
+      function trimPrefix(layer, layerError, layerPath, path5) {
         if (layerPath.length !== 0) {
-          if (layerPath !== path4.substring(0, layerPath.length)) {
+          if (layerPath !== path5.substring(0, layerPath.length)) {
             next(layerError);
             return;
           }
-          const c = path4[layerPath.length];
+          const c = path5[layerPath.length];
           if (c && c !== "/") {
             next(layerError);
             return;
@@ -45835,7 +45838,7 @@ var require_router = __commonJS({
     };
     Router8.prototype.use = function use(handler) {
       let offset = 0;
-      let path4 = "/";
+      let path5 = "/";
       if (typeof handler !== "function") {
         let arg = handler;
         while (Array.isArray(arg) && arg.length !== 0) {
@@ -45843,7 +45846,7 @@ var require_router = __commonJS({
         }
         if (typeof arg !== "function") {
           offset = 1;
-          path4 = handler;
+          path5 = handler;
         }
       }
       const callbacks = flatten.call(slice.call(arguments, offset), Infinity);
@@ -45855,8 +45858,8 @@ var require_router = __commonJS({
         if (typeof fn !== "function") {
           throw new TypeError("argument handler must be a function");
         }
-        debug("use %o %s", path4, fn.name || "<anonymous>");
-        const layer = new Layer(path4, {
+        debug("use %o %s", path5, fn.name || "<anonymous>");
+        const layer = new Layer(path5, {
           sensitive: this.caseSensitive,
           strict: false,
           end: false
@@ -45866,9 +45869,9 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router8.prototype.route = function route(path4) {
-      const route2 = new Route(path4);
-      const layer = new Layer(path4, {
+    Router8.prototype.route = function route(path5) {
+      const route2 = new Route(path5);
+      const layer = new Layer(path5, {
         sensitive: this.caseSensitive,
         strict: this.strict,
         end: true
@@ -45881,8 +45884,8 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router8.prototype[method] = function(path4) {
-        const route = this.route(path4);
+      Router8.prototype[method] = function(path5) {
+        const route = this.route(path5);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
       };
@@ -45911,9 +45914,9 @@ var require_router = __commonJS({
       const fqdnIndex = url2.substring(0, pathLength).indexOf("://");
       return fqdnIndex !== -1 ? url2.substring(0, url2.indexOf("/", 3 + fqdnIndex)) : void 0;
     }
-    function matchLayer(layer, path4) {
+    function matchLayer(layer, path5) {
       try {
-        return layer.match(path4);
+        return layer.match(path5);
       } catch (err) {
         return err;
       }
@@ -46141,7 +46144,7 @@ var require_application = __commonJS({
     };
     app2.use = function use(fn) {
       var offset = 0;
-      var path4 = "/";
+      var path5 = "/";
       if (typeof fn !== "function") {
         var arg = fn;
         while (Array.isArray(arg) && arg.length !== 0) {
@@ -46149,7 +46152,7 @@ var require_application = __commonJS({
         }
         if (typeof arg !== "function") {
           offset = 1;
-          path4 = fn;
+          path5 = fn;
         }
       }
       var fns = flatten.call(slice.call(arguments, offset), Infinity);
@@ -46159,12 +46162,12 @@ var require_application = __commonJS({
       var router8 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router8.use(path4, fn2);
+          return router8.use(path5, fn2);
         }
-        debug(".use app under %s", path4);
-        fn2.mountpath = path4;
+        debug(".use app under %s", path5);
+        fn2.mountpath = path5;
         fn2.parent = this;
-        router8.use(path4, function mounted_app(req, res, next) {
+        router8.use(path5, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -46176,8 +46179,8 @@ var require_application = __commonJS({
       }, this);
       return this;
     };
-    app2.route = function route(path4) {
-      return this.router.route(path4);
+    app2.route = function route(path5) {
+      return this.router.route(path5);
     };
     app2.engine = function engine(ext, fn) {
       if (typeof fn !== "function") {
@@ -46220,7 +46223,7 @@ var require_application = __commonJS({
       }
       return this;
     };
-    app2.path = function path4() {
+    app2.path = function path5() {
       return this.parent ? this.parent.path() + this.mountpath : "";
     };
     app2.enabled = function enabled(setting) {
@@ -46236,17 +46239,17 @@ var require_application = __commonJS({
       return this.set(setting, false);
     };
     methods.forEach(function(method) {
-      app2[method] = function(path4) {
+      app2[method] = function(path5) {
         if (method === "get" && arguments.length === 1) {
-          return this.set(path4);
+          return this.set(path5);
         }
-        var route = this.route(path4);
+        var route = this.route(path5);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
       };
     });
-    app2.all = function all(path4) {
-      var route = this.route(path4);
+    app2.all = function all(path5) {
+      var route = this.route(path5);
       var args = slice.call(arguments, 1);
       for (var i = 0; i < methods.length; i++) {
         route[methods[i]].apply(route, args);
@@ -47168,7 +47171,7 @@ var require_request = __commonJS({
       var subdomains2 = !isIP(hostname3) ? hostname3.split(".").reverse() : [hostname3];
       return subdomains2.slice(offset);
     });
-    defineGetter(req, "path", function path4() {
+    defineGetter(req, "path", function path5() {
       return parse7(this).pathname;
     });
     defineGetter(req, "host", function host() {
@@ -47379,8 +47382,8 @@ var require_content_disposition = __commonJS({
       this.type = type;
       this.parameters = parameters;
     }
-    function basename(path4) {
-      const normalized = path4.replaceAll("\\", "/");
+    function basename(path5) {
+      const normalized = path5.replaceAll("\\", "/");
       let end = normalized.length;
       while (end > 0 && normalized[end - 1] === "/") {
         end--;
@@ -47430,17 +47433,17 @@ var require_content_disposition = __commonJS({
 // node_modules/cookie-signature/index.js
 var require_cookie_signature = __commonJS({
   "node_modules/cookie-signature/index.js"(exports) {
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     exports.sign = function(val, secret) {
       if ("string" != typeof val) throw new TypeError("Cookie value must be provided as a string.");
       if (null == secret) throw new TypeError("Secret key must be provided.");
-      return val + "." + crypto5.createHmac("sha256", secret).update(val).digest("base64").replace(/\=+$/, "");
+      return val + "." + crypto6.createHmac("sha256", secret).update(val).digest("base64").replace(/\=+$/, "");
     };
     exports.unsign = function(input, secret) {
       if ("string" != typeof input) throw new TypeError("Signed cookie string must be provided.");
       if (null == secret) throw new TypeError("Secret key must be provided.");
       var tentativeValue = input.slice(0, input.lastIndexOf(".")), expectedInput = exports.sign(tentativeValue, secret), expectedBuffer = Buffer.from(expectedInput), inputBuffer = Buffer.from(input);
-      return expectedBuffer.length === inputBuffer.length && crypto5.timingSafeEqual(expectedBuffer, inputBuffer) ? tentativeValue : false;
+      return expectedBuffer.length === inputBuffer.length && crypto6.timingSafeEqual(expectedBuffer, inputBuffer) ? tentativeValue : false;
     };
   }
 });
@@ -47621,32 +47624,32 @@ var require_send = __commonJS({
     var escapeHtml = require_escape_html();
     var etag = require_etag();
     var fresh = require_fresh();
-    var fs4 = __require("fs");
+    var fs5 = __require("fs");
     var mime = require_mime_types();
     var ms = require_ms();
     var onFinished = require_on_finished();
     var parseRange = require_range_parser();
-    var path4 = __require("path");
+    var path5 = __require("path");
     var statuses = require_statuses();
     var Stream = __require("stream");
     var util = __require("util");
-    var extname = path4.extname;
-    var join3 = path4.join;
-    var normalize = path4.normalize;
-    var resolve2 = path4.resolve;
-    var sep = path4.sep;
+    var extname = path5.extname;
+    var join3 = path5.join;
+    var normalize = path5.normalize;
+    var resolve2 = path5.resolve;
+    var sep = path5.sep;
     var BYTES_RANGE_REGEXP = /^ *bytes=/;
     var MAX_MAXAGE = 60 * 60 * 24 * 365 * 1e3;
     var UP_PATH_REGEXP = /(?:^|[\\/])\.\.(?:[\\/]|$)/;
     module.exports = send;
-    function send(req, path5, options) {
-      return new SendStream(req, path5, options);
+    function send(req, path6, options) {
+      return new SendStream(req, path6, options);
     }
-    function SendStream(req, path5, options) {
+    function SendStream(req, path6, options) {
       Stream.call(this);
       var opts = options || {};
       this.options = opts;
-      this.path = path5;
+      this.path = path6;
       this.req = req;
       this._acceptRanges = opts.acceptRanges !== void 0 ? Boolean(opts.acceptRanges) : true;
       this._cacheControl = opts.cacheControl !== void 0 ? Boolean(opts.cacheControl) : true;
@@ -47760,10 +47763,10 @@ var require_send = __commonJS({
       var lastModified = this.res.getHeader("Last-Modified");
       return parseHttpDate(lastModified) <= parseHttpDate(ifRange);
     };
-    SendStream.prototype.redirect = function redirect(path5) {
+    SendStream.prototype.redirect = function redirect(path6) {
       var res = this.res;
       if (hasListeners(this, "directory")) {
-        this.emit("directory", res, path5);
+        this.emit("directory", res, path6);
         return;
       }
       if (this.hasTrailingSlash()) {
@@ -47783,38 +47786,38 @@ var require_send = __commonJS({
     SendStream.prototype.pipe = function pipe2(res) {
       var root = this._root;
       this.res = res;
-      var path5 = decode4(this.path);
-      if (path5 === -1) {
+      var path6 = decode4(this.path);
+      if (path6 === -1) {
         this.error(400);
         return res;
       }
-      if (~path5.indexOf("\0")) {
+      if (~path6.indexOf("\0")) {
         this.error(400);
         return res;
       }
       var parts;
       if (root !== null) {
-        if (path5) {
-          path5 = normalize("." + sep + path5);
+        if (path6) {
+          path6 = normalize("." + sep + path6);
         }
-        if (UP_PATH_REGEXP.test(path5)) {
-          debug('malicious path "%s"', path5);
+        if (UP_PATH_REGEXP.test(path6)) {
+          debug('malicious path "%s"', path6);
           this.error(403);
           return res;
         }
-        parts = path5.split(sep);
-        path5 = normalize(join3(root, path5));
+        parts = path6.split(sep);
+        path6 = normalize(join3(root, path6));
       } else {
-        if (UP_PATH_REGEXP.test(path5)) {
-          debug('malicious path "%s"', path5);
+        if (UP_PATH_REGEXP.test(path6)) {
+          debug('malicious path "%s"', path6);
           this.error(403);
           return res;
         }
-        parts = normalize(path5).split(sep);
-        path5 = resolve2(path5);
+        parts = normalize(path6).split(sep);
+        path6 = resolve2(path6);
       }
       if (containsDotFile(parts)) {
-        debug('%s dotfile "%s"', this._dotfiles, path5);
+        debug('%s dotfile "%s"', this._dotfiles, path6);
         switch (this._dotfiles) {
           case "allow":
             break;
@@ -47828,13 +47831,13 @@ var require_send = __commonJS({
         }
       }
       if (this._index.length && this.hasTrailingSlash()) {
-        this.sendIndex(path5);
+        this.sendIndex(path6);
         return res;
       }
-      this.sendFile(path5);
+      this.sendFile(path6);
       return res;
     };
-    SendStream.prototype.send = function send2(path5, stat) {
+    SendStream.prototype.send = function send2(path6, stat) {
       var len = stat.size;
       var options = this.options;
       var opts = {};
@@ -47846,9 +47849,9 @@ var require_send = __commonJS({
         this.headersAlreadySent();
         return;
       }
-      debug('pipe "%s"', path5);
-      this.setHeader(path5, stat);
-      this.type(path5);
+      debug('pipe "%s"', path6);
+      this.setHeader(path6, stat);
+      this.type(path6);
       if (this.isConditionalGET()) {
         if (this.isPreconditionFailure()) {
           this.error(412);
@@ -47897,30 +47900,30 @@ var require_send = __commonJS({
         res.end();
         return;
       }
-      this.stream(path5, opts);
+      this.stream(path6, opts);
     };
-    SendStream.prototype.sendFile = function sendFile(path5) {
+    SendStream.prototype.sendFile = function sendFile(path6) {
       var i = 0;
       var self2 = this;
-      debug('stat "%s"', path5);
-      fs4.stat(path5, function onstat(err, stat) {
-        var pathEndsWithSep = path5[path5.length - 1] === sep;
-        if (err && err.code === "ENOENT" && !extname(path5) && !pathEndsWithSep) {
+      debug('stat "%s"', path6);
+      fs5.stat(path6, function onstat(err, stat) {
+        var pathEndsWithSep = path6[path6.length - 1] === sep;
+        if (err && err.code === "ENOENT" && !extname(path6) && !pathEndsWithSep) {
           return next(err);
         }
         if (err) return self2.onStatError(err);
-        if (stat.isDirectory()) return self2.redirect(path5);
+        if (stat.isDirectory()) return self2.redirect(path6);
         if (pathEndsWithSep) return self2.error(404);
-        self2.emit("file", path5, stat);
-        self2.send(path5, stat);
+        self2.emit("file", path6, stat);
+        self2.send(path6, stat);
       });
       function next(err) {
         if (self2._extensions.length <= i) {
           return err ? self2.onStatError(err) : self2.error(404);
         }
-        var p = path5 + "." + self2._extensions[i++];
+        var p = path6 + "." + self2._extensions[i++];
         debug('stat "%s"', p);
-        fs4.stat(p, function(err2, stat) {
+        fs5.stat(p, function(err2, stat) {
           if (err2) return next(err2);
           if (stat.isDirectory()) return next();
           self2.emit("file", p, stat);
@@ -47928,7 +47931,7 @@ var require_send = __commonJS({
         });
       }
     };
-    SendStream.prototype.sendIndex = function sendIndex(path5) {
+    SendStream.prototype.sendIndex = function sendIndex(path6) {
       var i = -1;
       var self2 = this;
       function next(err) {
@@ -47936,9 +47939,9 @@ var require_send = __commonJS({
           if (err) return self2.onStatError(err);
           return self2.error(404);
         }
-        var p = join3(path5, self2._index[i]);
+        var p = join3(path6, self2._index[i]);
         debug('stat "%s"', p);
-        fs4.stat(p, function(err2, stat) {
+        fs5.stat(p, function(err2, stat) {
           if (err2) return next(err2);
           if (stat.isDirectory()) return next();
           self2.emit("file", p, stat);
@@ -47947,10 +47950,10 @@ var require_send = __commonJS({
       }
       next();
     };
-    SendStream.prototype.stream = function stream(path5, options) {
+    SendStream.prototype.stream = function stream(path6, options) {
       var self2 = this;
       var res = this.res;
-      var stream2 = fs4.createReadStream(path5, options);
+      var stream2 = fs5.createReadStream(path6, options);
       this.emit("stream", stream2);
       stream2.pipe(res);
       function cleanup() {
@@ -47965,17 +47968,17 @@ var require_send = __commonJS({
         self2.emit("end");
       });
     };
-    SendStream.prototype.type = function type(path5) {
+    SendStream.prototype.type = function type(path6) {
       var res = this.res;
       if (res.getHeader("Content-Type")) return;
-      var ext = extname(path5);
+      var ext = extname(path6);
       var type2 = mime.contentType(ext) || "application/octet-stream";
       debug("content-type %s", type2);
       res.setHeader("Content-Type", type2);
     };
-    SendStream.prototype.setHeader = function setHeader(path5, stat) {
+    SendStream.prototype.setHeader = function setHeader(path6, stat) {
       var res = this.res;
-      this.emit("headers", res, path5, stat);
+      this.emit("headers", res, path6, stat);
       if (this._acceptRanges && !res.getHeader("Accept-Ranges")) {
         debug("accept ranges");
         res.setHeader("Accept-Ranges", "bytes");
@@ -48033,9 +48036,9 @@ var require_send = __commonJS({
       }
       return err instanceof Error ? createError(status, err, { expose: false }) : createError(status, err);
     }
-    function decode4(path5) {
+    function decode4(path6) {
       try {
-        return decodeURIComponent(path5);
+        return decodeURIComponent(path6);
       } catch (err) {
         return -1;
       }
@@ -48179,7 +48182,7 @@ var require_response = __commonJS({
     var http2 = __require("node:http");
     var onFinished = require_on_finished();
     var mime = require_mime_types();
-    var path4 = __require("node:path");
+    var path5 = __require("node:path");
     var pathIsAbsolute = __require("node:path").isAbsolute;
     var statuses = require_statuses();
     var sign2 = require_cookie_signature().sign;
@@ -48188,8 +48191,8 @@ var require_response = __commonJS({
     var setCharset = require_utils3().setCharset;
     var cookie4 = require_cookie();
     var send = require_send();
-    var extname = path4.extname;
-    var resolve2 = path4.resolve;
+    var extname = path5.extname;
+    var resolve2 = path5.resolve;
     var vary = require_vary();
     var { Buffer: Buffer2 } = __require("node:buffer");
     var res = Object.create(http2.ServerResponse.prototype);
@@ -48335,26 +48338,26 @@ var require_response = __commonJS({
       this.type("txt");
       return this.send(body);
     };
-    res.sendFile = function sendFile(path5, options, callback) {
+    res.sendFile = function sendFile(path6, options, callback) {
       var done = callback;
       var req = this.req;
       var res2 = this;
       var next = req.next;
       var opts = options || {};
-      if (!path5) {
+      if (!path6) {
         throw new TypeError("path argument is required to res.sendFile");
       }
-      if (typeof path5 !== "string") {
+      if (typeof path6 !== "string") {
         throw new TypeError("path must be a string to res.sendFile");
       }
       if (typeof options === "function") {
         done = options;
         opts = {};
       }
-      if (!opts.root && !pathIsAbsolute(path5)) {
+      if (!opts.root && !pathIsAbsolute(path6)) {
         throw new TypeError("path must be absolute or specify root to res.sendFile");
       }
-      var pathname = encodeURI(path5);
+      var pathname = encodeURI(path6);
       opts.etag = this.app.enabled("etag");
       var file2 = send(req, pathname, opts);
       sendfile(res2, file2, opts, function(err) {
@@ -48365,7 +48368,7 @@ var require_response = __commonJS({
         }
       });
     };
-    res.download = function download(path5, filename, options, callback) {
+    res.download = function download(path6, filename, options, callback) {
       var done = callback;
       var name = filename;
       var opts = options || null;
@@ -48382,7 +48385,7 @@ var require_response = __commonJS({
         opts = filename;
       }
       var headers = {
-        "Content-Disposition": contentDisposition(name || path5)
+        "Content-Disposition": contentDisposition(name || path6)
       };
       if (opts && opts.headers) {
         var keys = Object.keys(opts.headers);
@@ -48395,7 +48398,7 @@ var require_response = __commonJS({
       }
       opts = Object.create(opts);
       opts.headers = headers;
-      var fullPath = !opts.root ? resolve2(path5) : path5;
+      var fullPath = !opts.root ? resolve2(path6) : path6;
       return this.sendFile(fullPath, opts, done);
     };
     res.contentType = res.type = function contentType(type) {
@@ -48678,11 +48681,11 @@ var require_serve_static = __commonJS({
         }
         var forwardError = !fallthrough;
         var originalUrl = parseUrl.original(req);
-        var path4 = parseUrl(req).pathname;
-        if (path4 === "/" && originalUrl.pathname.substr(-1) !== "/") {
-          path4 = "";
+        var path5 = parseUrl(req).pathname;
+        if (path5 === "/" && originalUrl.pathname.substr(-1) !== "/") {
+          path5 = "";
         }
-        var stream = send(req, path4, opts);
+        var stream = send(req, path5, opts);
         stream.on("directory", onDirectory);
         if (setHeaders) {
           stream.on("headers", setHeaders);
@@ -49165,8 +49168,8 @@ var require_node2 = __commonJS({
           }
           break;
         case "FILE":
-          var fs4 = __require("fs");
-          stream2 = new fs4.SyncWriteStream(fd2, { autoClose: false });
+          var fs5 = __require("fs");
+          stream2 = new fs5.SyncWriteStream(fd2, { autoClose: false });
           stream2._type = "fs";
           break;
         case "PIPE":
@@ -65047,11 +65050,11 @@ var require_mime_types2 = __commonJS({
       }
       return exts[0];
     }
-    function lookup(path4) {
-      if (!path4 || typeof path4 !== "string") {
+    function lookup(path5) {
+      if (!path5 || typeof path5 !== "string") {
         return false;
       }
-      var extension2 = extname("x." + path4).toLowerCase().substr(1);
+      var extension2 = extname("x." + path5).toLowerCase().substr(1);
       if (!extension2) {
         return false;
       }
@@ -65837,8 +65840,8 @@ var require_cookies = __commonJS({
         if (urlparts.hostname !== cookie4.domain && (cookie4.domain.charAt(0) !== "." || ("." + urlparts.hostname).substr(-cookie4.domain.length) !== cookie4.domain)) {
           return false;
         }
-        let path4 = this.getPath(urlparts.pathname);
-        if (path4.substr(0, cookie4.path.length) !== cookie4.path) {
+        let path5 = this.getPath(urlparts.pathname);
+        if (path5.substr(0, cookie4.path.length) !== cookie4.path) {
           return false;
         }
         if (cookie4.secure && urlparts.protocol !== "https:") {
@@ -65898,16 +65901,16 @@ var require_cookies = __commonJS({
        * @returns {String} Normalized path
        */
       getPath(pathname) {
-        let path4 = (pathname || "/").split("/");
-        path4.pop();
-        path4 = path4.join("/").trim();
-        if (path4.charAt(0) !== "/") {
-          path4 = "/" + path4;
+        let path5 = (pathname || "/").split("/");
+        path5.pop();
+        path5 = path5.join("/").trim();
+        if (path5.charAt(0) !== "/") {
+          path5 = "/" + path5;
         }
-        if (path4.substr(-1) !== "/") {
-          path4 += "/";
+        if (path5.substr(-1) !== "/") {
+          path5 += "/";
         }
-        return path4;
+        return path5;
       }
     };
     module.exports = Cookies;
@@ -66208,7 +66211,7 @@ var require_shared = __commonJS({
     "use strict";
     var urllib = __require("url");
     var util = __require("util");
-    var fs4 = __require("fs");
+    var fs5 = __require("fs");
     var nmfetch = require_fetch();
     var dns2 = __require("dns");
     var net2 = __require("net");
@@ -66594,7 +66597,7 @@ var require_shared = __commonJS({
           }
           return callback(null, parsedDataUri.data);
         } else if (content.path) {
-          return resolveStream(fs4.createReadStream(content.path), callback);
+          return resolveStream(fs5.createReadStream(content.path), callback);
         }
       }
       if (typeof data[key].content === "string" && !["utf8", "usascii", "ascii"].includes(encoding)) {
@@ -66718,7 +66721,7 @@ var require_shared = __commonJS({
 var require_mime_types3 = __commonJS({
   "node_modules/nodemailer/lib/mime-funcs/mime-types.js"(exports, module) {
     "use strict";
-    var path4 = __require("path");
+    var path5 = __require("path");
     var defaultMimeType = "application/octet-stream";
     var defaultExtension = "bin";
     var mimeTypes = /* @__PURE__ */ new Map([
@@ -68776,7 +68779,7 @@ var require_mime_types3 = __commonJS({
         if (!filename) {
           return defaultMimeType;
         }
-        let parsed = path4.parse(filename);
+        let parsed = path5.parse(filename);
         let extension = (parsed.ext.substr(1) || parsed.name || "").split("?").shift().trim().toLowerCase();
         let value = defaultMimeType;
         if (extensions.has(extension)) {
@@ -70177,8 +70180,8 @@ var require_le_unix = __commonJS({
 var require_mime_node = __commonJS({
   "node_modules/nodemailer/lib/mime-node/index.js"(exports, module) {
     "use strict";
-    var crypto5 = __require("crypto");
-    var fs4 = __require("fs");
+    var crypto6 = __require("crypto");
+    var fs5 = __require("fs");
     var punycode = require_punycode();
     var PassThrough = __require("stream").PassThrough;
     var shared = require_shared();
@@ -70194,7 +70197,7 @@ var require_mime_node = __commonJS({
       constructor(contentType, options) {
         this.nodeCounter = 0;
         options = options || {};
-        this.baseBoundary = options.baseBoundary || crypto5.randomBytes(8).toString("hex");
+        this.baseBoundary = options.baseBoundary || crypto6.randomBytes(8).toString("hex");
         this.boundaryPrefix = options.boundaryPrefix || "--_NmP";
         this.disableFileAccess = !!options.disableFileAccess;
         this.disableUrlAccess = !!options.disableUrlAccess;
@@ -70893,7 +70896,7 @@ var require_mime_node = __commonJS({
             setImmediate(() => contentStream.emit("error", new Error("File access rejected for " + content.path)));
             return contentStream;
           }
-          return fs4.createReadStream(content.path);
+          return fs5.createReadStream(content.path);
         } else if (content && typeof content.href === "string") {
           if (this.disableUrlAccess) {
             contentStream = new PassThrough();
@@ -71137,8 +71140,8 @@ var require_mime_node = __commonJS({
       _generateMessageId() {
         return "<" + [2, 2, 2, 6].reduce(
           // crux to generate UUID-like random strings
-          (prev, len) => prev + "-" + crypto5.randomBytes(len).toString("hex"),
-          crypto5.randomBytes(4).toString("hex")
+          (prev, len) => prev + "-" + crypto6.randomBytes(len).toString("hex"),
+          crypto6.randomBytes(4).toString("hex")
         ) + "@" + // try to use the domain of the FROM address or fallback to server hostname
         (this.getEnvelope().from || this.hostname || "localhost").split("@").pop() + ">";
       }
@@ -71729,14 +71732,14 @@ var require_relaxed_body = __commonJS({
   "node_modules/nodemailer/lib/dkim/relaxed-body.js"(exports, module) {
     "use strict";
     var Transform = __require("stream").Transform;
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     var RelaxedBody = class extends Transform {
       constructor(options) {
         super();
         options = options || {};
         this.chunkBuffer = [];
         this.chunkBufferLen = 0;
-        this.bodyHash = crypto5.createHash(options.hashAlgo || "sha1");
+        this.bodyHash = crypto6.createHash(options.hashAlgo || "sha1");
         this.remainder = "";
         this.byteLength = 0;
         this.debug = options.debug;
@@ -71839,7 +71842,7 @@ var require_sign2 = __commonJS({
     "use strict";
     var punycode = require_punycode();
     var mimeFuncs = require_mime_funcs();
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     module.exports = (headers, hashAlgo, bodyHash, options) => {
       options = options || {};
       let defaultFieldNames = "From:Sender:Reply-To:Subject:Date:Message-ID:To:Cc:MIME-Version:Content-Type:Content-Transfer-Encoding:Content-ID:Content-Description:Resent-Date:Resent-From:Resent-Sender:Resent-To:Resent-Cc:Resent-Message-ID:In-Reply-To:References:List-Id:List-Help:List-Unsubscribe:List-Subscribe:List-Post:List-Owner:List-Archive";
@@ -71848,7 +71851,7 @@ var require_sign2 = __commonJS({
       let dkimHeader = generateDKIMHeader(options.domainName, options.keySelector, canonicalizedHeaderData.fieldNames, hashAlgo, bodyHash);
       let signer, signature;
       canonicalizedHeaderData.headers += "dkim-signature:" + relaxedHeaderLine(dkimHeader);
-      signer = crypto5.createSign(("rsa-" + hashAlgo).toUpperCase());
+      signer = crypto6.createSign(("rsa-" + hashAlgo).toUpperCase());
       signer.update(canonicalizedHeaderData.headers);
       try {
         signature = signer.sign(options.privateKey, "base64");
@@ -71914,9 +71917,9 @@ var require_dkim = __commonJS({
     var RelaxedBody = require_relaxed_body();
     var sign2 = require_sign2();
     var PassThrough = __require("stream").PassThrough;
-    var fs4 = __require("fs");
-    var path4 = __require("path");
-    var crypto5 = __require("crypto");
+    var fs5 = __require("fs");
+    var path5 = __require("path");
+    var crypto6 = __require("crypto");
     var DKIM_ALGO = "sha256";
     var MAX_MESSAGE_SIZE = 128 * 1024;
     var DKIMSigner = class {
@@ -71929,7 +71932,7 @@ var require_dkim = __commonJS({
         this.chunks = [];
         this.chunklen = 0;
         this.readPos = 0;
-        this.cachePath = this.cacheDir ? path4.join(this.cacheDir, "message." + Date.now() + "-" + crypto5.randomBytes(14).toString("hex")) : false;
+        this.cachePath = this.cacheDir ? path5.join(this.cacheDir, "message." + Date.now() + "-" + crypto6.randomBytes(14).toString("hex")) : false;
         this.cache = false;
         this.headers = false;
         this.bodyHash = false;
@@ -71949,10 +71952,10 @@ var require_dkim = __commonJS({
         if (!this.cache || !this.cachePath) {
           return;
         }
-        fs4.unlink(this.cachePath, () => false);
+        fs5.unlink(this.cachePath, () => false);
       }
       createReadCache() {
-        this.cache = fs4.createReadStream(this.cachePath);
+        this.cache = fs5.createReadStream(this.cachePath);
         this.cache.once("error", (err) => {
           this.cleanup();
           this.output.emit("error", err);
@@ -72008,7 +72011,7 @@ var require_dkim = __commonJS({
       }
       createWriteCache() {
         this.output.usingCache = true;
-        this.cache = fs4.createWriteStream(this.cachePath);
+        this.cache = fs5.createWriteStream(this.cachePath);
         this.cache.once("error", (err) => {
           this.cleanup();
           this.relaxedBody.unpipe(this.cache);
@@ -72485,7 +72488,7 @@ var require_mailer = __commonJS({
     var MailMessage = require_mail_message();
     var net2 = __require("net");
     var dns2 = __require("dns");
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     var Mail = class extends EventEmitter {
       constructor(transporter, options, defaults) {
         super();
@@ -72809,7 +72812,7 @@ var require_mailer = __commonJS({
           }
           let cidCounter = 0;
           html = (html || "").toString().replace(/(<img\b[^<>]{0,1024} src\s{0,20}=[\s"']{0,20})(data:([^;]+);[^"'>\s]+)/gi, (match2, prefix, dataUri, mimeType) => {
-            let cid = crypto5.randomBytes(10).toString("hex") + "@localhost";
+            let cid = crypto6.randomBytes(10).toString("hex") + "@localhost";
             if (!mail.data.attachments) {
               mail.data.attachments = [];
             }
@@ -72936,7 +72939,7 @@ var require_smtp_connection = __commonJS({
     var net2 = __require("net");
     var tls = __require("tls");
     var os2 = __require("os");
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     var DataStream = require_data_stream();
     var PassThrough = __require("stream").PassThrough;
     var shared = require_shared();
@@ -72947,7 +72950,7 @@ var require_smtp_connection = __commonJS({
     var SMTPConnection = class extends EventEmitter {
       constructor(options) {
         super(options);
-        this.id = crypto5.randomBytes(8).toString("base64").replace(/\W/g, "");
+        this.id = crypto6.randomBytes(8).toString("base64").replace(/\W/g, "");
         this.stage = "init";
         this.options = options || {};
         this.secureConnection = !!this.options.secure;
@@ -74040,7 +74043,7 @@ var require_smtp_connection = __commonJS({
         } else {
           challengeString = challengeMatch[1];
         }
-        let base64decoded = Buffer.from(challengeString, "base64").toString("ascii"), hmacMD5 = crypto5.createHmac("md5", this._auth.credentials.pass);
+        let base64decoded = Buffer.from(challengeString, "base64").toString("ascii"), hmacMD5 = crypto6.createHmac("md5", this._auth.credentials.pass);
         hmacMD5.update(base64decoded);
         let prepended = this._auth.credentials.user + " " + hmacMD5.digest("hex");
         this._responseActions.push((str2) => {
@@ -74351,7 +74354,7 @@ var require_xoauth2 = __commonJS({
     "use strict";
     var Stream = __require("stream").Stream;
     var nmfetch = require_fetch();
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     var shared = require_shared();
     var XOAuth2 = class extends Stream {
       constructor(options, logger) {
@@ -74642,7 +74645,7 @@ var require_xoauth2 = __commonJS({
        */
       jwtSignRS256(payload) {
         payload = ['{"alg":"RS256","typ":"JWT"}', JSON.stringify(payload)].map((val) => this.toBase64URL(val)).join(".");
-        let signature = crypto5.createSign("RSA-SHA256").update(payload).sign(this.options.privateKey);
+        let signature = crypto6.createSign("RSA-SHA256").update(payload).sign(this.options.privateKey);
         return payload + "." + this.toBase64URL(signature);
       }
     };
@@ -77159,8 +77162,8 @@ var require_req = __commonJS({
       if (req.originalUrl) {
         _req.url = req.originalUrl;
       } else {
-        const path4 = req.path;
-        _req.url = typeof path4 === "string" ? path4 : req.url ? req.url.path || req.url : void 0;
+        const path5 = req.path;
+        _req.url = typeof path5 === "string" ? path5 : req.url ? req.url.path || req.url : void 0;
       }
       if (req.query) {
         _req.query = req.query;
@@ -77325,14 +77328,14 @@ var require_redact = __commonJS({
       }
       return obj;
     }
-    function parsePath2(path4) {
+    function parsePath2(path5) {
       const parts = [];
       let current = "";
       let inBrackets = false;
       let inQuotes = false;
       let quoteChar = "";
-      for (let i = 0; i < path4.length; i++) {
-        const char2 = path4[i];
+      for (let i = 0; i < path5.length; i++) {
+        const char2 = path5[i];
         if (!inBrackets && char2 === ".") {
           if (current) {
             parts.push(current);
@@ -77463,10 +77466,10 @@ var require_redact = __commonJS({
       return current;
     }
     function redactPaths(obj, paths, censor, remove = false) {
-      for (const path4 of paths) {
-        const parts = parsePath2(path4);
+      for (const path5 of paths) {
+        const parts = parsePath2(path5);
         if (parts.includes("*")) {
-          redactWildcardPath(obj, parts, censor, path4, remove);
+          redactWildcardPath(obj, parts, censor, path5, remove);
         } else {
           if (remove) {
             removeKey(obj, parts);
@@ -77551,8 +77554,8 @@ var require_redact = __commonJS({
           }
         } else {
           if (afterWildcard.includes("*")) {
-            const wrappedCensor = typeof censor === "function" ? (value, path4) => {
-              const fullPath = [...pathArray.slice(0, pathLength), ...path4];
+            const wrappedCensor = typeof censor === "function" ? (value, path5) => {
+              const fullPath = [...pathArray.slice(0, pathLength), ...path5];
               return censor(value, fullPath);
             } : censor;
             redactWildcardPath(current, afterWildcard, wrappedCensor, originalPath, remove);
@@ -77587,8 +77590,8 @@ var require_redact = __commonJS({
         return null;
       }
       const pathStructure = /* @__PURE__ */ new Map();
-      for (const path4 of pathsToClone) {
-        const parts = parsePath2(path4);
+      for (const path5 of pathsToClone) {
+        const parts = parsePath2(path5);
         let current = pathStructure;
         for (let i = 0; i < parts.length; i++) {
           const part = parts[i];
@@ -77640,24 +77643,24 @@ var require_redact = __commonJS({
       }
       return cloneSelectively(obj, pathStructure);
     }
-    function validatePath2(path4) {
-      if (typeof path4 !== "string") {
+    function validatePath2(path5) {
+      if (typeof path5 !== "string") {
         throw new Error("Paths must be (non-empty) strings");
       }
-      if (path4 === "") {
+      if (path5 === "") {
         throw new Error("Invalid redaction path ()");
       }
-      if (path4.includes("..")) {
-        throw new Error(`Invalid redaction path (${path4})`);
+      if (path5.includes("..")) {
+        throw new Error(`Invalid redaction path (${path5})`);
       }
-      if (path4.includes(",")) {
-        throw new Error(`Invalid redaction path (${path4})`);
+      if (path5.includes(",")) {
+        throw new Error(`Invalid redaction path (${path5})`);
       }
       let bracketCount = 0;
       let inQuotes = false;
       let quoteChar = "";
-      for (let i = 0; i < path4.length; i++) {
-        const char2 = path4[i];
+      for (let i = 0; i < path5.length; i++) {
+        const char2 = path5[i];
         if ((char2 === '"' || char2 === "'") && bracketCount > 0) {
           if (!inQuotes) {
             inQuotes = true;
@@ -77671,20 +77674,20 @@ var require_redact = __commonJS({
         } else if (char2 === "]" && !inQuotes) {
           bracketCount--;
           if (bracketCount < 0) {
-            throw new Error(`Invalid redaction path (${path4})`);
+            throw new Error(`Invalid redaction path (${path5})`);
           }
         }
       }
       if (bracketCount !== 0) {
-        throw new Error(`Invalid redaction path (${path4})`);
+        throw new Error(`Invalid redaction path (${path5})`);
       }
     }
     function validatePaths(paths) {
       if (!Array.isArray(paths)) {
         throw new TypeError("paths must be an array");
       }
-      for (const path4 of paths) {
-        validatePath2(path4);
+      for (const path5 of paths) {
+        validatePath2(path5);
       }
     }
     function slowRedact(options = {}) {
@@ -77852,8 +77855,8 @@ var require_redaction = __commonJS({
         if (shape[k] === null) {
           o[k] = (value) => topCensor(value, [k]);
         } else {
-          const wrappedCensor = typeof censor === "function" ? (value, path4) => {
-            return censor(value, [k, ...path4]);
+          const wrappedCensor = typeof censor === "function" ? (value, path5) => {
+            return censor(value, [k, ...path5]);
           } : censor;
           o[k] = Redact({
             paths: shape[k],
@@ -78071,10 +78074,10 @@ var require_atomic_sleep = __commonJS({
 var require_sonic_boom = __commonJS({
   "node_modules/sonic-boom/index.js"(exports, module) {
     "use strict";
-    var fs4 = __require("fs");
+    var fs5 = __require("fs");
     var EventEmitter = __require("events");
     var inherits = __require("util").inherits;
-    var path4 = __require("path");
+    var path5 = __require("path");
     var sleep2 = require_atomic_sleep();
     var assert2 = __require("assert");
     var BUSY_WRITE_TIMEOUT = 100;
@@ -78128,20 +78131,20 @@ var require_sonic_boom = __commonJS({
       const mode = sonic.mode;
       if (sonic.sync) {
         try {
-          if (sonic.mkdir) fs4.mkdirSync(path4.dirname(file2), { recursive: true });
-          const fd = fs4.openSync(file2, flags, mode);
+          if (sonic.mkdir) fs5.mkdirSync(path5.dirname(file2), { recursive: true });
+          const fd = fs5.openSync(file2, flags, mode);
           fileOpened(null, fd);
         } catch (err) {
           fileOpened(err);
           throw err;
         }
       } else if (sonic.mkdir) {
-        fs4.mkdir(path4.dirname(file2), { recursive: true }, (err) => {
+        fs5.mkdir(path5.dirname(file2), { recursive: true }, (err) => {
           if (err) return fileOpened(err);
-          fs4.open(file2, flags, mode, fileOpened);
+          fs5.open(file2, flags, mode, fileOpened);
         });
       } else {
-        fs4.open(file2, flags, mode, fileOpened);
+        fs5.open(file2, flags, mode, fileOpened);
       }
     }
     function SonicBoom(opts) {
@@ -78182,8 +78185,8 @@ var require_sonic_boom = __commonJS({
         this.flush = flushBuffer;
         this.flushSync = flushBufferSync;
         this._actualWrite = actualWriteBuffer;
-        fsWriteSync = () => fs4.writeSync(this.fd, this._writingBuf);
-        fsWrite = () => fs4.write(this.fd, this._writingBuf, this.release);
+        fsWriteSync = () => fs5.writeSync(this.fd, this._writingBuf);
+        fsWrite = () => fs5.write(this.fd, this._writingBuf, this.release);
       } else if (contentMode === void 0 || contentMode === kContentModeUtf8) {
         this._writingBuf = "";
         this.write = write;
@@ -78192,15 +78195,15 @@ var require_sonic_boom = __commonJS({
         this._actualWrite = actualWrite;
         fsWriteSync = () => {
           if (Buffer.isBuffer(this._writingBuf)) {
-            return fs4.writeSync(this.fd, this._writingBuf);
+            return fs5.writeSync(this.fd, this._writingBuf);
           }
-          return fs4.writeSync(this.fd, this._writingBuf, "utf8");
+          return fs5.writeSync(this.fd, this._writingBuf, "utf8");
         };
         fsWrite = () => {
           if (Buffer.isBuffer(this._writingBuf)) {
-            return fs4.write(this.fd, this._writingBuf, this.release);
+            return fs5.write(this.fd, this._writingBuf, this.release);
           }
-          return fs4.write(this.fd, this._writingBuf, "utf8", this.release);
+          return fs5.write(this.fd, this._writingBuf, "utf8", this.release);
         };
       } else {
         throw new Error(`SonicBoom supports "${kContentModeUtf8}" and "${kContentModeBuffer}", but passed ${contentMode}`);
@@ -78257,7 +78260,7 @@ var require_sonic_boom = __commonJS({
           }
         }
         if (this._fsync) {
-          fs4.fsyncSync(this.fd);
+          fs5.fsyncSync(this.fd);
         }
         const len = this._len;
         if (this._reopening) {
@@ -78371,7 +78374,7 @@ var require_sonic_boom = __commonJS({
       const onDrain = () => {
         if (!this._fsync) {
           try {
-            fs4.fsync(this.fd, (err) => {
+            fs5.fsync(this.fd, (err) => {
               this._flushPending = false;
               cb(err);
             });
@@ -78473,7 +78476,7 @@ var require_sonic_boom = __commonJS({
       const fd = this.fd;
       this.once("ready", () => {
         if (fd !== this.fd) {
-          fs4.close(fd, (err) => {
+          fs5.close(fd, (err) => {
             if (err) {
               return this.emit("error", err);
             }
@@ -78522,7 +78525,7 @@ var require_sonic_boom = __commonJS({
           buf = this._bufs[0];
         }
         try {
-          const n = Buffer.isBuffer(buf) ? fs4.writeSync(this.fd, buf) : fs4.writeSync(this.fd, buf, "utf8");
+          const n = Buffer.isBuffer(buf) ? fs5.writeSync(this.fd, buf) : fs5.writeSync(this.fd, buf, "utf8");
           const releasedBufObj = releaseWritingBuf(buf, this._len, n);
           buf = releasedBufObj.writingBuf;
           this._len = releasedBufObj.len;
@@ -78538,7 +78541,7 @@ var require_sonic_boom = __commonJS({
         }
       }
       try {
-        fs4.fsyncSync(this.fd);
+        fs5.fsyncSync(this.fd);
       } catch {
       }
     }
@@ -78559,7 +78562,7 @@ var require_sonic_boom = __commonJS({
           buf = mergeBuf(this._bufs[0], this._lens[0]);
         }
         try {
-          const n = fs4.writeSync(this.fd, buf);
+          const n = fs5.writeSync(this.fd, buf);
           buf = buf.subarray(n);
           this._len = Math.max(this._len - n, 0);
           if (buf.length <= 0) {
@@ -78587,13 +78590,13 @@ var require_sonic_boom = __commonJS({
       this._writingBuf = this._writingBuf.length ? this._writingBuf : this._bufs.shift() || "";
       if (this.sync) {
         try {
-          const written = Buffer.isBuffer(this._writingBuf) ? fs4.writeSync(this.fd, this._writingBuf) : fs4.writeSync(this.fd, this._writingBuf, "utf8");
+          const written = Buffer.isBuffer(this._writingBuf) ? fs5.writeSync(this.fd, this._writingBuf) : fs5.writeSync(this.fd, this._writingBuf, "utf8");
           release(null, written);
         } catch (err) {
           release(err);
         }
       } else {
-        fs4.write(this.fd, this._writingBuf, release);
+        fs5.write(this.fd, this._writingBuf, release);
       }
     }
     function actualWriteBuffer() {
@@ -78602,7 +78605,7 @@ var require_sonic_boom = __commonJS({
       this._writingBuf = this._writingBuf.length ? this._writingBuf : mergeBuf(this._bufs.shift(), this._lens.shift());
       if (this.sync) {
         try {
-          const written = fs4.writeSync(this.fd, this._writingBuf);
+          const written = fs5.writeSync(this.fd, this._writingBuf);
           release(null, written);
         } catch (err) {
           release(err);
@@ -78611,7 +78614,7 @@ var require_sonic_boom = __commonJS({
         if (kCopyBuffer) {
           this._writingBuf = Buffer.from(this._writingBuf);
         }
-        fs4.write(this.fd, this._writingBuf, release);
+        fs5.write(this.fd, this._writingBuf, release);
       }
     }
     function actualClose(sonic) {
@@ -78627,12 +78630,12 @@ var require_sonic_boom = __commonJS({
       sonic._lens = [];
       assert2(typeof sonic.fd === "number", `sonic.fd must be a number, got ${typeof sonic.fd}`);
       try {
-        fs4.fsync(sonic.fd, closeWrapped);
+        fs5.fsync(sonic.fd, closeWrapped);
       } catch {
       }
       function closeWrapped() {
         if (sonic.fd !== 1 && sonic.fd !== 2) {
-          fs4.close(sonic.fd, done);
+          fs5.close(sonic.fd, done);
         } else {
           done();
         }
@@ -79468,15 +79471,15 @@ var require_transport = __commonJS({
       if (!unquoted) {
         return false;
       }
-      let path4 = unquoted;
-      if (path4.startsWith("file://")) {
+      let path5 = unquoted;
+      if (path5.startsWith("file://")) {
         try {
-          path4 = fileURLToPath(path4);
+          path5 = fileURLToPath(path5);
         } catch {
           return false;
         }
       }
-      return isAbsolute(path4) && !existsSync3(path4);
+      return isAbsolute(path5) && !existsSync3(path5);
     }
     function stripQuotes(value) {
       const first = value[0];
@@ -116822,15 +116825,15 @@ var require_tools2 = __commonJS({
        * @param {String} path - Mailbox path to encode
        * @returns {String} Encoded mailbox path
        */
-      encodePath(connection, path4) {
-        path4 = (path4 || "").toString();
-        if (!connection.enabled.has("UTF8=ACCEPT") && /[&\x00-\x08\x0b-\x0c\x0e-\x1f\u0080-\uffff]/.test(path4)) {
+      encodePath(connection, path5) {
+        path5 = (path5 || "").toString();
+        if (!connection.enabled.has("UTF8=ACCEPT") && /[&\x00-\x08\x0b-\x0c\x0e-\x1f\u0080-\uffff]/.test(path5)) {
           try {
-            path4 = iconv.encode(path4, "utf-7-imap").toString();
+            path5 = iconv.encode(path5, "utf-7-imap").toString();
           } catch {
           }
         }
-        return path4;
+        return path5;
       },
       /**
        * Decodes a mailbox path from modified UTF-7 if the server does not support UTF8=ACCEPT.
@@ -116839,15 +116842,15 @@ var require_tools2 = __commonJS({
        * @param {String} path - Mailbox path to decode
        * @returns {String} Decoded mailbox path
        */
-      decodePath(connection, path4) {
-        path4 = (path4 || "").toString();
-        if (!connection.enabled.has("UTF8=ACCEPT") && /[&]/.test(path4)) {
+      decodePath(connection, path5) {
+        path5 = (path5 || "").toString();
+        if (!connection.enabled.has("UTF8=ACCEPT") && /[&]/.test(path5)) {
           try {
-            path4 = iconv.decode(Buffer.from(path4), "utf-7-imap").toString();
+            path5 = iconv.decode(Buffer.from(path5), "utf-7-imap").toString();
           } catch {
           }
         }
-        return path4;
+        return path5;
       },
       /**
        * Normalizes a mailbox path by joining array segments with the namespace delimiter,
@@ -116858,17 +116861,17 @@ var require_tools2 = __commonJS({
        * @param {Boolean} [skipNamespace] - If true, skips prepending the namespace prefix
        * @returns {String} Normalized mailbox path
        */
-      normalizePath(connection, path4, skipNamespace) {
-        if (Array.isArray(path4)) {
-          path4 = path4.join(connection.namespace && connection.namespace.delimiter || "");
+      normalizePath(connection, path5, skipNamespace) {
+        if (Array.isArray(path5)) {
+          path5 = path5.join(connection.namespace && connection.namespace.delimiter || "");
         }
-        if (path4.toUpperCase() === "INBOX") {
+        if (path5.toUpperCase() === "INBOX") {
           return "INBOX";
         }
-        if (!skipNamespace && connection.namespace && connection.namespace.prefix && !path4.startsWith(connection.namespace.prefix)) {
-          path4 = connection.namespace.prefix + path4;
+        if (!skipNamespace && connection.namespace && connection.namespace.prefix && !path5.startsWith(connection.namespace.prefix)) {
+          path5 = connection.namespace.prefix + path5;
         }
-        return path4;
+        return path5;
       },
       /**
        * Compares two mailbox paths for equality after normalization.
@@ -117185,14 +117188,14 @@ var require_tools2 = __commonJS({
           }
         }
         if (map2.emailId || map2.uid) {
-          let path4 = mailbox.path;
-          if (/[\u0080-\uffff]/.test(path4)) {
+          let path5 = mailbox.path;
+          if (/[\u0080-\uffff]/.test(path5)) {
             try {
-              path4 = iconv.encode(path4, "utf-7-imap").toString();
+              path5 = iconv.encode(path5, "utf-7-imap").toString();
             } catch {
             }
           }
-          map2.id = map2.emailId || createHash("md5").update([path4, mailbox.uidValidity?.toString() || "", map2.uid.toString()].join(":")).digest("hex");
+          map2.id = map2.emailId || createHash("md5").update([path5, mailbox.uidValidity?.toString() || "", map2.uid.toString()].join(":")).digest("hex");
         }
         if (map2.flags) {
           let flagColor = tools.getFlagColor(map2.flags);
@@ -117358,16 +117361,16 @@ var require_tools2 = __commonJS({
        * @returns {Object} Parsed body structure tree with part numbers, types, parameters, and child nodes
        */
       parseBodystructure(entry) {
-        let walk = (node, path4) => {
-          path4 = path4 || [];
+        let walk = (node, path5) => {
+          path5 = path5 || [];
           let curNode = {}, i = 0, part = 0;
-          if (path4.length) {
-            curNode.part = path4.join(".");
+          if (path5.length) {
+            curNode.part = path5.join(".");
           }
           if (Array.isArray(node[0])) {
             curNode.childNodes = [];
             while (Array.isArray(node[i])) {
-              curNode.childNodes.push(walk(node[i], path4.concat(++part)));
+              curNode.childNodes.push(walk(node[i], path5.concat(++part)));
               i++;
             }
             curNode.type = "multipart/" + ((node[i++] || {}).value || "").toString().toLowerCase();
@@ -117410,7 +117413,7 @@ var require_tools2 = __commonJS({
                   // the encapsulated message shares the part number with its wrapper.
                   // Distinction is via suffixes: path.MIME = wrapper headers,
                   // path.HEADER = encapsulated message headers.
-                  walk(node[i], path4)
+                  walk(node[i], path5)
                 ];
               }
               i++;
@@ -118510,14 +118513,14 @@ var require_select = __commonJS({
   "node_modules/imapflow/lib/commands/select.js"(exports, module) {
     "use strict";
     var { encodePath, normalizePath, enhanceCommandError } = require_tools2();
-    module.exports = async (connection, path4, options) => {
+    module.exports = async (connection, path5, options) => {
       if (![connection.states.AUTHENTICATED, connection.states.SELECTED].includes(connection.state)) {
         return;
       }
       options = options || {};
-      path4 = normalizePath(connection, path4);
-      if (!connection.folders.has(path4)) {
-        let folders = await connection.run("LIST", "", path4);
+      path5 = normalizePath(connection, path5);
+      if (!connection.folders.has(path5)) {
+        let folders = await connection.run("LIST", "", path5);
         if (!folders) {
           throw new Error("Failed to fetch folders");
         }
@@ -118525,10 +118528,10 @@ var require_select = __commonJS({
           connection.folders.set(folder.path, folder);
         });
       }
-      let folderListData = connection.folders.has(path4) ? connection.folders.get(path4) : false;
+      let folderListData = connection.folders.has(path5) ? connection.folders.get(path5) : false;
       let response;
       try {
-        let map2 = { path: path4 };
+        let map2 = { path: path5 };
         if (folderListData) {
           ["delimiter", "specialUse", "subscribed", "listed"].forEach((key) => {
             if (folderListData[key]) {
@@ -118547,7 +118550,7 @@ var require_select = __commonJS({
           ]);
           map2.qresync = true;
         }
-        let encodedPath = encodePath(connection, path4);
+        let encodedPath = encodePath(connection, path5);
         let selectCommand = {
           command: !options.readOnly ? "SELECT" : "EXAMINE",
           /* c8 ignore next */
@@ -118652,12 +118655,12 @@ var require_select = __commonJS({
             // since the client's last known state. Only received when QRESYNC was requested.
             // A dummy mailbox object is passed because the mailbox isn't officially open yet.
             VANISHED: async (untagged) => {
-              await connection.untaggedVanished(untagged, { path: path4, uidNext: false, uidValidity: false });
+              await connection.untaggedVanished(untagged, { path: path5, uidNext: false, uidValidity: false });
             },
             // Untagged FETCH during SELECT/EXAMINE: only occurs with QRESYNC, delivering
             // updated flags for messages that changed since the client's last modseq.
             FETCH: async (untagged) => {
-              await connection.untaggedFetch(untagged, { path: path4, uidNext: false, uidValidity: false });
+              await connection.untaggedFetch(untagged, { path: path5, uidNext: false, uidValidity: false });
             }
           }
         });
@@ -118670,13 +118673,13 @@ var require_select = __commonJS({
         }
         let currentMailbox = connection.mailbox;
         connection.mailbox = false;
-        if (currentMailbox && currentMailbox.path !== path4) {
+        if (currentMailbox && currentMailbox.path !== path5) {
           connection.emit("mailboxClose", currentMailbox);
         }
         connection.mailbox = map2;
         connection.currentSelectCommand = selectCommand;
         connection.state = connection.states.SELECTED;
-        if (!currentMailbox || currentMailbox.path !== path4) {
+        if (!currentMailbox || currentMailbox.path !== path5) {
           connection.emit("mailboxOpen", connection.mailbox);
         }
         response.next();
@@ -118892,17 +118895,17 @@ var require_create = __commonJS({
   "node_modules/imapflow/lib/commands/create.js"(exports, module) {
     "use strict";
     var { encodePath, normalizePath, getStatusCode, enhanceCommandError } = require_tools2();
-    module.exports = async (connection, path4) => {
+    module.exports = async (connection, path5) => {
       if (![connection.states.AUTHENTICATED, connection.states.SELECTED].includes(connection.state)) {
         return;
       }
-      path4 = normalizePath(connection, path4);
+      path5 = normalizePath(connection, path5);
       let response;
       try {
         let map2 = {
-          path: path4
+          path: path5
         };
-        response = await connection.exec("CREATE", [{ type: "ATOM", value: encodePath(connection, path4) }]);
+        response = await connection.exec("CREATE", [{ type: "ATOM", value: encodePath(connection, path5) }]);
         let section = response.response.attributes && response.response.attributes[0] && response.response.attributes[0].section && response.response.attributes[0].section.length ? response.response.attributes[0].section : false;
         if (section) {
           let key;
@@ -118928,13 +118931,13 @@ var require_create = __commonJS({
         }
         map2.created = true;
         response.next();
-        await connection.run("SUBSCRIBE", path4);
+        await connection.run("SUBSCRIBE", path5);
         return map2;
       } catch (err) {
         let errorCode = getStatusCode(err.response);
         if (errorCode === "ALREADYEXISTS") {
           return {
-            path: path4,
+            path: path5,
             created: false
           };
         }
@@ -118951,20 +118954,20 @@ var require_delete = __commonJS({
   "node_modules/imapflow/lib/commands/delete.js"(exports, module) {
     "use strict";
     var { encodePath, normalizePath, enhanceCommandError } = require_tools2();
-    module.exports = async (connection, path4) => {
+    module.exports = async (connection, path5) => {
       if (![connection.states.AUTHENTICATED, connection.states.SELECTED].includes(connection.state)) {
         return;
       }
-      path4 = normalizePath(connection, path4);
-      if (connection.state === connection.states.SELECTED && connection.mailbox.path === path4) {
+      path5 = normalizePath(connection, path5);
+      if (connection.state === connection.states.SELECTED && connection.mailbox.path === path5) {
         await connection.run("CLOSE");
       }
       let response;
       try {
         let map2 = {
-          path: path4
+          path: path5
         };
-        response = await connection.exec("DELETE", [{ type: "ATOM", value: encodePath(connection, path4) }]);
+        response = await connection.exec("DELETE", [{ type: "ATOM", value: encodePath(connection, path5) }]);
         response.next();
         return map2;
       } catch (err) {
@@ -118981,23 +118984,23 @@ var require_rename = __commonJS({
   "node_modules/imapflow/lib/commands/rename.js"(exports, module) {
     "use strict";
     var { encodePath, normalizePath, enhanceCommandError } = require_tools2();
-    module.exports = async (connection, path4, newPath) => {
+    module.exports = async (connection, path5, newPath) => {
       if (![connection.states.AUTHENTICATED, connection.states.SELECTED].includes(connection.state)) {
         return;
       }
-      path4 = normalizePath(connection, path4);
+      path5 = normalizePath(connection, path5);
       newPath = normalizePath(connection, newPath);
-      if (connection.state === connection.states.SELECTED && connection.mailbox.path === path4) {
+      if (connection.state === connection.states.SELECTED && connection.mailbox.path === path5) {
         await connection.run("CLOSE");
       }
       let response;
       try {
         let map2 = {
-          path: path4,
+          path: path5,
           newPath
         };
         response = await connection.exec("RENAME", [
-          { type: "ATOM", value: encodePath(connection, path4) },
+          { type: "ATOM", value: encodePath(connection, path5) },
           { type: "ATOM", value: encodePath(connection, newPath) }
         ]);
         response.next();
@@ -119044,14 +119047,14 @@ var require_subscribe = __commonJS({
   "node_modules/imapflow/lib/commands/subscribe.js"(exports, module) {
     "use strict";
     var { encodePath, normalizePath, enhanceCommandError } = require_tools2();
-    module.exports = async (connection, path4) => {
+    module.exports = async (connection, path5) => {
       if (![connection.states.AUTHENTICATED, connection.states.SELECTED].includes(connection.state)) {
         return;
       }
-      path4 = normalizePath(connection, path4);
+      path5 = normalizePath(connection, path5);
       let response;
       try {
-        response = await connection.exec("SUBSCRIBE", [{ type: "ATOM", value: encodePath(connection, path4) }]);
+        response = await connection.exec("SUBSCRIBE", [{ type: "ATOM", value: encodePath(connection, path5) }]);
         response.next();
         return true;
       } catch (err) {
@@ -119068,14 +119071,14 @@ var require_unsubscribe = __commonJS({
   "node_modules/imapflow/lib/commands/unsubscribe.js"(exports, module) {
     "use strict";
     var { encodePath, normalizePath, enhanceCommandError } = require_tools2();
-    module.exports = async (connection, path4) => {
+    module.exports = async (connection, path5) => {
       if (![connection.states.AUTHENTICATED, connection.states.SELECTED].includes(connection.state)) {
         return;
       }
-      path4 = normalizePath(connection, path4);
+      path5 = normalizePath(connection, path5);
       let response;
       try {
-        response = await connection.exec("UNSUBSCRIBE", [{ type: "ATOM", value: encodePath(connection, path4) }]);
+        response = await connection.exec("UNSUBSCRIBE", [{ type: "ATOM", value: encodePath(connection, path5) }]);
         response.next();
         return true;
       } catch (err) {
@@ -119767,12 +119770,12 @@ var require_status = __commonJS({
   "node_modules/imapflow/lib/commands/status.js"(exports, module) {
     "use strict";
     var { encodePath, normalizePath } = require_tools2();
-    module.exports = async (connection, path4, query) => {
-      if (![connection.states.AUTHENTICATED, connection.states.SELECTED].includes(connection.state) || !path4) {
+    module.exports = async (connection, path5, query) => {
+      if (![connection.states.AUTHENTICATED, connection.states.SELECTED].includes(connection.state) || !path5) {
         return false;
       }
-      path4 = normalizePath(connection, path4);
-      let encodedPath = encodePath(connection, path4);
+      path5 = normalizePath(connection, path5);
+      let encodedPath = encodePath(connection, path5);
       let attributes = [{ type: encodedPath.indexOf("&") >= 0 ? "STRING" : "ATOM", value: encodedPath }];
       let queryAttributes = [];
       Object.keys(query || {}).forEach((key) => {
@@ -119800,13 +119803,13 @@ var require_status = __commonJS({
       attributes.push(queryAttributes);
       let response;
       try {
-        let map2 = { path: path4 };
+        let map2 = { path: path5 };
         response = await connection.exec("STATUS", attributes, {
           untagged: {
             // STATUS response: * STATUS <mailbox> (<key> <value> <key> <value> ...)
             // Parsed as alternating key-value pairs (i % 2 pattern).
             STATUS: async (untagged) => {
-              let updateCurrent = connection.state === connection.states.SELECTED && path4 === connection.mailbox.path;
+              let updateCurrent = connection.state === connection.states.SELECTED && path5 === connection.mailbox.path;
               let list = untagged.attributes && Array.isArray(untagged.attributes[1]) ? untagged.attributes[1] : false;
               if (!list) {
                 return;
@@ -119819,7 +119822,7 @@ var require_status = __commonJS({
                     let prevCount = conn.mailbox.exists;
                     if (prevCount !== val) {
                       conn.mailbox.exists = val;
-                      conn.emit("exists", { path: path4, count: val, prevCount });
+                      conn.emit("exists", { path: path5, count: val, prevCount });
                     }
                   }
                 },
@@ -119870,9 +119873,9 @@ var require_status = __commonJS({
         return map2;
       } catch (err) {
         if (err.responseStatus === "NO") {
-          let folders = await connection.run("LIST", "", path4, { listOnly: true });
+          let folders = await connection.run("LIST", "", path5, { listOnly: true });
           if (folders && !folders.length) {
-            let error48 = new Error(`Mailbox doesn't exist: ${path4}`);
+            let error48 = new Error(`Mailbox doesn't exist: ${path5}`);
             error48.code = "NotFound";
             error48.response = err;
             throw error48;
@@ -120011,15 +120014,15 @@ var require_quota = __commonJS({
   "node_modules/imapflow/lib/commands/quota.js"(exports, module) {
     "use strict";
     var { encodePath, normalizePath, enhanceCommandError } = require_tools2();
-    module.exports = async (connection, path4) => {
-      if (![connection.states.AUTHENTICATED, connection.states.SELECTED].includes(connection.state) || !path4) {
+    module.exports = async (connection, path5) => {
+      if (![connection.states.AUTHENTICATED, connection.states.SELECTED].includes(connection.state) || !path5) {
         return;
       }
       if (!connection.capabilities.has("QUOTA")) {
         return false;
       }
-      path4 = normalizePath(connection, path4);
-      let map2 = { path: path4 };
+      path5 = normalizePath(connection, path5);
+      let map2 = { path: path5 };
       let processQuotaResponse = (untagged) => {
         let attributes = untagged.attributes && untagged.attributes[1];
         if (!attributes || !attributes.length) {
@@ -120056,7 +120059,7 @@ var require_quota = __commonJS({
       let quotaFound = false;
       let response;
       try {
-        response = await connection.exec("GETQUOTAROOT", [{ type: "ATOM", value: encodePath(connection, path4) }], {
+        response = await connection.exec("GETQUOTAROOT", [{ type: "ATOM", value: encodePath(connection, path5) }], {
           untagged: {
             // QUOTAROOT response tells us which quota root applies to this mailbox.
             // A mailbox may have zero or one quota root.
@@ -120450,7 +120453,7 @@ var require_imap_flow = __commonJS({
     "use strict";
     var tls = __require("tls");
     var net2 = __require("net");
-    var crypto5 = __require("crypto");
+    var crypto6 = __require("crypto");
     var { EventEmitter } = __require("events");
     var logger = require_logger();
     var libmime = require_libmime();
@@ -120721,7 +120724,7 @@ var require_imap_flow = __commonJS({
         this.emit("error", err);
       }
       getRandomId() {
-        let rid = BigInt("0x" + crypto5.randomBytes(13).toString("hex")).toString(36);
+        let rid = BigInt("0x" + crypto6.randomBytes(13).toString("hex")).toString(36);
         if (rid.length < 20) {
           rid = "0".repeat(20 - rid.length) + rid;
         }
@@ -121595,12 +121598,12 @@ var require_imap_flow = __commonJS({
           this.emit("flags", updateEvent);
         }
       }
-      async ensureSelectedMailbox(path4) {
-        if (!path4) {
+      async ensureSelectedMailbox(path5) {
+        if (!path5) {
           return false;
         }
-        if (!this.mailbox || !comparePaths(this, this.mailbox.path, path4)) {
-          return await this.mailboxOpen(path4);
+        if (!this.mailbox || !comparePaths(this, this.mailbox.path, path5)) {
+          return await this.mailboxOpen(path5);
         }
         return true;
       }
@@ -121994,9 +121997,9 @@ var require_imap_flow = __commonJS({
        * let quota = await client.getQuota();
        * console.log(quota.storage.used, quota.storage.limit)
        */
-      async getQuota(path4) {
-        path4 = path4 || "INBOX";
-        return await this.run("QUOTA", path4);
+      async getQuota(path5) {
+        path5 = path5 || "INBOX";
+        return await this.run("QUOTA", path5);
       }
       /**
        * @typedef {Object} ListResponse
@@ -122101,8 +122104,8 @@ var require_imap_flow = __commonJS({
        * console.log(info.path);
        * // "INBOX.parent.child" // assumes "INBOX." as namespace prefix and "." as delimiter
        */
-      async mailboxCreate(path4) {
-        return await this.run("CREATE", path4);
+      async mailboxCreate(path5) {
+        return await this.run("CREATE", path5);
       }
       /**
        * @typedef {Object} MailboxRenameResponse
@@ -122123,8 +122126,8 @@ var require_imap_flow = __commonJS({
        * console.log(info.newPath);
        * // "INBOX.Important stuff ❗️" // assumes "INBOX." as namespace prefix
        */
-      async mailboxRename(path4, newPath) {
-        return await this.run("RENAME", path4, newPath);
+      async mailboxRename(path5, newPath) {
+        return await this.run("RENAME", path5, newPath);
       }
       /**
        * @typedef {Object} MailboxDeleteResponse
@@ -122143,8 +122146,8 @@ var require_imap_flow = __commonJS({
        * console.log(info.path);
        * // "INBOX.Important stuff ❗️" // assumes "INBOX." as namespace prefix
        */
-      async mailboxDelete(path4) {
-        return await this.run("DELETE", path4);
+      async mailboxDelete(path5) {
+        return await this.run("DELETE", path5);
       }
       /**
        * Subscribes to a mailbox
@@ -122155,8 +122158,8 @@ var require_imap_flow = __commonJS({
        * @example
        * await client.mailboxSubscribe('Important stuff ❗️');
        */
-      async mailboxSubscribe(path4) {
-        return await this.run("SUBSCRIBE", path4);
+      async mailboxSubscribe(path5) {
+        return await this.run("SUBSCRIBE", path5);
       }
       /**
        * Unsubscribes from a mailbox
@@ -122167,8 +122170,8 @@ var require_imap_flow = __commonJS({
        * @example
        * await client.mailboxUnsubscribe('Important stuff ❗️');
        */
-      async mailboxUnsubscribe(path4) {
-        return await this.run("UNSUBSCRIBE", path4);
+      async mailboxUnsubscribe(path5) {
+        return await this.run("UNSUBSCRIBE", path5);
       }
       /**
        * Opens a mailbox to access messages. You can perform message operations only against an opened mailbox.
@@ -122186,8 +122189,8 @@ var require_imap_flow = __commonJS({
        * console.log(mailbox.exists);
        * // 125
        */
-      async mailboxOpen(path4, options) {
-        return await this.run("SELECT", path4, options);
+      async mailboxOpen(path5, options) {
+        return await this.run("SELECT", path5, options);
       }
       /**
        * Closes a previously opened mailbox
@@ -122230,8 +122233,8 @@ var require_imap_flow = __commonJS({
        * console.log(status.unseen);
        * // 123
        */
-      async status(path4, query) {
-        return await this.run("STATUS", path4, query);
+      async status(path5, query) {
+        return await this.run("STATUS", path5, query);
       }
       /**
        * Starts listening for new or deleted messages from the currently opened mailbox. Only required if {@link ImapFlow#disableAutoIdle} is set to `true`
@@ -122485,8 +122488,8 @@ var require_imap_flow = __commonJS({
        * @example
        * await client.append('INBOX', rawMessageBuffer, ['\\Seen'], new Date(2000, 1, 1));
        */
-      async append(path4, content, flags, idate) {
-        return await this.run("APPEND", path4, content, flags, idate) || false;
+      async append(path5, content, flags, idate) {
+        return await this.run("APPEND", path5, content, flags, idate) || false;
       }
       /**
        * @typedef {Object} CopyResponseObject
@@ -123304,7 +123307,7 @@ var require_imap_flow = __commonJS({
               await new Promise((resolve3) => setImmediate(resolve3));
             }
             const lock = this.locks.shift();
-            const { resolve: resolve2, reject, path: path4, options, lockId } = lock;
+            const { resolve: resolve2, reject, path: path5, options, lockId } = lock;
             if (lock.acquireTimer) {
               clearTimeout(lock.acquireTimer);
               lock.acquireTimer = null;
@@ -123320,7 +123323,7 @@ var require_imap_flow = __commonJS({
                 this.log.warn({
                   msg: "Mailbox lock held for a long time",
                   lockId: lock.lockId,
-                  path: path4,
+                  path: path5,
                   heldFor: Date.now() - lock.heldAt,
                   /* c8 ignore next */
                   // the held-lock-warning diagnostic with a description set is a timing-dependent log detail
@@ -123355,52 +123358,52 @@ var require_imap_flow = __commonJS({
               }
             };
             if (!this.usable || !this.socket || this.socket.destroyed) {
-              this.log.trace({ msg: "Failed to acquire mailbox lock", path: path4, lockId, idling: this.idling });
+              this.log.trace({ msg: "Failed to acquire mailbox lock", path: path5, lockId, idling: this.idling });
               let error48 = new Error("Connection not available");
               error48.code = "NoConnection";
               reject(error48);
               continue;
             }
-            if (this.mailbox && this.mailbox.path === path4 && !!this.mailbox.readOnly === !!options.readOnly) {
+            if (this.mailbox && this.mailbox.path === path5 && !!this.mailbox.readOnly === !!options.readOnly) {
               this.log.trace({
                 msg: "Mailbox lock acquired [existing]",
-                path: path4,
+                path: path5,
                 lockId,
                 idling: this.idling,
                 ...options.description && { description: options.description }
               });
               this.currentLock = lock;
               armHeldTimer();
-              resolve2({ path: path4, release });
+              resolve2({ path: path5, release });
               break;
             }
             try {
-              await this.mailboxOpen(path4, options);
+              await this.mailboxOpen(path5, options);
               this.log.trace({
                 msg: "Mailbox lock acquired [selected]",
-                path: path4,
+                path: path5,
                 lockId,
                 idling: this.idling,
                 ...options.description && { description: options.description }
               });
               this.currentLock = lock;
               armHeldTimer();
-              resolve2({ path: path4, release });
+              resolve2({ path: path5, release });
               break;
             } catch (err) {
               if (err.responseStatus === "NO") {
                 try {
-                  let folders = await this.run("LIST", "", path4, { listOnly: true });
+                  let folders = await this.run("LIST", "", path5, { listOnly: true });
                   if (!folders || !folders.length) {
                     err.mailboxMissing = true;
                   }
                 } catch (E) {
-                  this.log.trace({ msg: "Failed to verify failed mailbox", path: path4, err: E });
+                  this.log.trace({ msg: "Failed to verify failed mailbox", path: path5, err: E });
                 }
               }
               this.log.trace({
                 msg: "Failed to acquire mailbox lock",
-                path: path4,
+                path: path5,
                 lockId,
                 idling: this.idling,
                 ...options.description && { description: options.description },
@@ -123439,13 +123442,13 @@ var require_imap_flow = __commonJS({
        *   lock.release();
        * }
        */
-      getMailboxLock(path4, options) {
+      getMailboxLock(path5, options) {
         options = options || {};
-        path4 = normalizePath(this, path4);
+        path5 = normalizePath(this, path5);
         let lockId = ++this.lockCounter;
         this.log.trace({
           msg: "Requesting lock",
-          path: path4,
+          path: path5,
           lockId,
           ...options.description && { description: options.description },
           activeLock: this.currentLock ? {
@@ -123454,7 +123457,7 @@ var require_imap_flow = __commonJS({
           } : null
         });
         let lockPromise = new Promise((resolve2, reject) => {
-          let lockEntry = { resolve: resolve2, reject, path: path4, options, lockId };
+          let lockEntry = { resolve: resolve2, reject, path: path5, options, lockId };
           this.locks.push(lockEntry);
           if (Number(options.acquireTimeout) > 0) {
             lockEntry.acquireTimer = setTimeout(() => {
@@ -124271,10 +124274,10 @@ var createStreamBody = (stream) => {
   });
   return body;
 };
-var getStats = (path4) => {
+var getStats = (path5) => {
   let stats;
   try {
-    stats = statSync(path4);
+    stats = statSync(path5);
   } catch {
   }
   return stats;
@@ -124317,21 +124320,21 @@ var serveStatic = (options = { root: "" }) => {
         return next();
       }
     }
-    let path4 = join(
+    let path5 = join(
       root,
       !optionPath && options.rewriteRequestPath ? options.rewriteRequestPath(filename, c) : filename
     );
-    let stats = getStats(path4);
+    let stats = getStats(path5);
     if (stats && stats.isDirectory()) {
       const indexFile = options.index ?? "index.html";
-      path4 = join(path4, indexFile);
-      stats = getStats(path4);
+      path5 = join(path5, indexFile);
+      stats = getStats(path5);
     }
     if (!stats) {
-      await options.onNotFound?.(path4, c);
+      await options.onNotFound?.(path5, c);
       return next();
     }
-    const mimeType = getMimeType(path4);
+    const mimeType = getMimeType(path5);
     c.header("Content-Type", mimeType || "application/octet-stream");
     if (options.precompressed && (!mimeType || COMPRESSIBLE_CONTENT_TYPE_REGEX.test(mimeType))) {
       const acceptEncodingSet = new Set(
@@ -124341,12 +124344,12 @@ var serveStatic = (options = { root: "" }) => {
         if (!acceptEncodingSet.has(encoding)) {
           continue;
         }
-        const precompressedStats = getStats(path4 + ENCODINGS[encoding]);
+        const precompressedStats = getStats(path5 + ENCODINGS[encoding]);
         if (precompressedStats) {
           c.header("Content-Encoding", encoding);
           c.header("Vary", "Accept-Encoding", { append: true });
           stats = precompressedStats;
-          path4 = path4 + ENCODINGS[encoding];
+          path5 = path5 + ENCODINGS[encoding];
           break;
         }
       }
@@ -124360,7 +124363,7 @@ var serveStatic = (options = { root: "" }) => {
       result = c.body(null);
     } else if (!range) {
       c.header("Content-Length", size.toString());
-      result = c.body(createStreamBody(createReadStream(path4)), 200);
+      result = c.body(createStreamBody(createReadStream(path5)), 200);
     } else {
       c.header("Accept-Ranges", "bytes");
       c.header("Date", stats.birthtime.toUTCString());
@@ -124371,12 +124374,12 @@ var serveStatic = (options = { root: "" }) => {
         end = size - 1;
       }
       const chunksize = end - start + 1;
-      const stream = createReadStream(path4, { start, end });
+      const stream = createReadStream(path5, { start, end });
       c.header("Content-Length", chunksize.toString());
       c.header("Content-Range", `bytes ${start}-${end}/${stats.size}`);
       result = c.body(createStreamBody(stream), 206);
     }
-    await options.onFound?.(path4, c);
+    await options.onFound?.(path5, c);
     return result;
   };
 };
@@ -124537,26 +124540,26 @@ var handleParsingNestedValues = (form, key, value) => {
 };
 
 // node_modules/hono/dist/utils/url.js
-var splitPath = (path4) => {
-  const paths = path4.split("/");
+var splitPath = (path5) => {
+  const paths = path5.split("/");
   if (paths[0] === "") {
     paths.shift();
   }
   return paths;
 };
 var splitRoutingPath = (routePath) => {
-  const { groups, path: path4 } = extractGroupsFromPath(routePath);
-  const paths = splitPath(path4);
+  const { groups, path: path5 } = extractGroupsFromPath(routePath);
+  const paths = splitPath(path5);
   return replaceGroupMarks(paths, groups);
 };
-var extractGroupsFromPath = (path4) => {
+var extractGroupsFromPath = (path5) => {
   const groups = [];
-  path4 = path4.replace(/\{[^}]+\}/g, (match2, index2) => {
+  path5 = path5.replace(/\{[^}]+\}/g, (match2, index2) => {
     const mark = `@${index2}`;
     groups.push([mark, match2]);
     return mark;
   });
-  return { groups, path: path4 };
+  return { groups, path: path5 };
 };
 var replaceGroupMarks = (paths, groups) => {
   for (let i = groups.length - 1; i >= 0; i--) {
@@ -124613,8 +124616,8 @@ var getPath = (request) => {
       const queryIndex = url2.indexOf("?", i);
       const hashIndex = url2.indexOf("#", i);
       const end = queryIndex === -1 ? hashIndex === -1 ? void 0 : hashIndex : hashIndex === -1 ? queryIndex : Math.min(queryIndex, hashIndex);
-      const path4 = url2.slice(start, end);
-      return tryDecodeURI2(path4.includes("%25") ? path4.replace(/%25/g, "%2525") : path4);
+      const path5 = url2.slice(start, end);
+      return tryDecodeURI2(path5.includes("%25") ? path5.replace(/%25/g, "%2525") : path5);
     } else if (charCode === 63 || charCode === 35) {
       break;
     }
@@ -124631,11 +124634,11 @@ var mergePath = (base, sub, ...rest) => {
   }
   return `${base?.[0] === "/" ? "" : "/"}${base}${sub === "/" ? "" : `${base?.at(-1) === "/" ? "" : "/"}${sub?.[0] === "/" ? sub.slice(1) : sub}`}`;
 };
-var checkOptionalParameter = (path4) => {
-  if (path4.charCodeAt(path4.length - 1) !== 63 || !path4.includes(":")) {
+var checkOptionalParameter = (path5) => {
+  if (path5.charCodeAt(path5.length - 1) !== 63 || !path5.includes(":")) {
     return null;
   }
-  const segments = path4.split("/");
+  const segments = path5.split("/");
   const results = [];
   let basePath = "";
   segments.forEach((segment) => {
@@ -124776,9 +124779,9 @@ var HonoRequest = class {
    */
   path;
   bodyCache = {};
-  constructor(request, path4 = "/", matchResult = [[]]) {
+  constructor(request, path5 = "/", matchResult = [[]]) {
     this.raw = request;
-    this.path = path4;
+    this.path = path5;
     this.#matchResult = matchResult;
     this.#validatedData = {};
   }
@@ -125530,8 +125533,8 @@ var Hono = class _Hono {
         return this;
       };
     });
-    this.on = (method, path4, ...handlers2) => {
-      for (const p of [path4].flat()) {
+    this.on = (method, path5, ...handlers2) => {
+      for (const p of [path5].flat()) {
         this.#path = p;
         for (const m of [method].flat()) {
           handlers2.map((handler) => {
@@ -125588,8 +125591,8 @@ var Hono = class _Hono {
    * app.route("/api", app2) // GET /api/user
    * ```
    */
-  route(path4, app2) {
-    const subApp = this.basePath(path4);
+  route(path5, app2) {
+    const subApp = this.basePath(path5);
     app2.routes.map((r) => {
       let handler;
       if (app2.errorHandler === errorHandler) {
@@ -125615,9 +125618,9 @@ var Hono = class _Hono {
    * const api = new Hono().basePath('/api')
    * ```
    */
-  basePath(path4) {
+  basePath(path5) {
     const subApp = this.#clone();
-    subApp._basePath = mergePath(this._basePath, path4);
+    subApp._basePath = mergePath(this._basePath, path5);
     return subApp;
   }
   /**
@@ -125691,7 +125694,7 @@ var Hono = class _Hono {
    * })
    * ```
    */
-  mount(path4, applicationHandler, options) {
+  mount(path5, applicationHandler, options) {
     let replaceRequest;
     let optionHandler;
     if (options) {
@@ -125718,7 +125721,7 @@ var Hono = class _Hono {
       return [c.env, executionContext];
     };
     replaceRequest ||= (() => {
-      const mergedPath = mergePath(this._basePath, path4);
+      const mergedPath = mergePath(this._basePath, path5);
       const pathPrefixLength = mergedPath === "/" ? 0 : mergedPath.length;
       return (request) => {
         const url2 = new URL(request.url);
@@ -125733,19 +125736,19 @@ var Hono = class _Hono {
       }
       await next();
     };
-    this.#addRoute(METHOD_NAME_ALL, mergePath(path4, "*"), handler);
+    this.#addRoute(METHOD_NAME_ALL, mergePath(path5, "*"), handler);
     return this;
   }
-  #addRoute(method, path4, handler, baseRoutePath) {
+  #addRoute(method, path5, handler, baseRoutePath) {
     method = method.toUpperCase();
-    path4 = mergePath(this._basePath, path4);
+    path5 = mergePath(this._basePath, path5);
     const r = {
       basePath: baseRoutePath !== void 0 ? mergePath(this._basePath, baseRoutePath) : this._basePath,
-      path: path4,
+      path: path5,
       method,
       handler
     };
-    this.router.add(method, path4, [handler, r]);
+    this.router.add(method, path5, [handler, r]);
     this.routes.push(r);
   }
   #handleError(err, c) {
@@ -125758,10 +125761,10 @@ var Hono = class _Hono {
     if (method === "HEAD") {
       return (async () => new Response(null, await this.#dispatch(request, executionCtx, env2, "GET")))();
     }
-    const path4 = this.getPath(request, { env: env2 });
-    const matchResult = this.router.match(method, path4);
+    const path5 = this.getPath(request, { env: env2 });
+    const matchResult = this.router.match(method, path5);
     const c = new Context(request, {
-      path: path4,
+      path: path5,
       matchResult,
       env: env2,
       executionCtx,
@@ -125861,7 +125864,7 @@ var Hono = class _Hono {
 
 // node_modules/hono/dist/router/reg-exp-router/matcher.js
 var emptyParam = [];
-function match(method, path4) {
+function match(method, path5) {
   const matchers = this.buildAllMatchers();
   const match2 = ((method2, path22) => {
     const matcher = matchers[method2] || matchers[METHOD_NAME_ALL];
@@ -125877,7 +125880,7 @@ function match(method, path4) {
     return [matcher[1][index2], match3];
   });
   this.match = match2;
-  return match2(method, path4);
+  return match2(method, path5);
 }
 
 // node_modules/hono/dist/router/reg-exp-router/node.js
@@ -125992,12 +125995,12 @@ var Node = class _Node {
 var Trie = class {
   #context = { varIndex: 0 };
   #root = new Node();
-  insert(path4, index2, pathErrorCheckOnly) {
+  insert(path5, index2, pathErrorCheckOnly) {
     const paramAssoc = [];
     const groups = [];
     for (let i = 0; ; ) {
       let replaced = false;
-      path4 = path4.replace(/\{[^}]+\}/g, (m) => {
+      path5 = path5.replace(/\{[^}]+\}/g, (m) => {
         const mark = `@\\${i}`;
         groups[i] = [mark, m];
         i++;
@@ -126008,7 +126011,7 @@ var Trie = class {
         break;
       }
     }
-    const tokens = path4.match(/(?::[^\/]+)|(?:\/\*$)|./g) || [];
+    const tokens = path5.match(/(?::[^\/]+)|(?:\/\*$)|./g) || [];
     for (let i = groups.length - 1; i >= 0; i--) {
       const [mark] = groups[i];
       for (let j = tokens.length - 1; j >= 0; j--) {
@@ -126047,9 +126050,9 @@ var Trie = class {
 // node_modules/hono/dist/router/reg-exp-router/router.js
 var nullMatcher = [/^$/, [], /* @__PURE__ */ Object.create(null)];
 var wildcardRegExpCache = /* @__PURE__ */ Object.create(null);
-function buildWildcardRegExp(path4) {
-  return wildcardRegExpCache[path4] ??= new RegExp(
-    path4 === "*" ? "" : `^${path4.replace(
+function buildWildcardRegExp(path5) {
+  return wildcardRegExpCache[path5] ??= new RegExp(
+    path5 === "*" ? "" : `^${path5.replace(
       /\/\*$|([.\\+*[^\]$()])/g,
       (_, metaChar) => metaChar ? `\\${metaChar}` : "(?:|/.*)"
     )}$`
@@ -126071,17 +126074,17 @@ function buildMatcherFromPreprocessedRoutes(routes) {
   );
   const staticMap = /* @__PURE__ */ Object.create(null);
   for (let i = 0, j = -1, len = routesWithStaticPathFlag.length; i < len; i++) {
-    const [pathErrorCheckOnly, path4, handlers2] = routesWithStaticPathFlag[i];
+    const [pathErrorCheckOnly, path5, handlers2] = routesWithStaticPathFlag[i];
     if (pathErrorCheckOnly) {
-      staticMap[path4] = [handlers2.map(([h]) => [h, /* @__PURE__ */ Object.create(null)]), emptyParam];
+      staticMap[path5] = [handlers2.map(([h]) => [h, /* @__PURE__ */ Object.create(null)]), emptyParam];
     } else {
       j++;
     }
     let paramAssoc;
     try {
-      paramAssoc = trie.insert(path4, j, pathErrorCheckOnly);
+      paramAssoc = trie.insert(path5, j, pathErrorCheckOnly);
     } catch (e) {
-      throw e === PATH_ERROR ? new UnsupportedPathError(path4) : e;
+      throw e === PATH_ERROR ? new UnsupportedPathError(path5) : e;
     }
     if (pathErrorCheckOnly) {
       continue;
@@ -126115,12 +126118,12 @@ function buildMatcherFromPreprocessedRoutes(routes) {
   }
   return [regexp, handlerMap, staticMap];
 }
-function findMiddleware(middleware, path4) {
+function findMiddleware(middleware, path5) {
   if (!middleware) {
     return void 0;
   }
   for (const k of Object.keys(middleware).sort((a, b) => b.length - a.length)) {
-    if (buildWildcardRegExp(k).test(path4)) {
+    if (buildWildcardRegExp(k).test(path5)) {
       return [...middleware[k]];
     }
   }
@@ -126134,7 +126137,7 @@ var RegExpRouter = class {
     this.#middleware = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
     this.#routes = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
   }
-  add(method, path4, handler) {
+  add(method, path5, handler) {
     const middleware = this.#middleware;
     const routes = this.#routes;
     if (!middleware || !routes) {
@@ -126149,18 +126152,18 @@ var RegExpRouter = class {
         });
       });
     }
-    if (path4 === "/*") {
-      path4 = "*";
+    if (path5 === "/*") {
+      path5 = "*";
     }
-    const paramCount = (path4.match(/\/:/g) || []).length;
-    if (/\*$/.test(path4)) {
-      const re = buildWildcardRegExp(path4);
+    const paramCount = (path5.match(/\/:/g) || []).length;
+    if (/\*$/.test(path5)) {
+      const re = buildWildcardRegExp(path5);
       if (method === METHOD_NAME_ALL) {
         Object.keys(middleware).forEach((m) => {
-          middleware[m][path4] ||= findMiddleware(middleware[m], path4) || findMiddleware(middleware[METHOD_NAME_ALL], path4) || [];
+          middleware[m][path5] ||= findMiddleware(middleware[m], path5) || findMiddleware(middleware[METHOD_NAME_ALL], path5) || [];
         });
       } else {
-        middleware[method][path4] ||= findMiddleware(middleware[method], path4) || findMiddleware(middleware[METHOD_NAME_ALL], path4) || [];
+        middleware[method][path5] ||= findMiddleware(middleware[method], path5) || findMiddleware(middleware[METHOD_NAME_ALL], path5) || [];
       }
       Object.keys(middleware).forEach((m) => {
         if (method === METHOD_NAME_ALL || method === m) {
@@ -126178,7 +126181,7 @@ var RegExpRouter = class {
       });
       return;
     }
-    const paths = checkOptionalParameter(path4) || [path4];
+    const paths = checkOptionalParameter(path5) || [path5];
     for (let i = 0, len = paths.length; i < len; i++) {
       const path22 = paths[i];
       Object.keys(routes).forEach((m) => {
@@ -126205,13 +126208,13 @@ var RegExpRouter = class {
     const routes = [];
     let hasOwnRoute = method === METHOD_NAME_ALL;
     [this.#middleware, this.#routes].forEach((r) => {
-      const ownRoute = r[method] ? Object.keys(r[method]).map((path4) => [path4, r[method][path4]]) : [];
+      const ownRoute = r[method] ? Object.keys(r[method]).map((path5) => [path5, r[method][path5]]) : [];
       if (ownRoute.length !== 0) {
         hasOwnRoute ||= true;
         routes.push(...ownRoute);
       } else if (method !== METHOD_NAME_ALL) {
         routes.push(
-          ...Object.keys(r[METHOD_NAME_ALL]).map((path4) => [path4, r[METHOD_NAME_ALL][path4]])
+          ...Object.keys(r[METHOD_NAME_ALL]).map((path5) => [path5, r[METHOD_NAME_ALL][path5]])
         );
       }
     });
@@ -126231,13 +126234,13 @@ var SmartRouter = class {
   constructor(init) {
     this.#routers = init.routers;
   }
-  add(method, path4, handler) {
+  add(method, path5, handler) {
     if (!this.#routes) {
       throw new Error(MESSAGE_MATCHER_IS_ALREADY_BUILT);
     }
-    this.#routes.push([method, path4, handler]);
+    this.#routes.push([method, path5, handler]);
   }
-  match(method, path4) {
+  match(method, path5) {
     if (!this.#routes) {
       throw new Error("Fatal error");
     }
@@ -126252,7 +126255,7 @@ var SmartRouter = class {
         for (let i2 = 0, len2 = routes.length; i2 < len2; i2++) {
           router8.add(...routes[i2]);
         }
-        res = router8.match(method, path4);
+        res = router8.match(method, path5);
       } catch (e) {
         if (e instanceof UnsupportedPathError) {
           continue;
@@ -126302,10 +126305,10 @@ var Node2 = class _Node2 {
     }
     this.#patterns = [];
   }
-  insert(method, path4, handler) {
+  insert(method, path5, handler) {
     this.#order = ++this.#order;
     let curNode = this;
-    const parts = splitRoutingPath(path4);
+    const parts = splitRoutingPath(path5);
     const possibleKeys = [];
     for (let i = 0, len = parts.length; i < len; i++) {
       const p = parts[i];
@@ -126354,12 +126357,12 @@ var Node2 = class _Node2 {
       }
     }
   }
-  search(method, path4) {
+  search(method, path5) {
     const handlerSets = [];
     this.#params = emptyParams;
     const curNode = this;
     let curNodes = [curNode];
-    const parts = splitPath(path4);
+    const parts = splitPath(path5);
     const curNodesQueue = [];
     const len = parts.length;
     let partOffsets = null;
@@ -126401,13 +126404,13 @@ var Node2 = class _Node2 {
           if (matcher instanceof RegExp) {
             if (partOffsets === null) {
               partOffsets = new Array(len);
-              let offset = path4[0] === "/" ? 1 : 0;
+              let offset = path5[0] === "/" ? 1 : 0;
               for (let p = 0; p < len; p++) {
                 partOffsets[p] = offset;
                 offset += parts[p].length + 1;
               }
             }
-            const restPathString = path4.substring(partOffsets[i]);
+            const restPathString = path5.substring(partOffsets[i]);
             const m = matcher.exec(restPathString);
             if (m) {
               params[name] = m[0];
@@ -126460,18 +126463,18 @@ var TrieRouter = class {
   constructor() {
     this.#node = new Node2();
   }
-  add(method, path4, handler) {
-    const results = checkOptionalParameter(path4);
+  add(method, path5, handler) {
+    const results = checkOptionalParameter(path5);
     if (results) {
       for (let i = 0, len = results.length; i < len; i++) {
         this.#node.insert(method, results[i], handler);
       }
       return;
     }
-    this.#node.insert(method, path4, handler);
+    this.#node.insert(method, path5, handler);
   }
-  match(method, path4) {
-    return this.#node.search(method, path4);
+  match(method, path5) {
+    return this.#node.search(method, path5);
   }
 };
 
@@ -126745,31 +126748,31 @@ var noop = () => {
 var freezeIfAvailable = (obj) => {
   if (Object.freeze) Object.freeze(obj);
 };
-function createInnerProxy(callback, path4, memo2) {
+function createInnerProxy(callback, path5, memo2) {
   var _memo$cacheKey;
-  const cacheKey2 = path4.join(".");
+  const cacheKey2 = path5.join(".");
   (_memo$cacheKey = memo2[cacheKey2]) !== null && _memo$cacheKey !== void 0 || (memo2[cacheKey2] = new Proxy(noop, {
     get(_obj, key) {
       if (typeof key !== "string" || key === "then") return void 0;
-      return createInnerProxy(callback, [...path4, key], memo2);
+      return createInnerProxy(callback, [...path5, key], memo2);
     },
     apply(_1, _2, args) {
-      const lastOfPath = path4[path4.length - 1];
+      const lastOfPath = path5[path5.length - 1];
       if (lastOfPath === "valueOf" || lastOfPath === "toString" || lastOfPath === "toJSON") {
-        const debugPath = path4.slice(0, -1).join(".");
+        const debugPath = path5.slice(0, -1).join(".");
         return `tRPC.proxy(${debugPath})`;
       }
       let opts = {
         args,
-        path: path4
+        path: path5
       };
       if (lastOfPath === "call") opts = {
         args: args.length >= 2 ? [args[1]] : [],
-        path: path4.slice(0, -1)
+        path: path5.slice(0, -1)
       };
       else if (lastOfPath === "apply") opts = {
         args: args.length >= 2 ? args[1] : [],
-        path: path4.slice(0, -1)
+        path: path5.slice(0, -1)
       };
       freezeIfAvailable(opts.args);
       freezeIfAvailable(opts.path);
@@ -126897,7 +126900,7 @@ var require_objectSpread2 = __commonJS2({ "../../node_modules/.pnpm/@oxc-project
 } });
 var import_objectSpread2 = __toESM2(require_objectSpread2(), 1);
 function getErrorShape(opts) {
-  const { path: path4, error: error48, config: config2 } = opts;
+  const { path: path5, error: error48, config: config2 } = opts;
   const { code } = opts.error;
   const shape = {
     message: error48.message,
@@ -126908,7 +126911,7 @@ function getErrorShape(opts) {
     }
   };
   if (config2.isDev && typeof opts.error.stack === "string") shape.data.stack = opts.error.stack;
-  if (typeof path4 === "string") shape.data.path = path4;
+  if (typeof path5 === "string") shape.data.path = path5;
   return config2.errorFormatter((0, import_objectSpread2.default)((0, import_objectSpread2.default)({}, opts), {}, { shape }));
 }
 
@@ -127042,12 +127045,12 @@ function createRouterFactory(config2) {
         })
       };
     }
-    function step(from, path4 = []) {
+    function step(from, path5 = []) {
       const aggregate = emptyObject();
       for (const [key, item] of Object.entries(from !== null && from !== void 0 ? from : {})) {
         if (isLazy(item)) {
-          lazy$1[[...path4, key].join(".")] = createLazyLoader({
-            path: path4,
+          lazy$1[[...path5, key].join(".")] = createLazyLoader({
+            path: path5,
             ref: item,
             key,
             aggregate
@@ -127055,14 +127058,14 @@ function createRouterFactory(config2) {
           continue;
         }
         if (isRouter(item)) {
-          aggregate[key] = step(item._def.record, [...path4, key]);
+          aggregate[key] = step(item._def.record, [...path5, key]);
           continue;
         }
         if (!isProcedure(item)) {
-          aggregate[key] = step(item, [...path4, key]);
+          aggregate[key] = step(item, [...path5, key]);
           continue;
         }
-        const newPath = [...path4, key].join(".");
+        const newPath = [...path5, key].join(".");
         if (procedures[newPath]) throw new Error(`Duplicate key: ${newPath}`);
         procedures[newPath] = item;
         aggregate[key] = item;
@@ -127087,15 +127090,15 @@ function createRouterFactory(config2) {
 function isProcedure(procedureOrRouter) {
   return typeof procedureOrRouter === "function";
 }
-async function getProcedureAtPath(router8, path4) {
+async function getProcedureAtPath(router8, path5) {
   const { _def } = router8;
-  let procedure = _def.procedures[path4];
+  let procedure = _def.procedures[path5];
   while (!procedure) {
-    const key = Object.keys(_def.lazy).find((key$1) => path4.startsWith(key$1));
+    const key = Object.keys(_def.lazy).find((key$1) => path5.startsWith(key$1));
     if (!key) return null;
     const lazyRouter = _def.lazy[key];
     await lazyRouter.load();
-    procedure = _def.procedures[path4];
+    procedure = _def.procedures[path5];
   }
   return procedure;
 }
@@ -127104,15 +127107,15 @@ function createCallerFactory() {
     const { _def } = router8;
     return function createCaller(ctxOrCallback, opts) {
       return createRecursiveProxy(async (innerOpts) => {
-        const { path: path4, args } = innerOpts;
-        const fullPath = path4.join(".");
-        if (path4.length === 1 && path4[0] === "_def") return _def;
+        const { path: path5, args } = innerOpts;
+        const fullPath = path5.join(".");
+        if (path5.length === 1 && path5[0] === "_def") return _def;
         const procedure = await getProcedureAtPath(router8, fullPath);
         let ctx = void 0;
         try {
           if (!procedure) throw new TRPCError({
             code: "NOT_FOUND",
-            message: `No procedure found on path "${path4}"`
+            message: `No procedure found on path "${path5}"`
           });
           ctx = isFunction(ctxOrCallback) ? await Promise.resolve(ctxOrCallback()) : ctxOrCallback;
           return await procedure({
@@ -127337,11 +127340,11 @@ var jsonContentTypeHandler = {
       }
       return acc;
     });
-    const calls2 = await Promise.all(paths.map(async (path4, index2) => {
-      const procedure = await getProcedureAtPath(opts.router, path4);
+    const calls2 = await Promise.all(paths.map(async (path5, index2) => {
+      const procedure = await getProcedureAtPath(opts.router, path5);
       return {
         batchIndex: index2,
-        path: path4,
+        path: path5,
         procedure,
         getRawInput: async () => {
           const inputs = await getInputs.read();
@@ -128149,9 +128152,9 @@ function isPromise2(value) {
   return (isObject(value) || isFunction(value)) && typeof (value === null || value === void 0 ? void 0 : value["then"]) === "function" && typeof (value === null || value === void 0 ? void 0 : value["catch"]) === "function";
 }
 var MaxDepthError = class extends Error {
-  constructor(path4) {
-    super("Max depth reached at path: " + path4.join("."));
-    this.path = path4;
+  constructor(path5) {
+    super("Max depth reached at path: " + path5.join("."));
+    this.path = path5;
   }
 };
 function createBatchStreamProducer(_x3) {
@@ -128169,16 +128172,16 @@ function _createBatchStreamProducer() {
       mergedIterables.add(iterable$1);
       return idx;
     }
-    function encodePromise(promise2, path4) {
+    function encodePromise(promise2, path5) {
       return registerAsync(/* @__PURE__ */ (function() {
         var _ref = (0, import_wrapAsyncGenerator$2.default)(function* (idx) {
-          const error48 = checkMaxDepth(path4);
+          const error48 = checkMaxDepth(path5);
           if (error48) {
             promise2.catch((cause) => {
               var _opts$onError;
               (_opts$onError = opts.onError) === null || _opts$onError === void 0 || _opts$onError.call(opts, {
                 error: cause,
-                path: path4
+                path: path5
               });
             });
             promise2 = Promise.reject(error48);
@@ -128188,20 +128191,20 @@ function _createBatchStreamProducer() {
             yield [
               idx,
               PROMISE_STATUS_FULFILLED,
-              encode5(next, path4)
+              encode5(next, path5)
             ];
           } catch (cause) {
             var _opts$onError2, _opts$formatError;
             (_opts$onError2 = opts.onError) === null || _opts$onError2 === void 0 || _opts$onError2.call(opts, {
               error: cause,
-              path: path4
+              path: path5
             });
             yield [
               idx,
               PROMISE_STATUS_REJECTED,
               (_opts$formatError = opts.formatError) === null || _opts$formatError === void 0 ? void 0 : _opts$formatError.call(opts, {
                 error: cause,
-                path: path4
+                path: path5
               })
             ];
           }
@@ -128211,12 +128214,12 @@ function _createBatchStreamProducer() {
         };
       })());
     }
-    function encodeAsyncIterable(iterable$1, path4) {
+    function encodeAsyncIterable(iterable$1, path5) {
       return registerAsync(/* @__PURE__ */ (function() {
         var _ref2 = (0, import_wrapAsyncGenerator$2.default)(function* (idx) {
           try {
             var _usingCtx$1 = (0, import_usingCtx$1.default)();
-            const error48 = checkMaxDepth(path4);
+            const error48 = checkMaxDepth(path5);
             if (error48) throw error48;
             const iterator = _usingCtx$1.a(iteratorResource(iterable$1));
             try {
@@ -128226,28 +128229,28 @@ function _createBatchStreamProducer() {
                   yield [
                     idx,
                     ASYNC_ITERABLE_STATUS_RETURN,
-                    encode5(next.value, path4)
+                    encode5(next.value, path5)
                   ];
                   break;
                 }
                 yield [
                   idx,
                   ASYNC_ITERABLE_STATUS_YIELD,
-                  encode5(next.value, path4)
+                  encode5(next.value, path5)
                 ];
               }
             } catch (cause) {
               var _opts$onError3, _opts$formatError2;
               (_opts$onError3 = opts.onError) === null || _opts$onError3 === void 0 || _opts$onError3.call(opts, {
                 error: cause,
-                path: path4
+                path: path5
               });
               yield [
                 idx,
                 ASYNC_ITERABLE_STATUS_ERROR,
                 (_opts$formatError2 = opts.formatError) === null || _opts$formatError2 === void 0 ? void 0 : _opts$formatError2.call(opts, {
                   error: cause,
-                  path: path4
+                  path: path5
                 })
               ];
             }
@@ -128262,27 +128265,27 @@ function _createBatchStreamProducer() {
         };
       })());
     }
-    function checkMaxDepth(path4) {
-      if (opts.maxDepth && path4.length > opts.maxDepth) return new MaxDepthError(path4);
+    function checkMaxDepth(path5) {
+      if (opts.maxDepth && path5.length > opts.maxDepth) return new MaxDepthError(path5);
       return null;
     }
-    function encodeAsync3(value, path4) {
-      if (isPromise2(value)) return [CHUNK_VALUE_TYPE_PROMISE, encodePromise(value, path4)];
+    function encodeAsync3(value, path5) {
+      if (isPromise2(value)) return [CHUNK_VALUE_TYPE_PROMISE, encodePromise(value, path5)];
       if (isAsyncIterable(value)) {
-        if (opts.maxDepth && path4.length >= opts.maxDepth) throw new Error("Max depth reached");
-        return [CHUNK_VALUE_TYPE_ASYNC_ITERABLE, encodeAsyncIterable(value, path4)];
+        if (opts.maxDepth && path5.length >= opts.maxDepth) throw new Error("Max depth reached");
+        return [CHUNK_VALUE_TYPE_ASYNC_ITERABLE, encodeAsyncIterable(value, path5)];
       }
       return null;
     }
-    function encode5(value, path4) {
+    function encode5(value, path5) {
       if (value === void 0) return [[]];
-      const reg = encodeAsync3(value, path4);
+      const reg = encodeAsync3(value, path5);
       if (reg) return [[placeholder], [null, ...reg]];
       if (!isPlainObject(value)) return [[value]];
       const newObj = emptyObject();
       const asyncValues = [];
       for (const [key, item] of Object.entries(value)) {
-        const transformed = encodeAsync3(item, [...path4, key]);
+        const transformed = encodeAsync3(item, [...path5, key]);
         if (!transformed) {
           newObj[key] = item;
           continue;
@@ -128726,11 +128729,11 @@ async function resolveResponse(opts) {
               var _call$procedure$_def$2, _call$procedure3, _opts$onError2;
               const error$1 = getTRPCErrorFromUnknown(errorOpts.error);
               const input = call === null || call === void 0 ? void 0 : call.result();
-              const path4 = call === null || call === void 0 ? void 0 : call.path;
+              const path5 = call === null || call === void 0 ? void 0 : call.path;
               const type = (_call$procedure$_def$2 = call === null || call === void 0 || (_call$procedure3 = call.procedure) === null || _call$procedure3 === void 0 ? void 0 : _call$procedure3._def.type) !== null && _call$procedure$_def$2 !== void 0 ? _call$procedure$_def$2 : "unknown";
               (_opts$onError2 = opts.onError) === null || _opts$onError2 === void 0 || _opts$onError2.call(opts, {
                 error: error$1,
-                path: path4,
+                path: path5,
                 input,
                 ctx: ctxManager.valueOrUndefined(),
                 req: opts.req,
@@ -128741,7 +128744,7 @@ async function resolveResponse(opts) {
                 ctx: ctxManager.valueOrUndefined(),
                 error: error$1,
                 input,
-                path: path4,
+                path: path5,
                 type
               });
               return shape;
@@ -128831,14 +128834,14 @@ async function resolveResponse(opts) {
           const call = info === null || info === void 0 ? void 0 : info.calls[errorOpts.path[0]];
           const error48 = getTRPCErrorFromUnknown(errorOpts.error);
           const input = call === null || call === void 0 ? void 0 : call.result();
-          const path4 = call === null || call === void 0 ? void 0 : call.path;
+          const path5 = call === null || call === void 0 ? void 0 : call.path;
           const type = (_call$procedure$_def$3 = call === null || call === void 0 || (_call$procedure4 = call.procedure) === null || _call$procedure4 === void 0 ? void 0 : _call$procedure4._def.type) !== null && _call$procedure$_def$3 !== void 0 ? _call$procedure$_def$3 : "unknown";
           const shape = getErrorShape({
             config: config2,
             ctx: ctxManager.valueOrUndefined(),
             error: error48,
             input,
-            path: path4,
+            path: path5,
             type
           });
           return shape;
@@ -128913,10 +128916,10 @@ async function resolveResponse(opts) {
 
 // node_modules/@trpc/server/dist/adapters/fetch/index.mjs
 var import_objectSpread24 = __toESM2(require_objectSpread2(), 1);
-var trimSlashes = (path4) => {
-  path4 = path4.startsWith("/") ? path4.slice(1) : path4;
-  path4 = path4.endsWith("/") ? path4.slice(0, -1) : path4;
-  return path4;
+var trimSlashes = (path5) => {
+  path5 = path5.startsWith("/") ? path5.slice(1) : path5;
+  path5 = path5.endsWith("/") ? path5.slice(0, -1) : path5;
+  return path5;
 };
 async function fetchRequestHandler(opts) {
   const resHeaders = new Headers();
@@ -128930,11 +128933,11 @@ async function fetchRequestHandler(opts) {
   const url2 = new URL(opts.req.url);
   const pathname = trimSlashes(url2.pathname);
   const endpoint = trimSlashes(opts.endpoint);
-  const path4 = trimSlashes(pathname.slice(endpoint.length));
+  const path5 = trimSlashes(pathname.slice(endpoint.length));
   return await resolveResponse((0, import_objectSpread24.default)((0, import_objectSpread24.default)({}, opts), {}, {
     req: opts.req,
     createContext: createContext2,
-    path: path4,
+    path: path5,
     error: null,
     onError(o) {
       var _opts$onError;
@@ -129460,7 +129463,7 @@ var isURL = (payload) => payload instanceof URL;
 
 // node_modules/superjson/dist/pathstringifier.js
 var escapeKey = (key) => key.replace(/\\/g, "\\\\").replace(/\./g, "\\.");
-var stringifyPath = (path4) => path4.map(String).map(escapeKey).join(".");
+var stringifyPath = (path5) => path5.map(String).map(escapeKey).join(".");
 var parsePath = (string4, legacyPaths) => {
   const result = [];
   let segment = "";
@@ -129707,26 +129710,26 @@ var getNthKey = (value, n) => {
   }
   return keys.next().value;
 };
-function validatePath(path4) {
-  if (includes(path4, "__proto__")) {
+function validatePath(path5) {
+  if (includes(path5, "__proto__")) {
     throw new Error("__proto__ is not allowed as a property");
   }
-  if (includes(path4, "prototype")) {
+  if (includes(path5, "prototype")) {
     throw new Error("prototype is not allowed as a property");
   }
-  if (includes(path4, "constructor")) {
+  if (includes(path5, "constructor")) {
     throw new Error("constructor is not allowed as a property");
   }
 }
-var getDeep = (object2, path4) => {
-  validatePath(path4);
-  for (let i = 0; i < path4.length; i++) {
-    const key = path4[i];
+var getDeep = (object2, path5) => {
+  validatePath(path5);
+  for (let i = 0; i < path5.length; i++) {
+    const key = path5[i];
     if (isSet(object2)) {
       object2 = getNthKey(object2, +key);
     } else if (isMap(object2)) {
       const row = +key;
-      const type = +path4[++i] === 0 ? "key" : "value";
+      const type = +path5[++i] === 0 ? "key" : "value";
       const keyOfRow = getNthKey(object2, row);
       switch (type) {
         case "key":
@@ -129742,14 +129745,14 @@ var getDeep = (object2, path4) => {
   }
   return object2;
 };
-var setDeep = (object2, path4, mapper) => {
-  validatePath(path4);
-  if (path4.length === 0) {
+var setDeep = (object2, path5, mapper) => {
+  validatePath(path5);
+  if (path5.length === 0) {
     return mapper(object2);
   }
   let parent = object2;
-  for (let i = 0; i < path4.length - 1; i++) {
-    const key = path4[i];
+  for (let i = 0; i < path5.length - 1; i++) {
+    const key = path5[i];
     if (isArray(parent)) {
       const index2 = +key;
       parent = parent[index2];
@@ -129759,12 +129762,12 @@ var setDeep = (object2, path4, mapper) => {
       const row = +key;
       parent = getNthKey(parent, row);
     } else if (isMap(parent)) {
-      const isEnd = i === path4.length - 2;
+      const isEnd = i === path5.length - 2;
       if (isEnd) {
         break;
       }
       const row = +key;
-      const type = +path4[++i] === 0 ? "key" : "value";
+      const type = +path5[++i] === 0 ? "key" : "value";
       const keyOfRow = getNthKey(parent, row);
       switch (type) {
         case "key":
@@ -129776,7 +129779,7 @@ var setDeep = (object2, path4, mapper) => {
       }
     }
   }
-  const lastKey = path4[path4.length - 1];
+  const lastKey = path5[path5.length - 1];
   if (isArray(parent)) {
     parent[+lastKey] = mapper(parent[+lastKey]);
   } else if (isPlainObject2(parent)) {
@@ -129791,7 +129794,7 @@ var setDeep = (object2, path4, mapper) => {
     }
   }
   if (isMap(parent)) {
-    const row = +path4[path4.length - 2];
+    const row = +path5[path5.length - 2];
     const keyToRow = getNthKey(parent, row);
     const type = +lastKey === 0 ? "key" : "value";
     switch (type) {
@@ -129838,16 +129841,16 @@ function traverse(tree, walker2, version3, origin = []) {
   walker2(nodeValue, origin);
 }
 function applyValueAnnotations(plain, annotations, version3, superJson) {
-  traverse(annotations, (type, path4) => {
-    plain = setDeep(plain, path4, (v) => untransformValue(v, type, superJson));
+  traverse(annotations, (type, path5) => {
+    plain = setDeep(plain, path5, (v) => untransformValue(v, type, superJson));
   }, version3);
   return plain;
 }
 function applyReferentialEqualityAnnotations(plain, annotations, version3) {
   const legacyPaths = enableLegacyPaths(version3);
-  function apply(identicalPaths, path4) {
-    const object2 = getDeep(plain, parsePath(path4, legacyPaths));
-    identicalPaths.map((path5) => parsePath(path5, legacyPaths)).forEach((identicalObjectPath) => {
+  function apply(identicalPaths, path5) {
+    const object2 = getDeep(plain, parsePath(path5, legacyPaths));
+    identicalPaths.map((path6) => parsePath(path6, legacyPaths)).forEach((identicalObjectPath) => {
       plain = setDeep(plain, identicalObjectPath, () => object2);
     });
   }
@@ -129865,12 +129868,12 @@ function applyReferentialEqualityAnnotations(plain, annotations, version3) {
   return plain;
 }
 var isDeep = (object2, superJson) => isPlainObject2(object2) || isArray(object2) || isMap(object2) || isSet(object2) || isError(object2) || isInstanceOfRegisteredClass(object2, superJson);
-function addIdentity(object2, path4, identities) {
+function addIdentity(object2, path5, identities) {
   const existingSet = identities.get(object2);
   if (existingSet) {
-    existingSet.push(path4);
+    existingSet.push(path5);
   } else {
-    identities.set(object2, [path4]);
+    identities.set(object2, [path5]);
   }
 }
 function generateReferentialEqualityAnnotations(identitites, dedupe) {
@@ -129881,7 +129884,7 @@ function generateReferentialEqualityAnnotations(identitites, dedupe) {
       return;
     }
     if (!dedupe) {
-      paths = paths.map((path4) => path4.map(String)).sort((a, b) => a.length - b.length);
+      paths = paths.map((path5) => path5.map(String)).sort((a, b) => a.length - b.length);
     }
     const [representativePath, ...identicalPaths] = paths;
     if (representativePath.length === 0) {
@@ -129900,10 +129903,10 @@ function generateReferentialEqualityAnnotations(identitites, dedupe) {
     return isEmptyObject(result) ? void 0 : result;
   }
 }
-var walker = (object2, identities, superJson, dedupe, path4 = [], objectsInThisPath = [], seenObjects = /* @__PURE__ */ new Map()) => {
+var walker = (object2, identities, superJson, dedupe, path5 = [], objectsInThisPath = [], seenObjects = /* @__PURE__ */ new Map()) => {
   const primitive = isPrimitive(object2);
   if (!primitive) {
-    addIdentity(object2, path4, identities);
+    addIdentity(object2, path5, identities);
     const seen = seenObjects.get(object2);
     if (seen) {
       return dedupe ? {
@@ -129937,7 +129940,7 @@ var walker = (object2, identities, superJson, dedupe, path4 = [], objectsInThisP
     if (index2 === "__proto__" || index2 === "constructor" || index2 === "prototype") {
       throw new Error(`Detected property ${index2}. This is a prototype pollution risk, please remove it from your object.`);
     }
-    const recursiveResult = walker(value, identities, superJson, dedupe, [...path4, index2], [...objectsInThisPath, object2], seenObjects);
+    const recursiveResult = walker(value, identities, superJson, dedupe, [...path5, index2], [...objectsInThisPath, object2], seenObjects);
     transformedValue[index2] = recursiveResult.transformedValue;
     if (isArray(recursiveResult.annotations)) {
       innerAnnotations[escapeKey(index2)] = recursiveResult.annotations;
@@ -132491,10 +132494,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path4) {
-  if (!path4)
+function getElementAtPath(obj, path5) {
+  if (!path5)
     return obj;
-  return path4.reduce((acc, key) => acc?.[key], obj);
+  return path5.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -132877,11 +132880,11 @@ function aborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path4, issues) {
+function prefixIssues(path5, issues) {
   return issues.map((iss) => {
     var _a2;
     (_a2 = iss).path ?? (_a2.path = []);
-    iss.path.unshift(path4);
+    iss.path.unshift(path5);
     return iss;
   });
 }
@@ -133064,7 +133067,7 @@ function formatError(error48, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error48, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error49, path4 = []) => {
+  const processError = (error49, path5 = []) => {
     var _a2, _b;
     for (const issue2 of error49.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
@@ -133074,7 +133077,7 @@ function treeifyError(error48, mapper = (issue2) => issue2.message) {
       } else if (issue2.code === "invalid_element") {
         processError({ issues: issue2.issues }, issue2.path);
       } else {
-        const fullpath = [...path4, ...issue2.path];
+        const fullpath = [...path5, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -133106,8 +133109,8 @@ function treeifyError(error48, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path4 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path4) {
+  const path5 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path5) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -145084,13 +145087,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path4 = ref.slice(1).split("/").filter(Boolean);
-  if (path4.length === 0) {
+  const path5 = ref.slice(1).split("/").filter(Boolean);
+  if (path5.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path4[0] === defsKey) {
-    const key = path4[1];
+  if (path5[0] === defsKey) {
+    const key = path5[1];
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -147411,6 +147414,98 @@ var campaignRouter = createRouter({
   })
 });
 
+// api/lib/mediaStore.ts
+init_jsonDb();
+import fs2 from "fs";
+import path2 from "path";
+import crypto4 from "crypto";
+var MEDIA_ROUTE = "/api/media/";
+var INLINE_LIMIT = 4096;
+var NAME_RE = /^[a-f0-9-]{36}\.[a-z0-9]{1,8}$/;
+var EXT_BY_MIME = {
+  "audio/webm": "webm",
+  "audio/ogg": "ogg",
+  "audio/mpeg": "mp3",
+  "audio/mp3": "mp3",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/mp4": "m4a",
+  "audio/aac": "aac",
+  "video/webm": "webm",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "application/pdf": "pdf"
+};
+var MIME_BY_EXT = {
+  webm: "audio/webm",
+  ogg: "audio/ogg",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  png: "image/png",
+  jpg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+  bin: "application/octet-stream"
+};
+function mediaDir() {
+  return path2.join(path2.dirname(getDbPath()), "media");
+}
+function externalizeDataUrl(value) {
+  if (typeof value !== "string" || value.length < INLINE_LIMIT || !value.startsWith("data:")) return value;
+  const comma = value.indexOf(",");
+  if (comma < 0) return value;
+  const meta3 = value.slice(5, comma);
+  const mime = (meta3.split(";")[0] || "application/octet-stream").toLowerCase();
+  const isBase64 = /;base64$/i.test(meta3);
+  const payload = value.slice(comma + 1);
+  const buf = isBase64 ? Buffer.from(payload, "base64") : Buffer.from(decodeURIComponent(payload));
+  const name = `${crypto4.randomUUID()}.${EXT_BY_MIME[mime] ?? "bin"}`;
+  fs2.mkdirSync(mediaDir(), { recursive: true });
+  fs2.writeFileSync(path2.join(mediaDir(), name), buf);
+  return MEDIA_ROUTE + name;
+}
+function readMedia(name) {
+  if (!NAME_RE.test(name)) return null;
+  const file2 = path2.join(mediaDir(), name);
+  if (!fs2.existsSync(file2)) return null;
+  const ext = name.slice(name.lastIndexOf(".") + 1);
+  return { body: fs2.readFileSync(file2), mime: MIME_BY_EXT[ext] ?? "application/octet-stream" };
+}
+function externalizeDeep(node, depth) {
+  if (typeof node === "string") {
+    const next = externalizeDataUrl(node);
+    return { value: next, moved: next === node ? 0 : 1 };
+  }
+  if (!node || typeof node !== "object" || depth > 6) return { value: node, moved: 0 };
+  let moved = 0;
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i++) {
+      const r = externalizeDeep(node[i], depth + 1);
+      node[i] = r.value;
+      moved += r.moved;
+    }
+  } else {
+    const obj = node;
+    for (const key of Object.keys(obj)) {
+      const r = externalizeDeep(obj[key], depth + 1);
+      obj[key] = r.value;
+      moved += r.moved;
+    }
+  }
+  return { value: node, moved };
+}
+function migrateInlineMedia() {
+  const store = readJsonDb();
+  const { moved } = externalizeDeep(store, 0);
+  if (moved > 0) writeJsonDb(store);
+  return moved;
+}
+
 // api/lib/signalwireConfig.ts
 function asSettings3(company) {
   const s = company?.settings;
@@ -148295,7 +148390,8 @@ var callRouter = createRouter({
       notes: input.notes,
       callDescription: input.callDescription,
       customFields: input.customFields,
-      recordingUrl: input.recordingUrl,
+      // Store audio as a file, not inline base64 in db.json.
+      recordingUrl: externalizeDataUrl(input.recordingUrl),
       endedAt: /* @__PURE__ */ new Date()
     });
     return { success: true };
@@ -148343,7 +148439,7 @@ var callRouter = createRouter({
     format: external_exports.string().default("mp3")
   })).mutation(async ({ ctx, input }) => {
     await callInScope(ctx.user, input.callId);
-    const id = await createRecording(input);
+    const id = await createRecording({ ...input, recordingUrl: externalizeDataUrl(input.recordingUrl) });
     return { id, success: true };
   })
 });
@@ -151089,6 +151185,7 @@ webhooksApp.all("/signalwire/sms", async (c) => {
 
 // api/app.ts
 init_jsonDb();
+init_connection();
 var app = new Hono2();
 app.use(
   "*",
@@ -151102,10 +151199,34 @@ app.use(
   })
 );
 if (!process.env.VITEST) startSMSCampaignWorker();
+if (!process.env.VITEST && !hasDatabase()) {
+  try {
+    const moved = migrateInlineMedia();
+    if (moved > 0) console.log(`[media] Moved ${moved} inline recording(s) out of db.json into media files.`);
+  } catch (err) {
+    console.error("[media] Inline media migration failed:", err);
+  }
+}
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 app.get("/health", (c) => c.json({ status: "ok", time: (/* @__PURE__ */ new Date()).toISOString(), storage: getStorageInfo() }));
 var STARTED_AT = (/* @__PURE__ */ new Date()).toISOString();
 app.get("/api/health", (c) => c.json({ status: "ok", startedAt: STARTED_AT }));
+app.get("/api/media/:name", async (c) => {
+  try {
+    await authenticateRequest(c.req.raw.headers);
+  } catch {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  const media = readMedia(c.req.param("name"));
+  if (!media) return c.json({ error: "Not Found" }, 404);
+  return new Response(new Uint8Array(media.body), {
+    headers: {
+      "Content-Type": media.mime,
+      "Content-Length": String(media.body.length),
+      "Cache-Control": "private, max-age=86400"
+    }
+  });
+});
 app.route("/api/webhooks", webhooksApp);
 var trpcHandler = async (c) => {
   return fetchRequestHandler({
@@ -151125,13 +151246,13 @@ var import_express8 = __toESM(require_express2(), 1);
 var import_body_parser = __toESM(require_body_parser2(), 1);
 
 // api/mailsender/db.ts
-import path2 from "path";
-import fs2 from "fs";
+import path3 from "path";
+import fs3 from "fs";
 import { createRequire } from "module";
 var require2 = createRequire(import.meta.url);
-var DB_PATH2 = process.env.MAIL_DB_PATH || process.env.DB_PATH || path2.join(process.cwd(), "data/mailsender.db");
-var dir = path2.dirname(DB_PATH2);
-if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
+var DB_PATH2 = process.env.MAIL_DB_PATH || process.env.DB_PATH || path3.join(process.cwd(), "data/mailsender.db");
+var dir = path3.dirname(DB_PATH2);
+if (!fs3.existsSync(dir)) fs3.mkdirSync(dir, { recursive: true });
 function openDb() {
   try {
     const { DatabaseSync } = require2("node:sqlite");
@@ -151582,12 +151703,12 @@ async function requireAuth2(req, res, next) {
 }
 
 // api/mailsender/utils/security.ts
-import crypto4 from "node:crypto";
+import crypto5 from "node:crypto";
 import dns from "node:dns";
 import net from "node:net";
 var APP_SECRET = process.env.APP_SECRET || "salesvora-default-secret-change-me";
 function trackingToken(kind, campaignId, leadId) {
-  return crypto4.createHmac("sha256", APP_SECRET).update(`${kind}:${campaignId}:${leadId}`).digest("hex").slice(0, 20);
+  return crypto5.createHmac("sha256", APP_SECRET).update(`${kind}:${campaignId}:${leadId}`).digest("hex").slice(0, 20);
 }
 function verifyTrackingToken(kind, campaignId, leadId, supplied) {
   if (typeof supplied !== "string" || supplied.length === 0) return false;
@@ -151595,7 +151716,7 @@ function verifyTrackingToken(kind, campaignId, leadId, supplied) {
   const a = Buffer.from(expected);
   const b = Buffer.from(supplied);
   if (a.length !== b.length) return false;
-  return crypto4.timingSafeEqual(a, b);
+  return crypto5.timingSafeEqual(a, b);
 }
 function getTrackingBaseUrl(fallbackProto, fallbackHost) {
   const configured = process.env.BACKEND_URL || process.env.PUBLIC_URL || "";
@@ -154359,8 +154480,8 @@ mailApp.use("/api/mail/warmup", warmup_default);
 var app_default2 = mailApp;
 
 // api/boot.ts
-import fs3 from "fs";
-import path3 from "path";
+import fs4 from "fs";
+import path4 from "path";
 process.on("uncaughtException", (err) => {
   console.error("[boot] Uncaught exception:", err);
   process.exit(1);
@@ -154369,16 +154490,16 @@ process.on("unhandledRejection", (reason) => {
   console.error("[boot] Unhandled rejection:", reason);
   process.exit(1);
 });
-var staticRoot = path3.resolve(import.meta.dirname, "public");
-console.log(`[boot] static root: ${staticRoot} (exists: ${fs3.existsSync(staticRoot)})`);
+var staticRoot = path4.resolve(import.meta.dirname, "public");
+console.log(`[boot] static root: ${staticRoot} (exists: ${fs4.existsSync(staticRoot)})`);
 app_default.get("/api-proxy.php", (c) => c.json({ error: "Not Found" }, 404));
 app_default.use("*", serveStatic({ root: staticRoot }));
 app_default.notFound((c) => {
   const accept = c.req.header("accept") ?? "";
   if (!accept.includes("text/html")) return c.json({ error: "Not Found" }, 404);
-  const indexPath = path3.join(staticRoot, "index.html");
-  if (!fs3.existsSync(indexPath)) return c.text("index.html not found", 404);
-  return c.html(fs3.readFileSync(indexPath, "utf-8"));
+  const indexPath = path4.join(staticRoot, "index.html");
+  if (!fs4.existsSync(indexPath)) return c.text("index.html not found", 404);
+  return c.html(fs4.readFileSync(indexPath, "utf-8"));
 });
 var boot_default = app_default;
 if (process.env.NODE_ENV !== "test") startServer();

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { externalizeDataUrl } from "./lib/mediaStore";
 import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery, authedQuery, callerQuery } from "./middleware";
 import { resolveCompanyScope, requireCompanyScope, assertSameCompany } from "./lib/authz";
@@ -220,7 +221,8 @@ export const callRouter = createRouter({
         notes: input.notes,
         callDescription: input.callDescription,
         customFields: input.customFields,
-        recordingUrl: input.recordingUrl,
+        // Store audio as a file, not inline base64 in db.json.
+        recordingUrl: externalizeDataUrl(input.recordingUrl),
         endedAt: new Date(),
       });
       return { success: true };
@@ -289,7 +291,7 @@ export const callRouter = createRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await callInScope(ctx.user, input.callId);
-      const id = await createRecording(input);
+      const id = await createRecording({ ...input, recordingUrl: externalizeDataUrl(input.recordingUrl) });
       return { id, success: true };
     }),
 });

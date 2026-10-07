@@ -116,6 +116,11 @@ const DB_PATH_RESOLVED = resolveDbPath();
  * browser without SSH: which storage mode is active, where db.json actually
  * lives, and whether that location is deploy-safe and writable.
  */
+/** Absolute path of the JSON store; its folder is the persistent data dir. */
+export function getDbPath(): string {
+  return DB_PATH_RESOLVED;
+}
+
 export function getStorageInfo() {
   const persistent =
     Boolean(env.dbJsonPath) || DB_PATH_RESOLVED.replace(/\\/g, "/").includes("salesvora-data");
