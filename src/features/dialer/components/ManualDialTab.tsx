@@ -60,7 +60,8 @@ export function ManualDialTab() {
   const [expandedCallId, setExpandedCallId] = useState<number | null>(null);
 
   const { data: dispositions = [] } = trpc.calls.dispositions.useQuery({ companyId });
-  const { data: dialerConfig } = trpc.integration.getDialerConfig.useQuery();
+  const dialerConfigQuery = trpc.integration.getDialerConfig.useQuery();
+  const dialerConfig = dialerConfigQuery.data;
   const rtc = useWebRTC();
   const webrtcOn = Boolean(dialerConfig?.webrtc?.enabled);
 
@@ -343,12 +344,17 @@ export function ManualDialTab() {
         <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 text-xs">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-gray-700 dark:text-gray-300">Engine:</span>
+            {/* Never show a provider we haven't actually loaded from the server. */}
             <Badge variant="outline" className={`font-mono text-[11px] ${
-              dialerConfig?.provider === "signalwire"
+              !dialerConfig
+                ? "border-gray-500/40 text-gray-400"
+                : dialerConfig.provider === "signalwire"
                 ? "border-blue-500/40 bg-blue-500/10 text-blue-400 font-bold"
                 : "border-green-500/40 bg-green-500/10 text-green-400 font-bold"
             }`}>
-              {dialerConfig?.provider === "signalwire" ? "SignalWire" : "Telnyx"}
+              {!dialerConfig
+                ? (dialerConfigQuery.isError ? "Unavailable" : "Loading…")
+                : dialerConfig.provider === "signalwire" ? "SignalWire" : "Telnyx"}
             </Badge>
           </div>
           <div className="flex items-center gap-1.5">
@@ -371,6 +377,12 @@ export function ManualDialTab() {
             )}
           </div>
         </div>
+
+        {dialerConfigQuery.isError && (
+          <p className="text-xs text-red-400 font-medium">
+            Could not load calling settings: {dialerConfigQuery.error.message}
+          </p>
+        )}
 
         {dialerConfig?.provider === "signalwire" && !webrtcOn && (
           <div className="px-3 py-2 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">

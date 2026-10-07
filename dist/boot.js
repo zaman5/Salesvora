@@ -150439,6 +150439,7 @@ var integrationRouter = createRouter({
   setActiveTelephonyProvider: adminQuery.input(external_exports.object({ provider: external_exports.enum(["telnyx", "signalwire"]) })).mutation(async ({ ctx, input }) => {
     const companyId = companyScope(ctx.user);
     const active = await setActiveTelephonyProvider(companyId, input.provider);
+    console.log(`[telephony] company ${companyId}: active provider set to ${active} by user #${ctx.user.id}`);
     return { activeProvider: active };
   }),
   // ─── SignalWire Integration Endpoints ───
@@ -151103,6 +151104,8 @@ app.use(
 if (!process.env.VITEST) startSMSCampaignWorker();
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 app.get("/health", (c) => c.json({ status: "ok", time: (/* @__PURE__ */ new Date()).toISOString(), storage: getStorageInfo() }));
+var STARTED_AT = (/* @__PURE__ */ new Date()).toISOString();
+app.get("/api/health", (c) => c.json({ status: "ok", startedAt: STARTED_AT }));
 app.route("/api/webhooks", webhooksApp);
 var trpcHandler = async (c) => {
   return fetchRequestHandler({

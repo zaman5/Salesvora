@@ -456,6 +456,7 @@ export const integrationRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const companyId = companyScope(ctx.user);
       const active = await setActiveTelephonyProvider(companyId, input.provider);
+      console.log(`[telephony] company ${companyId}: active provider set to ${active} by user #${ctx.user.id}`);
       return { activeProvider: active };
     }),
 

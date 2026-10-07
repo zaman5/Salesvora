@@ -463,12 +463,13 @@ export default function SettingsPage() {
     setTestResult({ outgoing: "idle", incoming: "idle", outgoingMessage: "", incomingMessage: "" });
   };
 
-  const activeProvider = providerQuery.data?.activeProvider || "telnyx";
+  // undefined while loading — never pretend Telnyx is active before the server says so.
+  const activeProvider = providerQuery.data?.activeProvider;
   const isSwActive = activeProvider === "signalwire";
   const isTelnyxActive = activeProvider === "telnyx";
 
   const switchProvider = (provider: "signalwire" | "telnyx") => {
-    if (provider === activeProvider || setActiveProviderMutation.isPending) return;
+    if (!activeProvider || provider === activeProvider || setActiveProviderMutation.isPending) return;
     const name = provider === "signalwire" ? "SignalWire" : "Telnyx";
     if (!window.confirm(`Switch the live calling engine to ${name}? All outbound calls, inbound routing and SMS will use ${name}.`)) return;
     setActiveProviderMutation.mutate({ provider });
@@ -524,7 +525,7 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Current Engine:</span>
                 <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-600 text-white shadow-sm">
-                  {activeProvider}
+                  {activeProvider ?? (providerQuery.isError ? "unavailable" : "loading…")}
                 </span>
               </div>
             </div>

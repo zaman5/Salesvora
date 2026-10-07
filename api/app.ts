@@ -34,6 +34,10 @@ app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 // storage info lets us verify from a browser that db.json lives at a
 // deploy-safe path (persistent: true) — see api/queries/jsonDb.ts.
 app.get("/health", (c) => c.json({ status: "ok", time: new Date().toISOString(), storage: getStorageInfo() }));
+// Reachable through the PHP proxy (which forwards only /api/*). startedAt shows
+// whether the Node process actually restarted onto a new deploy.
+const STARTED_AT = new Date().toISOString();
+app.get("/api/health", (c) => c.json({ status: "ok", startedAt: STARTED_AT }));
 
 // Inbound Telnyx webhooks (SMS, etc.) — see api/webhooks.ts.
 app.route("/api/webhooks", webhooksApp);
