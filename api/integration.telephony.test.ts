@@ -350,6 +350,42 @@ describe("Complete End-to-End Telephony Provider Testing", () => {
     expect(callResult.callSid).toBe("CA_test_signalwire_12345");
   });
 
+  it("cost guards: no dial-out for inbound logs, redial reuse, and hang-up on end", async () => {
+    const adminCaller = appRouter.createCaller(superAdminContext as any);
+    await adminCaller.integration.saveSignalWire({
+      space: "salesvora.signalwire.com",
+      projectId: "6e1caf1e-238f-4ab3-b618-d164507f1250",
+      apiToken: "PT_secret_token_live_123",
+      enabled: true,
+    });
+    await adminCaller.integration.setActiveTelephonyProvider({ provider: "signalwire" });
+    const agent = appRouter.createCaller(callerContext as any);
+    const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    const swCallPosts = () =>
+      fetchMock.mock.calls.filter(([u, init]) => String(u).endsWith("/Calls.json") && init?.method === "POST");
+
+    // Logging an answered inbound call must not ring the caller back.
+    fetchMock.mockClear();
+    await agent.calls.initiate({ companyId: 1, toNumber: "+15551110000", type: "inbound" });
+    expect(swCallPosts()).toHaveLength(0);
+
+    // A second click within the guard window reuses the first call.
+    fetchMock.mockClear();
+    const first = await agent.calls.initiate({ companyId: 1, toNumber: "+15557770000", type: "manual" });
+    const again = await agent.calls.initiate({ companyId: 1, toNumber: "(555) 777-0000", type: "manual" });
+    expect(again.id).toBe(first.id);
+    expect(swCallPosts()).toHaveLength(1);
+
+    // Ending the call in the app hangs up the SignalWire leg.
+    fetchMock.mockClear();
+    await agent.calls.endCall({ id: first.id as number, duration: 5 });
+    const hangups = fetchMock.mock.calls.filter(([u]) => String(u).includes("/Calls/CA_test_signalwire_12345.json"));
+    expect(hangups).toHaveLength(1);
+    expect(String(hangups[0][1]?.body)).toContain("Status=completed");
+
+    await adminCaller.integration.setActiveTelephonyProvider({ provider: "telnyx" });
+  });
+
   // ─── 5. SMS Router Message Dispatch with SignalWire ───
   it("sends an outbound SMS via SignalWire when active provider is signalwire", async () => {
     const adminCaller = appRouter.createCaller(superAdminContext as any);

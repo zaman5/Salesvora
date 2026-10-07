@@ -182,6 +182,8 @@ export async function placeSignalWireCall(
     to: string;
     url: string; // Outbound connect cXML URL
     statusCallback?: string;
+    timeoutSec?: number; // ring time before giving up
+    timeLimitSec?: number; // hard cap on billed call length
   },
 ): Promise<SignalWireResult<SignalWireCallResult>> {
   if (!space || !projectId || !apiToken) {
@@ -195,6 +197,11 @@ export async function placeSignalWireCall(
   form.append("From", toE164(params.from));
   form.append("To", toE164(params.to));
   form.append("Url", params.url);
+  // Cost guards: stop ringing after 30 s (unanswered rings are free, but a
+  // long ring often ends in voicemail, which IS billed), and never let a
+  // forgotten leg run longer than an hour.
+  form.append("Timeout", String(params.timeoutSec ?? 30));
+  form.append("TimeLimit", String(params.timeLimitSec ?? 3600));
 
   if (params.statusCallback) {
     form.append("StatusCallback", params.statusCallback);
@@ -262,6 +269,38 @@ export async function placeSignalWireCall(
       status: 0,
       message: err instanceof Error ? `SignalWire call failed: ${err.message}` : "Network error initiating SignalWire call.",
     };
+  }
+}
+
+/**
+ * End a live call leg (POST Calls/{sid}.json Status=completed). Without this,
+ * hanging up in the app left the customer's PSTN leg running — and billing —
+ * until the customer (or their voicemail) hung up.
+ */
+export async function hangupSignalWireCall(
+  space: string,
+  projectId: string,
+  apiToken: string,
+  callSid: string,
+): Promise<SignalWireResult<{ callSid: string }>> {
+  if (!space || !projectId || !apiToken || !callSid) {
+    return { ok: false, status: 400, message: "SignalWire is not configured or call SID missing." };
+  }
+  const endpoint = `https://${normalizeSpace(space)}/api/laml/2010-04-01/Accounts/${encodeURIComponent(projectId)}/Calls/${encodeURIComponent(callSid)}.json`;
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: basicAuthHeader(projectId, apiToken),
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({ Status: "completed" }).toString(),
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseSignalWireError(res) };
+    return { ok: true, data: { callSid } };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error ending SignalWire call." };
   }
 }
 

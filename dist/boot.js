@@ -147705,6 +147705,8 @@ async function placeSignalWireCall(space, projectId, apiToken, params) {
   form.append("From", toE164(params.from));
   form.append("To", toE164(params.to));
   form.append("Url", params.url);
+  form.append("Timeout", String(params.timeoutSec ?? 30));
+  form.append("TimeLimit", String(params.timeLimitSec ?? 3600));
   if (params.statusCallback) {
     form.append("StatusCallback", params.statusCallback);
     form.append("StatusCallbackMethod", "POST");
@@ -147765,6 +147767,27 @@ async function placeSignalWireCall(space, projectId, apiToken, params) {
       status: 0,
       message: err instanceof Error ? `SignalWire call failed: ${err.message}` : "Network error initiating SignalWire call."
     };
+  }
+}
+async function hangupSignalWireCall(space, projectId, apiToken, callSid) {
+  if (!space || !projectId || !apiToken || !callSid) {
+    return { ok: false, status: 400, message: "SignalWire is not configured or call SID missing." };
+  }
+  const endpoint = `https://${normalizeSpace(space)}/api/laml/2010-04-01/Accounts/${encodeURIComponent(projectId)}/Calls/${encodeURIComponent(callSid)}.json`;
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: basicAuthHeader(projectId, apiToken),
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json"
+      },
+      body: new URLSearchParams({ Status: "completed" }).toString()
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: await parseSignalWireError(res) };
+    return { ok: true, data: { callSid } };
+  } catch (err) {
+    return { ok: false, status: 0, message: err instanceof Error ? err.message : "Network error ending SignalWire call." };
   }
 }
 async function sendSignalWireSMS(space, projectId, apiToken, params) {
@@ -148227,6 +148250,30 @@ async function callInScope(user, id) {
   assertSameCompany(user, call.companyId);
   return call;
 }
+async function hangupProviderLeg(call) {
+  const c = call;
+  const sid = c?.customFields?.signalwire?.callSid;
+  if (!sid || !c?.companyId) return;
+  try {
+    const sw = await getSignalWireConfig(c.companyId);
+    if (!sw?.projectId || !sw.apiToken) return;
+    const res = await hangupSignalWireCall(sw.space, sw.projectId, sw.apiToken, sid);
+    if (!res.ok && res.status !== 404) console.warn(`[calls] Could not end SignalWire leg ${sid}: ${res.message}`);
+  } catch (err) {
+    console.warn(`[calls] Could not end SignalWire leg ${sid}:`, err);
+  }
+}
+var REDIAL_GUARD_MS = 2e4;
+async function recentCallTo(callerId, toNumber) {
+  const all = await findCallsByCaller(callerId);
+  const list = Array.isArray(all) ? all : all?.items ?? [];
+  const target = toE164(toNumber);
+  const now = Date.now();
+  return list.find((c) => {
+    const at = new Date(c.startedAt ?? c.createdAt).getTime();
+    return c.type !== "inbound" && c.toNumber && toE164(c.toNumber) === target && ["initiated", "ringing", "connected"].includes(c.status ?? "") && now - at < REDIAL_GUARD_MS;
+  });
+}
 var callRouter = createRouter({
   // ─── Call CRUD ───
   list: callerQuery.input(external_exports.object({
@@ -148271,9 +148318,13 @@ var callRouter = createRouter({
     let providerStatus = "initiated";
     let providerError;
     const providerMeta = {};
+    if (activeProvider === "signalwire" && input.type !== "inbound") {
+      const dup = await recentCallTo(ctx.user.id, input.toNumber);
+      if (dup) return { id: dup.id, callSid: dup.callSid ?? "", success: true, error: void 0 };
+    }
     if (activeProvider === "signalwire") {
       const sw = await getSignalWireConfig(companyId);
-      const useSwCall = Boolean(sw?.enabled && sw.projectId && sw.apiToken);
+      const useSwCall = input.type !== "inbound" && Boolean(sw?.enabled && sw.projectId && sw.apiToken);
       if (useSwCall && sw) {
         const from = input.fromNumber && !input.fromNumber.includes("5550002222") ? input.fromNumber : sw.defaultCallerId || "+12082489823";
         const host = ctx.req?.headers?.get("x-forwarded-host") || ctx.req?.headers?.get("host");
@@ -148306,7 +148357,7 @@ var callRouter = createRouter({
     } else {
       const telnyx = await getTelnyxConfig(companyId);
       const useRestDialing = Boolean(
-        telnyx?.enabled && telnyx.apiKey && telnyx.connectionId && !telnyx.webrtcEnabled
+        input.type !== "inbound" && telnyx?.enabled && telnyx.apiKey && telnyx.connectionId && !telnyx.webrtcEnabled
       );
       if (useRestDialing && telnyx) {
         const from = input.fromNumber || telnyx.defaultCallerId || "";
@@ -148352,7 +148403,7 @@ var callRouter = createRouter({
     id: external_exports.number(),
     status: external_exports.enum(["initiated", "ringing", "connected", "completed", "failed", "no_answer", "busy", "cancelled"])
   })).mutation(async ({ ctx, input }) => {
-    await callInScope(ctx.user, input.id);
+    const call = await callInScope(ctx.user, input.id);
     const updateData = { status: input.status };
     if (input.status === "connected") {
       updateData.answeredAt = /* @__PURE__ */ new Date();
@@ -148360,6 +148411,7 @@ var callRouter = createRouter({
     }
     if (["completed", "failed", "no_answer", "busy", "cancelled"].includes(input.status)) {
       updateData.endedAt = /* @__PURE__ */ new Date();
+      await hangupProviderLeg(call);
     }
     await updateCall(input.id, updateData);
     return { success: true };
@@ -148382,7 +148434,8 @@ var callRouter = createRouter({
     customFields: external_exports.record(external_exports.string(), external_exports.any()).optional(),
     recordingUrl: external_exports.string().optional()
   })).mutation(async ({ ctx, input }) => {
-    await callInScope(ctx.user, input.id);
+    const call = await callInScope(ctx.user, input.id);
+    await hangupProviderLeg(call);
     await updateCall(input.id, {
       status: "completed",
       dispositionId: input.dispositionId,

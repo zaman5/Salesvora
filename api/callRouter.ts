@@ -6,7 +6,8 @@ import { resolveCompanyScope, requireCompanyScope, assertSameCompany } from "./l
 import { getTelnyxConfig } from "./lib/telnyxConfig";
 import { placeCall } from "./lib/telnyx";
 import { getSignalWireConfig, getActiveTelephonyProvider } from "./lib/signalwireConfig";
-import { placeSignalWireCall } from "./lib/signalwire";
+import { placeSignalWireCall, hangupSignalWireCall } from "./lib/signalwire";
+import { toE164 } from "./lib/telnyx";
 import {
   findCallsByCompany, findCallsByCaller, findCallById,
   findActiveCallByCaller, createCall, updateCall,
@@ -22,6 +23,45 @@ async function callInScope(user: { role: string; companyId?: number | null }, id
   if (!call) throw new TRPCError({ code: "NOT_FOUND", message: "Call not found." });
   assertSameCompany(user, (call as { companyId?: number | null }).companyId);
   return call;
+}
+
+// End the provider's PSTN leg when the app ends a call. Previously only the
+// browser side hung up, so the customer leg (or their voicemail) kept running
+// and billing until the far end disconnected. Best-effort: never blocks the
+// app-side update.
+async function hangupProviderLeg(call: unknown) {
+  const c = call as { companyId?: number | null; customFields?: { signalwire?: { callSid?: string } } } | null;
+  const sid = c?.customFields?.signalwire?.callSid;
+  if (!sid || !c?.companyId) return;
+  try {
+    const sw = await getSignalWireConfig(c.companyId);
+    if (!sw?.projectId || !sw.apiToken) return;
+    const res = await hangupSignalWireCall(sw.space, sw.projectId, sw.apiToken, sid);
+    if (!res.ok && res.status !== 404) console.warn(`[calls] Could not end SignalWire leg ${sid}: ${res.message}`);
+  } catch (err) {
+    console.warn(`[calls] Could not end SignalWire leg ${sid}:`, err);
+  }
+}
+
+// A second click (or a retry while the first attempt is still ringing) used
+// to place another billed call to the same number. Reuse a very recent one.
+const REDIAL_GUARD_MS = 20_000;
+async function recentCallTo(callerId: number, toNumber: string) {
+  const all = await findCallsByCaller(callerId);
+  const list = (Array.isArray(all) ? all : (all as { items?: unknown[] })?.items ?? []) as Array<{
+    id: number; callSid?: string; toNumber?: string; status?: string; type?: string; createdAt?: string | Date; startedAt?: string | Date;
+  }>;
+  const target = toE164(toNumber);
+  const now = Date.now();
+  return list.find((c) => {
+    const at = new Date((c.startedAt ?? c.createdAt) as string).getTime();
+    return (
+      c.type !== "inbound" &&
+      c.toNumber && toE164(c.toNumber) === target &&
+      ["initiated", "ringing", "connected"].includes(c.status ?? "") &&
+      now - at < REDIAL_GUARD_MS
+    );
+  });
 }
 
 export const callRouter = createRouter({
@@ -85,9 +125,16 @@ export const callRouter = createRouter({
       let providerError: string | undefined;
       const providerMeta: Record<string, unknown> = {};
 
+      if (activeProvider === "signalwire" && input.type !== "inbound") {
+        const dup = await recentCallTo(ctx.user.id, input.toNumber);
+        if (dup) return { id: dup.id, callSid: dup.callSid ?? "", success: true, error: undefined };
+      }
+
       if (activeProvider === "signalwire") {
         const sw = await getSignalWireConfig(companyId);
-        const useSwCall = Boolean(sw?.enabled && sw.projectId && sw.apiToken);
+        // An "inbound" row only LOGS a call someone placed to us — never dial out for it
+        // (that used to ring the caller back as a second, billed outbound call).
+        const useSwCall = input.type !== "inbound" && Boolean(sw?.enabled && sw.projectId && sw.apiToken);
         if (useSwCall && sw) {
           const from = (input.fromNumber && !input.fromNumber.includes("5550002222"))
             ? input.fromNumber
@@ -127,7 +174,7 @@ export const callRouter = createRouter({
       } else {
         const telnyx = await getTelnyxConfig(companyId);
         const useRestDialing = Boolean(
-          telnyx?.enabled && telnyx.apiKey && telnyx.connectionId && !telnyx.webrtcEnabled,
+          input.type !== "inbound" && telnyx?.enabled && telnyx.apiKey && telnyx.connectionId && !telnyx.webrtcEnabled,
         );
         if (useRestDialing && telnyx) {
           const from = input.fromNumber || telnyx.defaultCallerId || "";
@@ -177,7 +224,7 @@ export const callRouter = createRouter({
       status: z.enum(["initiated", "ringing", "connected", "completed", "failed", "no_answer", "busy", "cancelled"]),
     }))
     .mutation(async ({ ctx, input }) => {
-      await callInScope(ctx.user, input.id);
+      const call = await callInScope(ctx.user, input.id);
       const updateData: Record<string, unknown> = { status: input.status };
       if (input.status === "connected") {
         updateData.answeredAt = new Date();
@@ -185,6 +232,7 @@ export const callRouter = createRouter({
       }
       if (["completed", "failed", "no_answer", "busy", "cancelled"].includes(input.status)) {
         updateData.endedAt = new Date();
+        await hangupProviderLeg(call);
       }
       await updateCall(input.id, updateData);
       return { success: true };
@@ -213,7 +261,8 @@ export const callRouter = createRouter({
       recordingUrl: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await callInScope(ctx.user, input.id);
+      const call = await callInScope(ctx.user, input.id);
+      await hangupProviderLeg(call);
       await updateCall(input.id, {
         status: "completed",
         dispositionId: input.dispositionId,
