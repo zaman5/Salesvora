@@ -1,4 +1,5 @@
-import { findCompanyById, updateCompany } from "../queries/companies";
+import { findCompanyById } from "../queries/companies";
+import { patchCompanySettings } from "./companySettings";
 
 export type TelnyxConfig = {
   enabled: boolean;
@@ -43,7 +44,30 @@ export async function getTelnyxConfig(companyId: number): Promise<TelnyxConfig |
   const company = await findCompanyById(companyId);
   const settings = asSettings(company);
   const cfg = settings.telnyx as TelnyxConfig | undefined;
-  return cfg ?? null;
+  return cfg ? stripSignalWireLeak(cfg, settings) : null;
+}
+
+const digits = (s?: string) => (s ?? "").replace(/\D/g, "");
+
+/**
+ * An old Settings bug saved a SignalWire number's label ("SignalWire (space)")
+ * as the Telnyx SIP username / connection name, and the SignalWire number as
+ * the Telnyx caller ID. Ignore those leaked values so Telnyx never dials with
+ * a SignalWire identity.
+ */
+function stripSignalWireLeak(cfg: TelnyxConfig, settings: Record<string, unknown>): TelnyxConfig {
+  const isSwLabel = (v?: string) => Boolean(v && /^signalwire\b/i.test(v.trim()));
+  const swCaller = digits((settings.signalwire as { defaultCallerId?: string } | undefined)?.defaultCallerId);
+  const assigned = (cfg.assignedNumbers ?? []).map(digits);
+  const leakedCaller =
+    Boolean(swCaller) && digits(cfg.defaultCallerId) === swCaller && !assigned.includes(swCaller);
+  if (!isSwLabel(cfg.sipUsername) && !isSwLabel(cfg.connectionName) && !leakedCaller) return cfg;
+  return {
+    ...cfg,
+    sipUsername: isSwLabel(cfg.sipUsername) ? "" : cfg.sipUsername,
+    connectionName: isSwLabel(cfg.connectionName) ? "" : cfg.connectionName,
+    defaultCallerId: leakedCaller ? "" : cfg.defaultCallerId,
+  };
 }
 
 /** Mask the API key so it is never sent back to the browser. */
@@ -82,20 +106,20 @@ export async function saveTelnyxConfig(
   companyId: number,
   patch: Partial<TelnyxConfig>,
 ): Promise<TelnyxConfig> {
-  const company = await findCompanyById(companyId);
-  const settings = asSettings(company);
-  const existing = (settings.telnyx as TelnyxConfig | undefined) ?? {
-    enabled: false,
-    apiKey: "",
-    connectionId: "",
-  };
-  const merged: TelnyxConfig = {
-    ...existing,
-    ...patch,
-    apiKey: patch.apiKey && patch.apiKey.trim() ? patch.apiKey.trim() : existing.apiKey,
-    sipPassword: patch.sipPassword && patch.sipPassword.trim() ? patch.sipPassword.trim() : existing.sipPassword,
-    updatedAt: new Date().toISOString(),
-  };
-  await updateCompany(companyId, { settings: { ...settings, telnyx: merged } });
-  return merged;
+  return patchCompanySettings(companyId, (settings) => {
+    const existing = (settings.telnyx as TelnyxConfig | undefined) ?? {
+      enabled: false,
+      apiKey: "",
+      connectionId: "",
+    };
+    const merged: TelnyxConfig = {
+      ...existing,
+      ...patch,
+      apiKey: patch.apiKey && patch.apiKey.trim() ? patch.apiKey.trim() : existing.apiKey,
+      sipPassword: patch.sipPassword && patch.sipPassword.trim() ? patch.sipPassword.trim() : existing.sipPassword,
+      updatedAt: new Date().toISOString(),
+    };
+    // Only the Telnyx subtree is written — the active provider is untouched.
+    return { patch: { telnyx: merged }, result: merged };
+  });
 }

@@ -1,4 +1,5 @@
-import { findCompanyById, updateCompany } from "../queries/companies";
+import { findCompanyById } from "../queries/companies";
+import { patchCompanySettings } from "./companySettings";
 
 export type TelephonyProvider = "telnyx" | "signalwire";
 
@@ -39,8 +40,9 @@ export async function getActiveTelephonyProvider(companyId: number): Promise<Tel
   if (active === "signalwire" || active === "telnyx") {
     return active;
   }
-  // Default to signalwire if signalwire is enabled, otherwise telnyx
-  const sw = settings.signalwire as SignalWireConfig | undefined;
+  // No explicit choice yet: default to signalwire if it is configured
+  // (in company settings or via SIGNALWIRE_* env vars), otherwise telnyx.
+  const sw = await getSignalWireConfig(companyId);
   if (sw?.enabled && sw.projectId && sw.apiToken) {
     return "signalwire";
   }
@@ -51,10 +53,12 @@ export async function setActiveTelephonyProvider(
   companyId: number,
   provider: TelephonyProvider,
 ): Promise<TelephonyProvider> {
-  const company = await findCompanyById(companyId);
-  const settings = asSettings(company);
-  await updateCompany(companyId, { settings: { ...settings, activeTelephonyProvider: provider } });
-  return provider;
+  // The ONLY place the active provider changes — saving Telnyx/SignalWire
+  // credentials or phone numbers must never flip it.
+  return patchCompanySettings(companyId, () => ({
+    patch: { activeTelephonyProvider: provider },
+    result: provider,
+  }));
 }
 
 export async function getSignalWireConfig(companyId: number): Promise<SignalWireConfig | null> {
@@ -118,25 +122,23 @@ export async function saveSignalWireConfig(
   companyId: number,
   patch: Partial<SignalWireConfig>,
 ): Promise<SignalWireConfig> {
-  const company = await findCompanyById(companyId);
-  const settings = asSettings(company);
-  const existing = (settings.signalwire as SignalWireConfig | undefined) ?? {
-    enabled: false,
-    space: "salesvora.signalwire.com",
-    projectId: "",
-    apiToken: "",
-  };
+  return patchCompanySettings(companyId, (settings) => {
+    const existing = (settings.signalwire as SignalWireConfig | undefined) ?? {
+      enabled: false,
+      space: "salesvora.signalwire.com",
+      projectId: "",
+      apiToken: "",
+    };
 
-  const merged: SignalWireConfig = {
-    ...existing,
-    ...patch,
-    space: (patch.space && patch.space.trim()) ? patch.space.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "") : existing.space,
-    projectId: patch.projectId && patch.projectId.trim() ? patch.projectId.trim() : existing.projectId,
-    apiToken: patch.apiToken && patch.apiToken.trim() ? patch.apiToken.trim() : existing.apiToken,
-    sipPassword: patch.sipPassword && patch.sipPassword.trim() ? patch.sipPassword.trim() : existing.sipPassword,
-    updatedAt: new Date().toISOString(),
-  };
-
-  await updateCompany(companyId, { settings: { ...settings, signalwire: merged } });
-  return merged;
+    const merged: SignalWireConfig = {
+      ...existing,
+      ...patch,
+      space: (patch.space && patch.space.trim()) ? patch.space.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "") : existing.space,
+      projectId: patch.projectId && patch.projectId.trim() ? patch.projectId.trim() : existing.projectId,
+      apiToken: patch.apiToken && patch.apiToken.trim() ? patch.apiToken.trim() : existing.apiToken,
+      sipPassword: patch.sipPassword && patch.sipPassword.trim() ? patch.sipPassword.trim() : existing.sipPassword,
+      updatedAt: new Date().toISOString(),
+    };
+    return { patch: { signalwire: merged }, result: merged };
+  });
 }

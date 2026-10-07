@@ -417,6 +417,7 @@ export const integrationRouter = createRouter({
       outboundVoiceProfileId: z.string().optional(),
       messagingProfileId: z.string().optional(),
       publicKey: z.string().optional(),
+      webhookPublicKey: z.string().optional(),
       defaultCallerId: z.string().optional(),
       assignedNumbers: z.array(z.string()).optional(),
       channelLimit: z.number().nullable().optional(),
@@ -425,7 +426,14 @@ export const integrationRouter = createRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const companyId = companyScope(ctx.user);
-      const saved = await saveTelnyxConfig(companyId, input);
+      // Credentials only — the active provider is changed solely by
+      // setActiveTelephonyProvider below.
+      const { publicKey, channelLimit, ...rest } = input;
+      const saved = await saveTelnyxConfig(companyId, {
+        ...rest,
+        ...(channelLimit !== undefined ? { channelLimit: channelLimit ?? undefined } : {}),
+        ...(publicKey !== undefined && rest.webhookPublicKey === undefined ? { webhookPublicKey: publicKey } : {}),
+      });
       return maskTelnyxConfig(saved);
     }),
 

@@ -75,15 +75,18 @@ export const companyRouter = createRouter({
       if (data.settings) {
         // settings is a free-form blob, so a plain overwrite would let an admin
         // clobber the Telnyx credentials / webhook public key (or inject their
-        // own) through this generic route. Telnyx config is owned exclusively
-        // by integration.saveTelnyx — carry the stored subtree over verbatim
-        // and drop whatever the client sent for it.
+        // own) through this generic route. Telephony config is owned
+        // exclusively by the integration router — carry the stored subtrees
+        // over verbatim and drop whatever the client sent for them.
         const existing = await findCompanyById(input.id);
         const existingSettings = ((existing as { settings?: unknown } | null)?.settings ?? {}) as Record<string, unknown>;
-        const { telnyx: _clientTelnyx, ...rest } = data.settings as Record<string, unknown>;
-        data.settings = "telnyx" in existingSettings
-          ? { ...rest, telnyx: existingSettings.telnyx }
-          : rest;
+        const protectedKeys = ["telnyx", "signalwire", "activeTelephonyProvider", "phoneNumbers"];
+        const rest = { ...(data.settings as Record<string, unknown>) };
+        for (const key of protectedKeys) {
+          delete rest[key];
+          if (key in existingSettings) rest[key] = existingSettings[key];
+        }
+        data.settings = rest;
       }
       await updateCompany(input.id, data);
       return { success: true };

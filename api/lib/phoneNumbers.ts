@@ -1,4 +1,5 @@
-import { findCompanyById, updateCompany } from "../queries/companies";
+import { findCompanyById } from "../queries/companies";
+import { patchCompanySettings } from "./companySettings";
 import { toE164 } from "./telnyx";
 
 export type PhoneNumber = {
@@ -21,10 +22,7 @@ export async function listPhoneNumbers(companyId: number): Promise<PhoneNumber[]
 }
 
 async function writePhoneNumbers(companyId: number, numbers: PhoneNumber[]): Promise<PhoneNumber[]> {
-  const company = await findCompanyById(companyId);
-  const settings = settingsOf(company);
-  await updateCompany(companyId, { settings: { ...settings, phoneNumbers: numbers } });
-  return numbers;
+  return patchCompanySettings(companyId, () => ({ patch: { phoneNumbers: numbers }, result: numbers }));
 }
 
 export async function addPhoneNumber(

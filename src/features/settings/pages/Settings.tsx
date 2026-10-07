@@ -31,6 +31,7 @@ import {
 
 type CredentialForm = {
   phoneNumber: string;
+  label: string;
   sipUsername: string;
   sipPassword: string;
   apiKey: string;
@@ -41,6 +42,7 @@ type CredentialForm = {
 
 const EMPTY_FORM: CredentialForm = {
   phoneNumber: "",
+  label: "",
   sipUsername: "",
   sipPassword: "",
   apiKey: "",
@@ -210,19 +212,43 @@ export default function SettingsPage() {
     message: "",
   });
 
-  // Display list of numbers
+  // Every saved number, plus a predicate telling SignalWire numbers apart
+  // (the SignalWire caller ID, or anything saved from the SignalWire tab).
+  const allNumbers: DisplayEntry[] = useMemo(
+    () =>
+      (numbersQuery.data ?? []).map((n: any) => ({
+        id: n.id,
+        number: n.number,
+        label: n.label ?? n.name,
+        status: n.status as "active" | "inactive",
+      })),
+    [numbersQuery.data],
+  );
+  const swCallerDigits = (signalwireQuery.data?.defaultCallerId || "").replace(/\D/g, "");
+  const isSignalWireNumber = (number?: string, label?: string) =>
+    Boolean(
+      (label && /^signalwire\b/i.test(label.trim())) ||
+      (swCallerDigits && number && number.replace(/\D/g, "") === swCallerDigits),
+    );
+
+  const signalWireNumbers = useMemo(
+    () => allNumbers.filter((n) => isSignalWireNumber(n.number, n.label)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allNumbers, swCallerDigits],
+  );
+
+  // Telnyx list — SignalWire numbers are managed in the SignalWire tab only.
   const phoneNumbers: DisplayEntry[] = useMemo(() => {
-    const real: DisplayEntry[] = (numbersQuery.data ?? []).map((n: any) => ({
-      id: n.id,
-      number: n.number,
-      label: n.label ?? n.name,
-      status: n.status as "active" | "inactive",
-    }));
+    const real = allNumbers.filter((n) => !isSignalWireNumber(n.number, n.label));
 
     const telnyxNumber = telnyxQuery.data?.defaultCallerId?.trim();
     const telnyxUsername = telnyxQuery.data?.sipUsername?.trim();
 
-    if (telnyxNumber && !real.some((n) => n.number === telnyxNumber)) {
+    if (
+      telnyxNumber &&
+      !isSignalWireNumber(telnyxNumber, telnyxUsername) &&
+      !real.some((n) => n.number === telnyxNumber)
+    ) {
       real.unshift({
         id: 0,
         number: telnyxNumber,
@@ -233,7 +259,8 @@ export default function SettingsPage() {
     }
 
     return real;
-  }, [numbersQuery.data, telnyxQuery.data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allNumbers, telnyxQuery.data, swCallerDigits]);
 
   // Pre-populate Telnyx form when editing
   useEffect(() => {
@@ -243,6 +270,7 @@ export default function SettingsPage() {
     if (editingId === 0) {
       setForm({
         phoneNumber: saved.defaultCallerId || "",
+        label: saved.connectionName || "",
         sipUsername: saved.sipUsername || "",
         sipPassword: "",
         apiKey: "",
@@ -254,7 +282,9 @@ export default function SettingsPage() {
       const num = (numbersQuery.data ?? []).find((n: any) => n.id === editingId) as any;
       setForm({
         phoneNumber: num?.number || saved.defaultCallerId || "",
-        sipUsername: num?.label ?? num?.name ?? saved.sipUsername ?? "",
+        label: num?.label ?? num?.name ?? "",
+        // The number's label is NOT a SIP username — only use Telnyx's own.
+        sipUsername: saved.sipUsername || "",
         sipPassword: "",
         apiKey: "",
         sipHost: saved.sipHost || "",
@@ -308,11 +338,20 @@ export default function SettingsPage() {
 
   const handleTelnyxSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isSignalWireNumber(form.phoneNumber, form.label)) {
+      setSaveStatus({
+        type: "error",
+        message: "This is a SignalWire number — manage it in the SignalWire tab, not as a Telnyx credential.",
+      });
+      return;
+    }
     try {
+      // Saves Telnyx credentials only. It never changes the active calling
+      // engine — that is switched exclusively via the engine cards above.
       await saveTelnyxMutation.mutateAsync({
         apiKey: form.apiKey || undefined,
         connectionId: form.connectionId,
-        connectionName: form.sipUsername,
+        connectionName: form.label || telnyxQuery.data?.connectionName || form.sipUsername,
         defaultCallerId: form.phoneNumber,
         sipUsername: form.sipUsername,
         sipPassword: form.sipPassword || undefined,
@@ -324,12 +363,12 @@ export default function SettingsPage() {
       if (editingId === null || editingId === 0) {
         await addPhoneMutation.mutateAsync({
           number: form.phoneNumber,
-          label: form.sipUsername,
+          label: form.label || undefined,
         });
       } else {
         await updatePhoneNumberMutation.mutateAsync({
           id: editingId,
-          label: form.sipUsername,
+          label: form.label,
         });
       }
 
@@ -392,7 +431,7 @@ export default function SettingsPage() {
         enabled: swForm.enabled,
       });
 
-      if (swForm.defaultCallerId && !phoneNumbers.some((p) => p.number === swForm.defaultCallerId)) {
+      if (swForm.defaultCallerId && !allNumbers.some((p) => p.number.replace(/\D/g, "") === swForm.defaultCallerId.replace(/\D/g, ""))) {
         await addPhoneMutation.mutateAsync({
           number: swForm.defaultCallerId,
           label: `SignalWire (${swForm.space})`,
@@ -423,6 +462,13 @@ export default function SettingsPage() {
   const activeProvider = providerQuery.data?.activeProvider || "telnyx";
   const isSwActive = activeProvider === "signalwire";
   const isTelnyxActive = activeProvider === "telnyx";
+
+  const switchProvider = (provider: "signalwire" | "telnyx") => {
+    if (provider === activeProvider || setActiveProviderMutation.isPending) return;
+    const name = provider === "signalwire" ? "SignalWire" : "Telnyx";
+    if (!window.confirm(`Switch the live calling engine to ${name}? All outbound calls, inbound routing and SMS will use ${name}.`)) return;
+    setActiveProviderMutation.mutate({ provider });
+  };
 
   return (
     <div className="space-y-6">
@@ -483,7 +529,7 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               {/* SignalWire Engine Option */}
               <div
-                onClick={() => setActiveProviderMutation.mutate({ provider: "signalwire" })}
+                onClick={() => switchProvider("signalwire")}
                 className={`relative flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
                   isSwActive
                     ? "border-blue-600 bg-white dark:bg-gray-900 shadow-md ring-2 ring-blue-500/20"
@@ -521,7 +567,7 @@ export default function SettingsPage() {
 
               {/* Telnyx Engine Option */}
               <div
-                onClick={() => setActiveProviderMutation.mutate({ provider: "telnyx" })}
+                onClick={() => switchProvider("telnyx")}
                 className={`relative flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
                   isTelnyxActive
                     ? "border-green-600 bg-white dark:bg-gray-900 shadow-md ring-2 ring-green-500/20"
@@ -821,6 +867,14 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
+              <SignalWireNumbersCard
+                numbers={signalWireNumbers}
+                defaultCallerId={signalwireQuery.data?.defaultCallerId || ""}
+                onRename={(id, label) => updatePhoneNumberMutation.mutateAsync({ id, label })}
+                onRemove={(id) => removePhoneMutation.mutateAsync({ id })}
+                onMakeDefault={(number) => setSwForm({ ...swForm, defaultCallerId: number })}
+              />
+
               {/* SignalWire Webhooks & Configuration Guide Card */}
               <SignalWireWebhookEndpointsCard />
             </>
@@ -1024,6 +1078,18 @@ export default function SettingsPage() {
                       </div>
 
                       <div>
+                        <Label className="text-gray-600 dark:text-gray-300 text-sm">Label</Label>
+                        <Input
+                          value={form.label}
+                          onChange={(e) => setForm({ ...form, label: e.target.value })}
+                          autoComplete="off"
+                          placeholder="e.g. Sales line"
+                          className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-1"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Display name for this number</p>
+                      </div>
+
+                      <div>
                         <Label className="text-gray-600 dark:text-gray-300 text-sm">
                           SIP Username <span className="text-red-400">*</span>
                         </Label>
@@ -1189,6 +1255,143 @@ export default function SettingsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SignalWire Phone Numbers — kept apart from Telnyx SIP credentials
+// ─────────────────────────────────────────────────────────────────────────────
+function SignalWireNumbersCard({
+  numbers,
+  defaultCallerId,
+  onRename,
+  onRemove,
+  onMakeDefault,
+}: {
+  numbers: DisplayEntry[];
+  defaultCallerId: string;
+  onRename: (id: number, label: string) => Promise<unknown>;
+  onRemove: (id: number) => Promise<unknown>;
+  onMakeDefault: (number: string) => void;
+}) {
+  const [editId, setEditId] = useState<number | null>(null);
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const defaultDigits = defaultCallerId.replace(/\D/g, "");
+
+  const save = async () => {
+    if (editId === null) return;
+    setBusy(true);
+    setError("");
+    try {
+      await onRename(editId, label.trim());
+      setEditId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white">
+          <Phone className="w-5 h-5 text-blue-500" />
+          SignalWire Phone Numbers
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Numbers from your SignalWire project. To add one, enter it as Default Caller ID above and click Save Settings.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {numbers.length === 0 ? (
+          <p className="text-sm text-gray-500 py-4 text-center">
+            No SignalWire numbers saved yet.
+          </p>
+        ) : (
+          numbers.map((n) => {
+            const isDefault = defaultDigits !== "" && n.number.replace(/\D/g, "") === defaultDigits;
+            return (
+              <div
+                key={n.id}
+                className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-100/30 dark:bg-gray-800/30"
+              >
+                <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0">
+                  <Phone className="w-4 h-4 text-blue-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-gray-900 dark:text-white font-medium flex items-center gap-2">
+                    {n.number}
+                    {isDefault && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 px-2 py-0.5 rounded-full">
+                        Caller ID
+                      </span>
+                    )}
+                  </p>
+                  {editId === n.id ? (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <Input
+                        value={label}
+                        onChange={(e) => setLabel(e.target.value)}
+                        placeholder="Label"
+                        className="h-8 text-sm bg-gray-50 dark:bg-gray-800/60 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white"
+                      />
+                      <Button type="button" size="sm" onClick={save} disabled={busy} className="h-8 bg-blue-600 hover:bg-blue-700 text-white" title="Save label">
+                        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setEditId(null)} className="h-8 w-8 p-0" title="Cancel">
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    n.label && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{n.label}</p>
+                  )}
+                </div>
+                {editId !== n.id && (
+                  <>
+                    {!isDefault && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onMakeDefault(n.number)}
+                        className="h-8 text-xs border-gray-300 dark:border-gray-700"
+                        title="Fills the Default Caller ID field — then click Save Settings"
+                      >
+                        Use as caller ID
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setEditId(n.id); setLabel(n.label || ""); setError(""); }}
+                      className="h-8 w-8 p-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white shrink-0"
+                      title="Edit label"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    {!isDefault && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { if (window.confirm(`Remove ${n.number} from SalesVora?`)) onRemove(n.id).catch(() => {}); }}
+                        className="h-8 w-8 p-0 text-gray-500 dark:text-gray-400 hover:text-red-400 shrink-0"
+                        title="Remove"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })
+        )}
+        {error && <p className="text-xs text-red-500">{error}</p>}
+      </CardContent>
+    </Card>
   );
 }
 

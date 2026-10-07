@@ -51,7 +51,14 @@ async function parseSignalWireError(res: Response): Promise<string> {
     const text = await res.text();
     try {
       const json = JSON.parse(text);
-      rawMsg = json.message || json.error_message || json.description || "";
+      // Fabric / Relay APIs answer {"errors":[{code,message,attribute}]}; LaML answers {message}.
+      const first = Array.isArray(json.errors) ? json.errors[0] : null;
+      if (first?.code === "insufficient_balance") {
+        return "SignalWire account has insufficient balance. Add funds in the SignalWire Dashboard → Billing, then reload the dialer.";
+      }
+      rawMsg =
+        json.message || json.error_message || json.description ||
+        (first ? [first.message, first.attribute ? `(${first.attribute})` : ""].filter(Boolean).join(" ") : "");
     } catch {
       if (text.includes("<Message>") && text.includes("</Message>")) {
         const match = text.match(/<Message>(.*?)<\/Message>/);

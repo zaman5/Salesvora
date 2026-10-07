@@ -7032,12 +7032,12 @@ var require_umd = __commonJS({
           var radixToPower = fromNumber(pow_dbl(radix, 6), this.unsigned), rem = this;
           var result = "";
           while (true) {
-            var remDiv = rem.div(radixToPower), intval = rem.sub(remDiv.mul(radixToPower)).toInt() >>> 0, digits = intval.toString(radix);
+            var remDiv = rem.div(radixToPower), intval = rem.sub(remDiv.mul(radixToPower)).toInt() >>> 0, digits2 = intval.toString(radix);
             rem = remDiv;
-            if (rem.isZero()) return digits + result;
+            if (rem.isZero()) return digits2 + result;
             else {
-              while (digits.length < 6) digits = "0" + digits;
-              result = "" + digits + result;
+              while (digits2.length < 6) digits2 = "0" + digits2;
+              result = "" + digits2 + result;
             }
           }
         };
@@ -145758,16 +145758,53 @@ function assertSameCompany(user, resourceCompanyId) {
   }
 }
 
-// api/lib/telnyxConfig.ts
+// api/lib/companySettings.ts
 function asSettings(company) {
+  const s = company?.settings;
+  return s && typeof s === "object" ? { ...s } : {};
+}
+var locks = /* @__PURE__ */ new Map();
+async function patchCompanySettings(companyId, mutate) {
+  const prev = locks.get(companyId) ?? Promise.resolve();
+  const run2 = prev.catch(() => {
+  }).then(async () => {
+    const settings = asSettings(await findCompanyById(companyId));
+    const { patch, result } = mutate(settings);
+    await updateCompany(companyId, { settings: { ...settings, ...patch } });
+    return result;
+  });
+  locks.set(companyId, run2);
+  try {
+    return await run2;
+  } finally {
+    if (locks.get(companyId) === run2) locks.delete(companyId);
+  }
+}
+
+// api/lib/telnyxConfig.ts
+function asSettings2(company) {
   const s = company?.settings;
   return s && typeof s === "object" ? s : {};
 }
 async function getTelnyxConfig(companyId) {
   const company = await findCompanyById(companyId);
-  const settings = asSettings(company);
+  const settings = asSettings2(company);
   const cfg = settings.telnyx;
-  return cfg ?? null;
+  return cfg ? stripSignalWireLeak(cfg, settings) : null;
+}
+var digits = (s) => (s ?? "").replace(/\D/g, "");
+function stripSignalWireLeak(cfg, settings) {
+  const isSwLabel = (v) => Boolean(v && /^signalwire\b/i.test(v.trim()));
+  const swCaller = digits(settings.signalwire?.defaultCallerId);
+  const assigned = (cfg.assignedNumbers ?? []).map(digits);
+  const leakedCaller = Boolean(swCaller) && digits(cfg.defaultCallerId) === swCaller && !assigned.includes(swCaller);
+  if (!isSwLabel(cfg.sipUsername) && !isSwLabel(cfg.connectionName) && !leakedCaller) return cfg;
+  return {
+    ...cfg,
+    sipUsername: isSwLabel(cfg.sipUsername) ? "" : cfg.sipUsername,
+    connectionName: isSwLabel(cfg.connectionName) ? "" : cfg.connectionName,
+    defaultCallerId: leakedCaller ? "" : cfg.defaultCallerId
+  };
 }
 function maskTelnyxConfig(cfg) {
   const key = cfg?.apiKey ?? "";
@@ -145795,22 +145832,21 @@ function maskTelnyxConfig(cfg) {
   };
 }
 async function saveTelnyxConfig(companyId, patch) {
-  const company = await findCompanyById(companyId);
-  const settings = asSettings(company);
-  const existing = settings.telnyx ?? {
-    enabled: false,
-    apiKey: "",
-    connectionId: ""
-  };
-  const merged = {
-    ...existing,
-    ...patch,
-    apiKey: patch.apiKey && patch.apiKey.trim() ? patch.apiKey.trim() : existing.apiKey,
-    sipPassword: patch.sipPassword && patch.sipPassword.trim() ? patch.sipPassword.trim() : existing.sipPassword,
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
-  await updateCompany(companyId, { settings: { ...settings, telnyx: merged } });
-  return merged;
+  return patchCompanySettings(companyId, (settings) => {
+    const existing = settings.telnyx ?? {
+      enabled: false,
+      apiKey: "",
+      connectionId: ""
+    };
+    const merged = {
+      ...existing,
+      ...patch,
+      apiKey: patch.apiKey && patch.apiKey.trim() ? patch.apiKey.trim() : existing.apiKey,
+      sipPassword: patch.sipPassword && patch.sipPassword.trim() ? patch.sipPassword.trim() : existing.sipPassword,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    return { patch: { telnyx: merged }, result: merged };
+  });
 }
 
 // api/companyRouter.ts
@@ -145872,8 +145908,13 @@ var companyRouter = createRouter({
     if (data.settings) {
       const existing = await findCompanyById(input.id);
       const existingSettings = existing?.settings ?? {};
-      const { telnyx: _clientTelnyx, ...rest } = data.settings;
-      data.settings = "telnyx" in existingSettings ? { ...rest, telnyx: existingSettings.telnyx } : rest;
+      const protectedKeys = ["telnyx", "signalwire", "activeTelephonyProvider", "phoneNumbers"];
+      const rest = { ...data.settings };
+      for (const key of protectedKeys) {
+        delete rest[key];
+        if (key in existingSettings) rest[key] = existingSettings[key];
+      }
+      data.settings = rest;
     }
     await updateCompany(input.id, data);
     return { success: true };
@@ -145975,11 +146016,11 @@ function toE164(raw2) {
   if (!raw2) return raw2;
   const trimmed = raw2.trim();
   const hasPlus = trimmed.startsWith("+");
-  const digits = trimmed.replace(/[^0-9]/g, "");
-  if (hasPlus) return `+${digits}`;
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return digits;
+  const digits2 = trimmed.replace(/[^0-9]/g, "");
+  if (hasPlus) return `+${digits2}`;
+  if (digits2.length === 10) return `+1${digits2}`;
+  if (digits2.length === 11 && digits2.startsWith("1")) return `+${digits2}`;
+  return digits2;
 }
 async function sendSMS(apiKey, params) {
   if (!apiKey) return { ok: false, status: 400, message: "Telnyx is not configured." };
@@ -147369,32 +147410,32 @@ var campaignRouter = createRouter({
 });
 
 // api/lib/signalwireConfig.ts
-function asSettings2(company) {
+function asSettings3(company) {
   const s = company?.settings;
   return s && typeof s === "object" ? s : {};
 }
 async function getActiveTelephonyProvider(companyId) {
   const company = await findCompanyById(companyId);
-  const settings = asSettings2(company);
+  const settings = asSettings3(company);
   const active = settings.activeTelephonyProvider;
   if (active === "signalwire" || active === "telnyx") {
     return active;
   }
-  const sw = settings.signalwire;
+  const sw = await getSignalWireConfig(companyId);
   if (sw?.enabled && sw.projectId && sw.apiToken) {
     return "signalwire";
   }
   return "telnyx";
 }
 async function setActiveTelephonyProvider(companyId, provider) {
-  const company = await findCompanyById(companyId);
-  const settings = asSettings2(company);
-  await updateCompany(companyId, { settings: { ...settings, activeTelephonyProvider: provider } });
-  return provider;
+  return patchCompanySettings(companyId, () => ({
+    patch: { activeTelephonyProvider: provider },
+    result: provider
+  }));
 }
 async function getSignalWireConfig(companyId) {
   const company = await findCompanyById(companyId);
-  const settings = asSettings2(company);
+  const settings = asSettings3(company);
   const cfg = settings.signalwire;
   const envSpace = process.env.SIGNALWIRE_SPACE || "";
   const envProjectId = process.env.SIGNALWIRE_PROJECT_ID || "";
@@ -147440,25 +147481,24 @@ function maskSignalWireConfig(cfg) {
   };
 }
 async function saveSignalWireConfig(companyId, patch) {
-  const company = await findCompanyById(companyId);
-  const settings = asSettings2(company);
-  const existing = settings.signalwire ?? {
-    enabled: false,
-    space: "salesvora.signalwire.com",
-    projectId: "",
-    apiToken: ""
-  };
-  const merged = {
-    ...existing,
-    ...patch,
-    space: patch.space && patch.space.trim() ? patch.space.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "") : existing.space,
-    projectId: patch.projectId && patch.projectId.trim() ? patch.projectId.trim() : existing.projectId,
-    apiToken: patch.apiToken && patch.apiToken.trim() ? patch.apiToken.trim() : existing.apiToken,
-    sipPassword: patch.sipPassword && patch.sipPassword.trim() ? patch.sipPassword.trim() : existing.sipPassword,
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
-  await updateCompany(companyId, { settings: { ...settings, signalwire: merged } });
-  return merged;
+  return patchCompanySettings(companyId, (settings) => {
+    const existing = settings.signalwire ?? {
+      enabled: false,
+      space: "salesvora.signalwire.com",
+      projectId: "",
+      apiToken: ""
+    };
+    const merged = {
+      ...existing,
+      ...patch,
+      space: patch.space && patch.space.trim() ? patch.space.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "") : existing.space,
+      projectId: patch.projectId && patch.projectId.trim() ? patch.projectId.trim() : existing.projectId,
+      apiToken: patch.apiToken && patch.apiToken.trim() ? patch.apiToken.trim() : existing.apiToken,
+      sipPassword: patch.sipPassword && patch.sipPassword.trim() ? patch.sipPassword.trim() : existing.sipPassword,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    return { patch: { signalwire: merged }, result: merged };
+  });
 }
 
 // api/lib/signalwire.ts
@@ -147475,7 +147515,11 @@ async function parseSignalWireError(res) {
     const text2 = await res.text();
     try {
       const json3 = JSON.parse(text2);
-      rawMsg = json3.message || json3.error_message || json3.description || "";
+      const first = Array.isArray(json3.errors) ? json3.errors[0] : null;
+      if (first?.code === "insufficient_balance") {
+        return "SignalWire account has insufficient balance. Add funds in the SignalWire Dashboard \u2192 Billing, then reload the dialer.";
+      }
+      rawMsg = json3.message || json3.error_message || json3.description || (first ? [first.message, first.attribute ? `(${first.attribute})` : ""].filter(Boolean).join(" ") : "");
     } catch {
       if (text2.includes("<Message>") && text2.includes("</Message>")) {
         const match2 = text2.match(/<Message>(.*?)<\/Message>/);
@@ -149098,10 +149142,7 @@ async function listPhoneNumbers(companyId) {
   return Array.isArray(list) ? list : [];
 }
 async function writePhoneNumbers(companyId, numbers) {
-  const company = await findCompanyById(companyId);
-  const settings = settingsOf(company);
-  await updateCompany(companyId, { settings: { ...settings, phoneNumbers: numbers } });
-  return numbers;
+  return patchCompanySettings(companyId, () => ({ patch: { phoneNumbers: numbers }, result: numbers }));
 }
 async function addPhoneNumber(companyId, input) {
   const numbers = await listPhoneNumbers(companyId);
@@ -149484,14 +149525,14 @@ async function findSMSLogsByCompany(companyId, limit = 200) {
   }
 }
 function numberVariants(n) {
-  const digits = (n || "").replace(/[^0-9]/g, "");
-  const v = /* @__PURE__ */ new Set([n, digits, `+${digits}`]);
-  if (digits.length === 10) {
-    v.add(`1${digits}`);
-    v.add(`+1${digits}`);
+  const digits2 = (n || "").replace(/[^0-9]/g, "");
+  const v = /* @__PURE__ */ new Set([n, digits2, `+${digits2}`]);
+  if (digits2.length === 10) {
+    v.add(`1${digits2}`);
+    v.add(`+1${digits2}`);
   }
-  if (digits.length === 11 && digits.startsWith("1")) {
-    const ten = digits.slice(1);
+  if (digits2.length === 11 && digits2.startsWith("1")) {
+    const ten = digits2.slice(1);
     v.add(ten);
     v.add(`+${ten}`);
   }
@@ -150367,6 +150408,7 @@ var integrationRouter = createRouter({
     outboundVoiceProfileId: external_exports.string().optional(),
     messagingProfileId: external_exports.string().optional(),
     publicKey: external_exports.string().optional(),
+    webhookPublicKey: external_exports.string().optional(),
     defaultCallerId: external_exports.string().optional(),
     assignedNumbers: external_exports.array(external_exports.string()).optional(),
     channelLimit: external_exports.number().nullable().optional(),
@@ -150374,7 +150416,12 @@ var integrationRouter = createRouter({
     enabled: external_exports.boolean().default(false)
   })).mutation(async ({ ctx, input }) => {
     const companyId = companyScope(ctx.user);
-    const saved = await saveTelnyxConfig(companyId, input);
+    const { publicKey, channelLimit, ...rest } = input;
+    const saved = await saveTelnyxConfig(companyId, {
+      ...rest,
+      ...channelLimit !== void 0 ? { channelLimit: channelLimit ?? void 0 } : {},
+      ...publicKey !== void 0 && rest.webhookPublicKey === void 0 ? { webhookPublicKey: publicKey } : {}
+    });
     return maskTelnyxConfig(saved);
   }),
   // ─── Active Telephony Provider Selection ───

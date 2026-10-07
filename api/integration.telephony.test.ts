@@ -286,6 +286,35 @@ describe("Complete End-to-End Telephony Provider Testing", () => {
     expect(dialerConfigTelnyx.provider).toBe("telnyx");
   });
 
+  it("never changes the active provider when Telnyx/SignalWire config or numbers are saved", async () => {
+    const caller = appRouter.createCaller(superAdminContext as any);
+    await caller.integration.setActiveTelephonyProvider({ provider: "signalwire" });
+
+    // Exactly what the Settings edit form used to send for a SignalWire number.
+    await Promise.all([
+      caller.integration.saveTelnyx({
+        connectionName: "SignalWire (salesvora.signalwire.com)",
+        sipUsername: "SignalWire (salesvora.signalwire.com)",
+        defaultCallerId: "+12082489823",
+        webrtcEnabled: true,
+        enabled: true,
+      }),
+      caller.integration.addPhoneNumber({ number: "+12082489823", label: "SignalWire (salesvora.signalwire.com)" }),
+      caller.integration.saveSignalWire({ defaultCallerId: "+12082489823", enabled: true }),
+    ]);
+
+    const info = await caller.integration.getTelephonyProvider();
+    expect(info.activeProvider).toBe("signalwire");
+
+    // The leaked SignalWire identity is ignored when Telnyx config is read.
+    const telnyx = await caller.integration.getTelnyx();
+    expect(telnyx.sipUsername).toBe("");
+    expect(telnyx.connectionName).toBe("");
+    expect(telnyx.defaultCallerId).toBe("");
+
+    await caller.integration.setActiveTelephonyProvider({ provider: "telnyx" });
+  });
+
   // ─── 4. Call Router Outbound Call Placement with SignalWire ───
   it("places an outbound REST call via SignalWire when active provider is signalwire", async () => {
     const adminCaller = appRouter.createCaller(superAdminContext as any);
