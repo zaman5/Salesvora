@@ -101,10 +101,14 @@ export default function SettingsPage() {
 
   // Telephony provider status & queries
   const providerQuery = trpc.integration.getTelephonyProvider.useQuery(undefined, { enabled: isAdmin });
+  const utils = trpc.useUtils();
   const setActiveProviderMutation = trpc.integration.setActiveTelephonyProvider.useMutation({
     onSuccess: () => {
       providerQuery.refetch();
+      // The dialer and the global WebRTC client read the provider from here.
+      utils.integration.getDialerConfig.invalidate();
     },
+    onError: (err) => window.alert(`Could not switch calling engine: ${err.message}`),
   });
 
   // Telnyx queries & mutations

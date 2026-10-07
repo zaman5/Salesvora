@@ -1,4 +1,5 @@
-import { findCompanyById, updateCompany } from "../queries/companies";
+import { findCompanyById } from "../queries/companies";
+import { patchCompanySettings } from "./companySettings";
 import { toE164 } from "./telnyx";
 
 // Company-scoped SMS contact names: lets agents label a client's phone number
@@ -30,8 +31,5 @@ export async function setContactName(
     (c) => toE164(c.number) !== normalized,
   );
   if (trimmed) contacts.push({ number: normalized, name: trimmed });
-  const company = await findCompanyById(companyId);
-  const settings = settingsOf(company);
-  await updateCompany(companyId, { settings: { ...settings, smsContacts: contacts } });
-  return contacts;
+  return patchCompanySettings(companyId, () => ({ patch: { smsContacts: contacts }, result: contacts }));
 }

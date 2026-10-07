@@ -315,6 +315,18 @@ describe("Complete End-to-End Telephony Provider Testing", () => {
     await caller.integration.setActiveTelephonyProvider({ provider: "telnyx" });
   });
 
+  it("dialer sees the same provider as Settings for a superadmin with no company", async () => {
+    const noCompany = { ...superAdminContext, user: { ...superAdminContext.user, companyId: null } };
+    const caller = appRouter.createCaller(noCompany as any);
+    await caller.integration.saveSignalWire({ projectId: "p", apiToken: "t", enabled: true, webrtcEnabled: true });
+    await caller.integration.setActiveTelephonyProvider({ provider: "signalwire" });
+
+    const dialer = await caller.integration.getDialerConfig();
+    expect(dialer.provider).toBe("signalwire");
+
+    await caller.integration.setActiveTelephonyProvider({ provider: "telnyx" });
+  });
+
   // ─── 4. Call Router Outbound Call Placement with SignalWire ───
   it("places an outbound REST call via SignalWire when active provider is signalwire", async () => {
     const adminCaller = appRouter.createCaller(superAdminContext as any);

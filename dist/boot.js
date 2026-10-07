@@ -28247,7 +28247,9 @@ function writeJsonDb(data) {
         } catch {
         }
       }
-      fs.writeFileSync(DB_PATH, json3, "utf-8");
+      const tmp = `${DB_PATH}.${process.pid}.tmp`;
+      fs.writeFileSync(tmp, json3, "utf-8");
+      fs.renameSync(tmp, DB_PATH);
       return;
     } catch (err) {
       attempts++;
@@ -149396,10 +149398,7 @@ async function setContactName(companyId, number4, name) {
     (c) => toE164(c.number) !== normalized
   );
   if (trimmed) contacts.push({ number: normalized, name: trimmed });
-  const company = await findCompanyById(companyId);
-  const settings = settingsOf2(company);
-  await updateCompany(companyId, { settings: { ...settings, smsContacts: contacts } });
-  return contacts;
+  return patchCompanySettings(companyId, () => ({ patch: { smsContacts: contacts }, result: contacts }));
 }
 
 // api/queries/sms.ts
@@ -149935,15 +149934,16 @@ var smsRouter = createRouter({
     fromNumber: external_exports.string().optional()
   })).mutation(async ({ ctx, input }) => {
     const companyId = ctx.user.companyId;
+    const telephonyCompanyId = companyId ?? (ctx.user.role === "superadmin" ? 1 : null);
     let success2 = true;
     let error48;
     let providerMsgId;
     const to = toE164(input.toNumber);
     const fromRaw = input.fromNumber || "";
     try {
-      const activeProvider = companyId ? await getActiveTelephonyProvider(companyId) : "telnyx";
+      const activeProvider = telephonyCompanyId ? await getActiveTelephonyProvider(telephonyCompanyId) : "telnyx";
       if (activeProvider === "signalwire") {
-        const sw = companyId ? await getSignalWireConfig(companyId) : null;
+        const sw = telephonyCompanyId ? await getSignalWireConfig(telephonyCompanyId) : null;
         if (sw?.space && sw?.projectId && sw?.apiToken && sw?.enabled) {
           const from = fromRaw && !fromRaw.includes("5550002222") ? fromRaw : sw.defaultCallerId || "+12082489823";
           if (from) {
@@ -149961,7 +149961,7 @@ var smsRouter = createRouter({
           }
         }
       } else {
-        const cfg = companyId ? await getTelnyxConfig(companyId) : null;
+        const cfg = telephonyCompanyId ? await getTelnyxConfig(telephonyCompanyId) : null;
         if (cfg?.apiKey && cfg?.enabled) {
           const from = fromRaw || cfg.defaultCallerId || "";
           if (from) {
@@ -150146,7 +150146,7 @@ var integrationRouter = createRouter({
   // Gated on callerQuery: this hands out a SIP password, so read-only viewers
   // have no business calling it.
   getDialerConfig: callerQuery.query(async ({ ctx }) => {
-    const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? void 0);
+    const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? 1);
     const activeProvider = companyId ? await getActiveTelephonyProvider(companyId) : "telnyx";
     const cfg = companyId ? await getTelnyxConfig(companyId) : null;
     const swCfg = companyId ? await getSignalWireConfig(companyId) : null;
@@ -150484,7 +150484,7 @@ var integrationRouter = createRouter({
     return testSignalWireConnection(space, projectId, apiToken);
   }),
   getSignalWireSubscriberToken: callerQuery.mutation(async ({ ctx }) => {
-    const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? void 0);
+    const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? 1);
     if (!companyId) {
       return { ok: false, message: "No company associated with user." };
     }

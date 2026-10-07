@@ -73,7 +73,8 @@ export const integrationRouter = createRouter({
   // Gated on callerQuery: this hands out a SIP password, so read-only viewers
   // have no business calling it.
   getDialerConfig: callerQuery.query(async ({ ctx }) => {
-    const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? undefined);
+    // Same company the Settings page saves telephony config to (companyScope).
+    const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? 1);
     const activeProvider = companyId ? await getActiveTelephonyProvider(companyId) : "telnyx";
     const cfg = companyId ? await getTelnyxConfig(companyId) : null;
     const swCfg = companyId ? await getSignalWireConfig(companyId) : null;
@@ -511,7 +512,8 @@ export const integrationRouter = createRouter({
 
   getSignalWireSubscriberToken: callerQuery
     .mutation(async ({ ctx }) => {
-      const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? undefined);
+      // Same company the Settings page saves telephony config to (companyScope).
+      const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? 1);
       if (!companyId) {
         return { ok: false as const, message: "No company associated with user." };
       }

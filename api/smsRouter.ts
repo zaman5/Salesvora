@@ -168,6 +168,8 @@ export const smsRouter = createRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const companyId = (ctx.user as any).companyId;
+      // Telephony config lives on the same company Settings saves it to.
+      const telephonyCompanyId: number | null = companyId ?? (ctx.user.role === "superadmin" ? 1 : null);
       let success = true;
       let error: string | undefined;
       let providerMsgId: string | undefined;
@@ -180,9 +182,9 @@ export const smsRouter = createRouter({
 
       // Attempt real SMS delivery via active provider (SignalWire or Telnyx) if configured
       try {
-        const activeProvider = companyId ? await getActiveTelephonyProvider(companyId) : "telnyx";
+        const activeProvider = telephonyCompanyId ? await getActiveTelephonyProvider(telephonyCompanyId) : "telnyx";
         if (activeProvider === "signalwire") {
-          const sw = companyId ? await getSignalWireConfig(companyId) : null;
+          const sw = telephonyCompanyId ? await getSignalWireConfig(telephonyCompanyId) : null;
           if (sw?.space && sw?.projectId && sw?.apiToken && sw?.enabled) {
             const from = (fromRaw && !fromRaw.includes("5550002222"))
               ? fromRaw
@@ -202,7 +204,7 @@ export const smsRouter = createRouter({
             }
           }
         } else {
-          const cfg = companyId ? await getTelnyxConfig(companyId) : null;
+          const cfg = telephonyCompanyId ? await getTelnyxConfig(telephonyCompanyId) : null;
           if (cfg?.apiKey && cfg?.enabled) {
             const from = fromRaw || cfg.defaultCallerId || "";
             if (from) {

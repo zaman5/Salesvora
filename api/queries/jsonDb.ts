@@ -470,7 +470,13 @@ export function writeJsonDb(data: JsonDb): void {
       if (fs.existsSync(DB_PATH)) {
         try { fs.copyFileSync(DB_PATH, BAK_PATH); } catch { /* non-fatal */ }
       }
-      fs.writeFileSync(DB_PATH, json, "utf-8");
+      // Write-then-rename so a concurrent reader never sees a half-written
+      // file. A partial read is treated as corruption and restores db.json.bak
+      // — the PREVIOUS state — silently reverting the change just saved
+      // (e.g. flipping the active telephony provider back).
+      const tmp = `${DB_PATH}.${process.pid}.tmp`;
+      fs.writeFileSync(tmp, json, "utf-8");
+      fs.renameSync(tmp, DB_PATH);
       return;
     } catch (err: any) {
       attempts++;
