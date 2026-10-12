@@ -14,7 +14,7 @@ import {
   getSignalWireConfig, saveSignalWireConfig, maskSignalWireConfig,
   getActiveTelephonyProvider, setActiveTelephonyProvider, type TelephonyProvider,
 } from "./lib/signalwireConfig";
-import { testSignalWireConnection, listSignalWirePhoneNumbers, issueSignalWireSubscriberToken } from "./lib/signalwire";
+import { testSignalWireConnection, listSignalWirePhoneNumbers, issueSignalWireSubscriberToken, routeSignalWireNumbersToSwml } from "./lib/signalwire";
 import { sameNumber } from "./lib/telnyxWebhook";
 import { listPhoneNumbers, addPhoneNumber, updatePhoneNumber, removePhoneNumber, togglePhoneNumber, assignPhoneNumber, numbersForCaller } from "./lib/phoneNumbers";
 
@@ -509,6 +509,49 @@ export const integrationRouter = createRouter({
       }
 
       return testSignalWireConnection(space, projectId, apiToken);
+    }),
+
+  // Inbound calls can only reach the browser dialer (a Call Fabric subscriber) through SWML,
+  // so point the company's SignalWire numbers at our SWML voice webhook. Also drops an inbound
+  // forward that is just the outbound SIP credential (the LiveKit agent), which would
+  // otherwise race the agents for every inbound call.
+  repairSignalWireInbound: adminQuery
+    .input(z.object({ origin: z.string().url() }))
+    .mutation(async ({ ctx, input }) => {
+      const companyId = companyScope(ctx.user);
+      const cfg = await getSignalWireConfig(companyId);
+      if (!cfg?.projectId || !cfg?.apiToken) {
+        return { ok: false as const, message: "Save your SignalWire Project ID and API Token first.", actions: [] as string[] };
+      }
+
+      const actions: string[] = [];
+      const swmlUrl = `${input.origin.replace(/\/+$/, "")}/api/webhooks/signalwire/voice`;
+      const pool = await listPhoneNumbers(companyId);
+      const numbers = [cfg.defaultCallerId || "", ...pool.filter((p) => p.status === "active").map((p) => p.number)].filter(Boolean);
+      if (numbers.length === 0) {
+        return { ok: false as const, message: "No SignalWire number is configured — set a Default Caller ID first.", actions };
+      }
+
+      const routed = await routeSignalWireNumbersToSwml(cfg.space, cfg.projectId, cfg.apiToken, numbers, swmlUrl);
+      if (!routed.ok) return { ok: false as const, message: routed.message, actions };
+      for (const n of routed.data.updated) actions.push(`${n}: inbound calls now use the SWML script ${swmlUrl}.`);
+      for (const n of routed.data.alreadySet) actions.push(`${n}: already routed to ${swmlUrl}.`);
+
+      const fwd = (cfg.inboundForwardSip || "").replace(/^sip:/, "").trim().toLowerCase();
+      const outboundCred = (cfg.sipCredential || "").replace(/^sip:/, "").trim().toLowerCase();
+      if (fwd && (fwd === outboundCred || fwd.startsWith("livekit-agent@"))) {
+        await saveSignalWireConfig(companyId, { inboundForwardSip: "" });
+        actions.push(`Removed inbound forward to ${cfg.inboundForwardSip} — calls now ring the browser dialer.`);
+      }
+
+      if (routed.data.updated.length === 0 && routed.data.alreadySet.length === 0) {
+        return {
+          ok: false as const,
+          message: `None of these numbers are in your SignalWire project: ${routed.data.notFound.join(", ")}.`,
+          actions,
+        };
+      }
+      return { ok: true as const, message: "Inbound calls will ring the SalesVora browser dialer.", actions };
     }),
 
   getSignalWireSubscriberToken: callerQuery

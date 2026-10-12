@@ -366,6 +366,11 @@ export function ManualDialTab() {
                   rtc.status === "registered" ? "bg-green-400" : rtc.status === "connecting" ? "bg-yellow-400" : "bg-red-400"
                 }`} />
                 {rtc.status === "registered" ? (dialerConfig?.provider === "signalwire" ? "🟢 SignalWire WebRTC Ready" : "🟢 SIP Ready") : rtc.status === "connecting" ? "Connecting…" : "Not connected"}
+                {rtc.status === "registered" && "inboundReady" in rtc && (
+                  <span className={rtc.inboundReady ? "text-green-400/80" : "text-yellow-400"}>
+                    {rtc.inboundReady ? " · receiving calls" : " · inbound offline"}
+                  </span>
+                )}
               </span>
             ) : dialerConfig?.provider === "signalwire" ? (
               <span className="flex items-center gap-1.5 text-green-400 font-medium text-[11px]">

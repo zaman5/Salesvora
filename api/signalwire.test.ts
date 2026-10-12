@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { generateVoiceCXml } from "./lib/signalwire";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { generateVoiceCXml, generateInboundSwml, routeSignalWireNumbersToSwml } from "./lib/signalwire";
 import {
   saveSignalWireConfig,
   getSignalWireConfig,
@@ -32,6 +32,64 @@ describe("SignalWire cXML Generation", () => {
 
     expect(xml).toContain("<Say>Connecting call</Say>");
     expect(xml).toContain("<Dial>+15550002222</Dial>");
+  });
+});
+
+describe("SignalWire inbound SWML", () => {
+  it("rings every destination in parallel and falls back to voicemail", () => {
+    const swml = generateInboundSwml({
+      greeting: "Thanks for calling SalesVora.",
+      destinations: ["/private/jane", "/private/jane", "+15550002222"],
+      eventUrl: "https://salesvora.online/api/webhooks/signalwire/swml-event",
+    }) as any;
+
+    const main = swml.sections.main;
+    expect(main[0]).toEqual({ answer: {} });
+    expect(main[1].play.url).toBe("say:Thanks for calling SalesVora.");
+    const connect = main[2].connect;
+    expect(connect.parallel).toEqual([{ to: "/private/jane" }, { to: "+15550002222" }]);
+    const failed = JSON.stringify(connect.result.case.failed);
+    expect(failed).toContain('"record"');
+    expect(failed).toContain('"event":"voicemail"');
+  });
+
+  it("goes straight to voicemail when there is nobody to ring", () => {
+    const swml = generateInboundSwml({ destinations: [] }) as any;
+    const steps = JSON.stringify(swml.sections.main);
+    expect(steps).not.toContain("connect");
+    expect(steps).toContain("record");
+  });
+});
+
+describe("SignalWire number routing", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("switches only the requested numbers to the SWML script", async () => {
+    const puts: Array<{ url: string; body: any }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        puts.push({ url, body: JSON.parse(String(init.body)) });
+        return new Response("{}");
+      }
+      return new Response(JSON.stringify({
+        data: [
+          { id: "pn-1", number: "+12082489823", call_handler: "laml_webhooks" },
+          { id: "pn-2", number: "+15550009999", call_handler: "relay_sip_endpoint" },
+        ],
+        links: {},
+      }));
+    }));
+
+    const res = await routeSignalWireNumbersToSwml("x.signalwire.com", "proj", "tok", ["(208) 248-9823", "+15551230000"], "https://salesvora.online/api/webhooks/signalwire/voice");
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.updated).toEqual(["+12082489823"]);
+    expect(res.data.notFound).toEqual(["+15551230000"]);
+    expect(puts).toHaveLength(1);
+    expect(puts[0].url).toContain("/api/relay/rest/phone_numbers/pn-1");
+    expect(puts[0].body).toEqual({ call_handler: "relay_script", call_relay_script_url: "https://salesvora.online/api/webhooks/signalwire/voice" });
   });
 });
 
@@ -82,6 +140,52 @@ describe("SignalWire Webhooks", () => {
     const xml = await res.text();
     expect(xml).toContain("<Response>");
     expect(xml).toContain("<Say>");
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("answers a SWML fetch with SWML that rings the browser subscriber", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/addresses")) {
+        return new Response(JSON.stringify({ data: [{ name: "agent", channels: { audio: "/private/agent?channel=audio" } }] }));
+      }
+      // No subscriber matches, so the call should route to voicemail rather than LiveKit
+      return new Response(JSON.stringify({ data: [], links: {} }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.request("/api/webhooks/signalwire/voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        call: {
+          call_id: "swml-call-" + Date.now(),
+          from: "+15550001111",
+          to: "+15550002222",
+          project_id: "6e1caf1e-238f-4ab3-b618-d164507f1250",
+        },
+        vars: {},
+        params: {},
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const swml = (await res.json()) as any;
+    expect(swml.version).toBe("1.0.0");
+    expect(swml.sections.main[0]).toEqual({ answer: {} });
+    // Never forwards to the outbound SIP credential (the LiveKit agent)
+    expect(JSON.stringify(swml)).not.toContain("livekit-agent");
+  });
+
+  it("records SWML events against the inbound call", async () => {
+    const res = await app.request("/api/webhooks/signalwire/swml-event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event: "no_answer", call_id: "unknown-call" }),
+    });
+    expect(res.status).toBe(200);
   });
 
   it("handles /api/webhooks/signalwire/outbound-connect", async () => {

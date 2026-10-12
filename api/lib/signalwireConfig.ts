@@ -81,7 +81,8 @@ export async function getSignalWireConfig(companyId: number): Promise<SignalWire
       sipCredential: cfg?.sipCredential || envSipEndpoint || "livekit-agent@salesvora-d164507f1250.sip.signalwire.com",
       defaultCallerId: cfg?.defaultCallerId || envCallerId,
       inboundGreeting: cfg?.inboundGreeting || "Thanks for calling SalesVora. Connecting you now.",
-      inboundForwardSip: cfg?.inboundForwardSip || envSipEndpoint || "",
+      // The SIP endpoint is the outbound credential; it is never an inbound forward target.
+      inboundForwardSip: cfg?.inboundForwardSip || "",
       inboundForwardNumber: cfg?.inboundForwardNumber || "",
       webrtcEnabled: cfg?.webrtcEnabled ?? true,
     };

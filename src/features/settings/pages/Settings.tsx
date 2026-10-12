@@ -1413,6 +1413,16 @@ function SignalWireWebhookEndpointsCard() {
   const [copiedStatus, setCopiedStatus] = useState(false);
   const [copiedSms, setCopiedSms] = useState(false);
 
+  const utils = trpc.useUtils();
+  const [inboundFix, setInboundFix] = useState<{ ok: boolean; message: string; actions?: string[] } | null>(null);
+  const repairInbound = trpc.integration.repairSignalWireInbound.useMutation({
+    onSuccess: (res) => {
+      setInboundFix(res);
+      utils.integration.getSignalWire.invalidate();
+    },
+    onError: (err) => setInboundFix({ ok: false, message: err.message }),
+  });
+
   const copyToClipboard = (text: string, setCopied: (v: boolean) => void) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       navigator.clipboard.writeText(text);
@@ -1440,10 +1450,10 @@ function SignalWireWebhookEndpointsCard() {
             <div className="flex items-center justify-between mb-1">
               <Label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
                 <PhoneIncoming className="w-3.5 h-3.5 text-blue-500" />
-                Inbound Voice Webhook (cXML Script URL)
+                Inbound Voice Webhook (SWML Script URL)
               </Label>
               <span className="text-[10px] font-mono bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 px-1.5 py-0.5 rounded">
-                POST · cXML Script
+                POST · SWML Script
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -1464,8 +1474,30 @@ function SignalWireWebhookEndpointsCard() {
               </Button>
             </div>
             <p className="text-[11px] text-gray-500 mt-1">
-              Set in SignalWire: <em>When a Call Comes In</em> → choose <strong>cXML Script</strong> → <strong>POST</strong> → paste this URL.
+              Inbound calls must use an <strong>SWML Script</strong> handler to ring the browser dialer — a cXML
+              script can only forward to phone numbers or SIP. Click below to set it on your numbers automatically.
             </p>
+            <div className="flex items-center gap-2 mt-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={repairInbound.isPending}
+                onClick={() => {
+                  setInboundFix(null);
+                  repairInbound.mutate({ origin });
+                }}
+                className="text-xs bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {repairInbound.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <PhoneIncoming className="w-3.5 h-3.5 mr-1" />}
+                Fix Inbound Calls
+              </Button>
+            </div>
+            {inboundFix && (
+              <div className={`mt-2 text-[11px] rounded px-2 py-1.5 ${inboundFix.ok ? "bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400"}`}>
+                <p className="font-medium">{inboundFix.message}</p>
+                {inboundFix.actions?.map((a) => <p key={a}>• {a}</p>)}
+              </div>
+            )}
           </div>
 
           {/* 2. Status Callback Webhook */}

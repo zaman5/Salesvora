@@ -64,6 +64,27 @@ async function recentCallTo(callerId: number, toNumber: string) {
   });
 }
 
+// The inbound voice webhook logs a call the moment it arrives. When an agent answers in the
+// browser, attach them to that row instead of logging the same call a second time.
+const INBOUND_ADOPT_MS = 2 * 60_000;
+async function recentWebhookInboundCall(companyId: number, callerNumber: string) {
+  const all = await findCallsByCompany(companyId, 1, 25);
+  const list = (Array.isArray(all) ? all : (all as { items?: unknown[] })?.items ?? []) as Array<{
+    id: number; callSid?: string; fromNumber?: string; status?: string; type?: string; createdAt?: string | Date; startedAt?: string | Date;
+  }>;
+  const target = toE164(callerNumber);
+  const now = Date.now();
+  return list.find((c) => {
+    const at = new Date((c.startedAt ?? c.createdAt) as string).getTime();
+    return (
+      c.type === "inbound" &&
+      c.fromNumber && toE164(c.fromNumber) === target &&
+      ["ringing", "connected"].includes(c.status ?? "") &&
+      now - at < INBOUND_ADOPT_MS
+    );
+  });
+}
+
 export const callRouter = createRouter({
   // ─── Call CRUD ───
   list: callerQuery
@@ -117,6 +138,14 @@ export const callRouter = createRouter({
           code: "FORBIDDEN",
           message: "Your account is not linked to a company, so it cannot place calls.",
         });
+      }
+
+      if (input.type === "inbound") {
+        const logged = await recentWebhookInboundCall(companyId, input.toNumber);
+        if (logged) {
+          await updateCall(logged.id, { callerId: ctx.user.id });
+          return { id: logged.id, callSid: logged.callSid ?? "", success: true, error: undefined };
+        }
       }
 
       const activeProvider = await getActiveTelephonyProvider(companyId);

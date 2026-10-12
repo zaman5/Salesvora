@@ -147548,7 +147548,8 @@ async function getSignalWireConfig(companyId) {
       sipCredential: cfg?.sipCredential || envSipEndpoint || "livekit-agent@salesvora-d164507f1250.sip.signalwire.com",
       defaultCallerId: cfg?.defaultCallerId || envCallerId,
       inboundGreeting: cfg?.inboundGreeting || "Thanks for calling SalesVora. Connecting you now.",
-      inboundForwardSip: cfg?.inboundForwardSip || envSipEndpoint || "",
+      // The SIP endpoint is the outbound credential; it is never an inbound forward target.
+      inboundForwardSip: cfg?.inboundForwardSip || "",
       inboundForwardNumber: cfg?.inboundForwardNumber || "",
       webrtcEnabled: cfg?.webrtcEnabled ?? true
     };
@@ -147692,6 +147693,59 @@ async function testSignalWireConnection(space, projectId, apiToken) {
       ok: false,
       status: 0,
       message: err instanceof Error ? `Could not reach SignalWire space: ${err.message}` : "Network error connecting to SignalWire."
+    };
+  }
+}
+async function routeSignalWireNumbersToSwml(space, projectId, apiToken, numbers, swmlUrl) {
+  if (!space || !projectId || !apiToken) {
+    return { ok: false, status: 400, message: "SignalWire is not configured." };
+  }
+  const cleanSpace = normalizeSpace(space);
+  const headers = {
+    Authorization: basicAuthHeader(projectId, apiToken),
+    "Content-Type": "application/json",
+    Accept: "application/json"
+  };
+  const wanted = [...new Set(numbers.map((n) => toE164(n)).filter((n) => n.length > 4))];
+  const updated = [];
+  const alreadySet = [];
+  try {
+    const owned = [];
+    let url2 = `https://${cleanSpace}/api/relay/rest/phone_numbers?page_size=100`;
+    for (let page = 0; url2 && page < 20; page++) {
+      const res = await fetch(url2, { headers });
+      if (!res.ok) return { ok: false, status: res.status, message: await parseSignalWireError(res) };
+      const body = await res.json();
+      for (const row of body?.data ?? []) {
+        owned.push({ id: String(row.id), number: String(row.number), handler: row.call_handler, scriptUrl: row.call_relay_script_url });
+      }
+      url2 = body?.links?.next || void 0;
+    }
+    const notFound = [];
+    for (const num of wanted) {
+      const match2 = owned.find((o) => toE164(o.number) === num);
+      if (!match2) {
+        notFound.push(num);
+        continue;
+      }
+      if (match2.handler === "relay_script" && match2.scriptUrl === swmlUrl) {
+        alreadySet.push(num);
+        continue;
+      }
+      const res = await fetch(`https://${cleanSpace}/api/relay/rest/phone_numbers/${encodeURIComponent(match2.id)}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ call_handler: "relay_script", call_relay_script_url: swmlUrl })
+      });
+      if (!res.ok) return { ok: false, status: res.status, message: `${num}: ${await parseSignalWireError(res)}` };
+      updated.push(num);
+    }
+    return { ok: true, data: { updated, alreadySet, notFound } };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      message: err instanceof Error ? `SignalWire number update failed: ${err.message}` : "Network error updating SignalWire numbers."
     };
   }
 }
@@ -147908,6 +147962,109 @@ async function issueSignalWireSubscriberToken(space, projectId, apiToken, refere
       message: err instanceof Error ? `SignalWire subscriber token failed: ${err.message}` : "Network error issuing SignalWire subscriber token."
     };
   }
+}
+var subscriberAddressCache = /* @__PURE__ */ new Map();
+var SUBSCRIBER_CACHE_TTL_MS = 10 * 60 * 1e3;
+async function findSignalWireSubscriberAddresses(space, projectId, apiToken, emails) {
+  if (!space || !projectId || !apiToken || emails.length === 0) return [];
+  const cleanSpace = normalizeSpace(space);
+  const auth = basicAuthHeader(projectId, apiToken);
+  const wanted = new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean));
+  const now = Date.now();
+  const result = [];
+  const missing = /* @__PURE__ */ new Set();
+  for (const email3 of wanted) {
+    const hit = subscriberAddressCache.get(`${cleanSpace}|${email3}`);
+    if (hit && now - hit.at < SUBSCRIBER_CACHE_TTL_MS) {
+      if (hit.address) result.push(hit.address);
+    } else {
+      missing.add(email3);
+    }
+  }
+  if (missing.size === 0) return result;
+  const getJson = async (url2) => {
+    const res = await fetch(url2, {
+      headers: { Authorization: auth, Accept: "application/json" },
+      signal: AbortSignal.timeout(4e3)
+    });
+    if (!res.ok) throw new Error(await parseSignalWireError(res));
+    return res.json();
+  };
+  try {
+    const idsByEmail = /* @__PURE__ */ new Map();
+    let url2 = `https://${cleanSpace}/api/fabric/resources/subscribers?page_size=100`;
+    for (let page = 0; url2 && page < 10 && idsByEmail.size < missing.size; page++) {
+      const body = await getJson(url2);
+      for (const row of body?.data ?? []) {
+        const email3 = String(row?.subscriber?.email ?? "").toLowerCase();
+        if (email3 && missing.has(email3) && row?.id) idsByEmail.set(email3, String(row.id));
+      }
+      url2 = body?.links?.next || void 0;
+    }
+    await Promise.all(
+      [...missing].map(async (email3) => {
+        const id = idsByEmail.get(email3);
+        let address = null;
+        if (id) {
+          try {
+            const body = await getJson(`https://${cleanSpace}/api/fabric/resources/subscribers/${id}/addresses`);
+            const rows = Array.isArray(body) ? body.flatMap((b) => b?.data ?? []) : body?.data ?? [];
+            const usable = rows.find((r) => !r?.locked && (r?.channels?.audio || r?.name));
+            if (usable) {
+              address = usable.channels?.audio ? String(usable.channels.audio).split("?")[0] : `/private/${usable.name}`;
+            }
+          } catch (err) {
+            console.warn(`[signalwire] could not load addresses for subscriber ${email3}:`, err);
+          }
+        }
+        subscriberAddressCache.set(`${cleanSpace}|${email3}`, { address, at: now });
+        if (address) result.push(address);
+      })
+    );
+  } catch (err) {
+    console.warn("[signalwire] subscriber address lookup failed:", err);
+  }
+  return result;
+}
+function generateInboundSwml(options) {
+  const sayUrl = (text2) => `say:${text2.replace(/\s+/g, " ").trim()}`;
+  const notify = (event, extra = {}) => options.eventUrl ? [{
+    request: {
+      url: options.eventUrl,
+      method: "POST",
+      body: { event, call_id: "%{call.call_id}", from: "%{call.from}", to: "%{call.to}", ...extra },
+      timeout: 5
+    }
+  }] : [];
+  const voicemail = [
+    { play: { url: sayUrl(options.voicemailPrompt || "Sorry, no one is available to take your call. Please leave a message after the tone.") } },
+    { record: { beep: true, format: "mp3", end_silence_timeout: 5, terminators: "#" } },
+    ...notify("voicemail", { record_url: "%{record_url}" }),
+    { hangup: {} }
+  ];
+  const main = [{ answer: {} }];
+  if (options.greeting && options.greeting.trim()) {
+    main.push({ play: { url: sayUrl(options.greeting) } });
+  }
+  const destinations = [...new Set(options.destinations.map((d) => d.trim()).filter(Boolean))];
+  if (destinations.length === 0) {
+    main.push(...notify("no_answer"), ...voicemail);
+  } else {
+    main.push({
+      connect: {
+        parallel: destinations.map((to) => ({ to })),
+        timeout: options.timeout ?? 25,
+        result: {
+          case: {
+            connected: [...notify("completed"), { hangup: {} }],
+            failed: [...notify("no_answer"), ...voicemail]
+          },
+          default: [...notify("no_answer"), ...voicemail]
+        }
+      }
+    });
+  }
+  return { version: "1.0.0", sections: { main } };
 }
 function generateVoiceCXml(options) {
   const parts = ['<?xml version="1.0" encoding="UTF-8"?>', "<Response>"];
@@ -148274,6 +148431,17 @@ async function recentCallTo(callerId, toNumber) {
     return c.type !== "inbound" && c.toNumber && toE164(c.toNumber) === target && ["initiated", "ringing", "connected"].includes(c.status ?? "") && now - at < REDIAL_GUARD_MS;
   });
 }
+var INBOUND_ADOPT_MS = 2 * 6e4;
+async function recentWebhookInboundCall(companyId, callerNumber) {
+  const all = await findCallsByCompany(companyId, 1, 25);
+  const list = Array.isArray(all) ? all : all?.items ?? [];
+  const target = toE164(callerNumber);
+  const now = Date.now();
+  return list.find((c) => {
+    const at = new Date(c.startedAt ?? c.createdAt).getTime();
+    return c.type === "inbound" && c.fromNumber && toE164(c.fromNumber) === target && ["ringing", "connected"].includes(c.status ?? "") && now - at < INBOUND_ADOPT_MS;
+  });
+}
 var callRouter = createRouter({
   // ─── Call CRUD ───
   list: callerQuery.input(external_exports.object({
@@ -148312,6 +148480,13 @@ var callRouter = createRouter({
         code: "FORBIDDEN",
         message: "Your account is not linked to a company, so it cannot place calls."
       });
+    }
+    if (input.type === "inbound") {
+      const logged = await recentWebhookInboundCall(companyId, input.toNumber);
+      if (logged) {
+        await updateCall(logged.id, { callerId: ctx.user.id });
+        return { id: logged.id, callSid: logged.callSid ?? "", success: true, error: void 0 };
+      }
     }
     const activeProvider = await getActiveTelephonyProvider(companyId);
     let callSid = `CALL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -150633,6 +150808,42 @@ var integrationRouter = createRouter({
     }
     return testSignalWireConnection(space, projectId, apiToken);
   }),
+  // Inbound calls can only reach the browser dialer (a Call Fabric subscriber) through SWML,
+  // so point the company's SignalWire numbers at our SWML voice webhook. Also drops an inbound
+  // forward that is just the outbound SIP credential (the LiveKit agent), which would
+  // otherwise race the agents for every inbound call.
+  repairSignalWireInbound: adminQuery.input(external_exports.object({ origin: external_exports.string().url() })).mutation(async ({ ctx, input }) => {
+    const companyId = companyScope(ctx.user);
+    const cfg = await getSignalWireConfig(companyId);
+    if (!cfg?.projectId || !cfg?.apiToken) {
+      return { ok: false, message: "Save your SignalWire Project ID and API Token first.", actions: [] };
+    }
+    const actions = [];
+    const swmlUrl = `${input.origin.replace(/\/+$/, "")}/api/webhooks/signalwire/voice`;
+    const pool2 = await listPhoneNumbers(companyId);
+    const numbers = [cfg.defaultCallerId || "", ...pool2.filter((p) => p.status === "active").map((p) => p.number)].filter(Boolean);
+    if (numbers.length === 0) {
+      return { ok: false, message: "No SignalWire number is configured \u2014 set a Default Caller ID first.", actions };
+    }
+    const routed = await routeSignalWireNumbersToSwml(cfg.space, cfg.projectId, cfg.apiToken, numbers, swmlUrl);
+    if (!routed.ok) return { ok: false, message: routed.message, actions };
+    for (const n of routed.data.updated) actions.push(`${n}: inbound calls now use the SWML script ${swmlUrl}.`);
+    for (const n of routed.data.alreadySet) actions.push(`${n}: already routed to ${swmlUrl}.`);
+    const fwd = (cfg.inboundForwardSip || "").replace(/^sip:/, "").trim().toLowerCase();
+    const outboundCred = (cfg.sipCredential || "").replace(/^sip:/, "").trim().toLowerCase();
+    if (fwd && (fwd === outboundCred || fwd.startsWith("livekit-agent@"))) {
+      await saveSignalWireConfig(companyId, { inboundForwardSip: "" });
+      actions.push(`Removed inbound forward to ${cfg.inboundForwardSip} \u2014 calls now ring the browser dialer.`);
+    }
+    if (routed.data.updated.length === 0 && routed.data.alreadySet.length === 0) {
+      return {
+        ok: false,
+        message: `None of these numbers are in your SignalWire project: ${routed.data.notFound.join(", ")}.`,
+        actions
+      };
+    }
+    return { ok: true, message: "Inbound calls will ring the SalesVora browser dialer.", actions };
+  }),
   getSignalWireSubscriberToken: callerQuery.mutation(async ({ ctx }) => {
     const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? 1);
     if (!companyId) {
@@ -151046,7 +151257,7 @@ async function resolveSignalWireCompany(to, accountSid) {
           companyId: comp.id,
           defaultCallerId: sw.defaultCallerId,
           greeting: sw.inboundGreeting,
-          forwardSip: sw.inboundForwardSip || sw.sipCredential,
+          forwardSip: sw.inboundForwardSip,
           forwardNumber: sw.inboundForwardNumber
         };
       }
@@ -151060,7 +151271,7 @@ async function resolveSignalWireCompany(to, accountSid) {
           companyId: comp.id,
           defaultCallerId: sw.defaultCallerId,
           greeting: sw.inboundGreeting,
-          forwardSip: sw.inboundForwardSip || sw.sipCredential,
+          forwardSip: sw.inboundForwardSip,
           forwardNumber: sw.inboundForwardNumber
         };
       }
@@ -151070,7 +151281,7 @@ async function resolveSignalWireCompany(to, accountSid) {
           companyId: comp.id,
           defaultCallerId: sw?.defaultCallerId,
           greeting: sw?.inboundGreeting,
-          forwardSip: sw?.inboundForwardSip || sw?.sipCredential,
+          forwardSip: sw?.inboundForwardSip,
           forwardNumber: sw?.inboundForwardNumber
         };
       }
@@ -151083,14 +151294,93 @@ async function resolveSignalWireCompany(to, accountSid) {
         companyId: comp.id,
         defaultCallerId: sw.defaultCallerId,
         greeting: sw.inboundGreeting,
-        forwardSip: sw.inboundForwardSip || sw.sipCredential,
+        forwardSip: sw.inboundForwardSip,
         forwardNumber: sw.inboundForwardNumber
       };
     }
   }
   return { companyId: all[0]?.id ?? 1 };
 }
+async function logInboundSignalWireCall(opts) {
+  const { companyId, from, to, callSid, accountSid } = opts;
+  const lead = from ? await findLeadByPhone(companyId, from).catch(() => null) : null;
+  const users3 = await findAllUsers(companyId);
+  const callerId = users3.find((u) => u.role === "admin" || u.role === "superadmin")?.id ?? users3[0]?.id ?? 1;
+  const existing = callSid ? await findCallByCallSid(callSid) : null;
+  if (!existing) {
+    await createCall({
+      callSid: callSid || `SW_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      callerId,
+      adminId: void 0,
+      leadId: lead?.id ?? null,
+      companyId,
+      type: "inbound",
+      direction: "inbound",
+      toNumber: to || "unknown",
+      fromNumber: from || void 0,
+      status: "ringing",
+      customFields: {
+        signalwire: {
+          callSid,
+          accountSid,
+          provider: "signalwire"
+        }
+      },
+      startedAt: /* @__PURE__ */ new Date()
+    });
+  }
+}
+function publicOrigin(c) {
+  const host = c.req.header("x-forwarded-host") || c.req.header("host");
+  const proto = c.req.header("x-forwarded-proto") || "https";
+  const dynamicOrigin = host ? `${proto}://${host}` : "https://salesvora.online";
+  const origin = process.env.PUBLIC_APP_URL && process.env.PUBLIC_APP_URL !== "https://api.salesvora.com" ? process.env.PUBLIC_APP_URL : dynamicOrigin;
+  return origin.replace(/\/+$/, "");
+}
+async function readSwmlCall(c) {
+  if (!(c.req.header("content-type") || "").includes("application/json")) return null;
+  try {
+    const body = await c.req.json();
+    return body && typeof body.call === "object" && body.call ? body.call : null;
+  } catch {
+    return null;
+  }
+}
 webhooksApp.all("/signalwire/voice", async (c) => {
+  const swmlCall = await readSwmlCall(c);
+  if (swmlCall) {
+    try {
+      const from = String(swmlCall.from_number || swmlCall.from || "");
+      const to = String(swmlCall.to_number || swmlCall.to || "");
+      const callSid = String(swmlCall.call_id || "");
+      const accountSid = String(swmlCall.project_id || "");
+      const { companyId, greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
+      await logInboundSignalWireCall({ companyId, from, to, callSid, accountSid });
+      const sw = await getSignalWireConfig(companyId);
+      const users3 = await findAllUsers(companyId);
+      const emails = users3.map((u) => u.email || "").filter(Boolean);
+      const subscribers = sw ? await findSignalWireSubscriberAddresses(sw.space, sw.projectId, sw.apiToken, emails) : [];
+      const destinations = [...subscribers];
+      if (forwardNumber && forwardNumber.trim()) destinations.push(toE164(forwardNumber.trim()));
+      if (forwardSip && forwardSip.trim()) {
+        destinations.push(forwardSip.trim().startsWith("sip:") ? forwardSip.trim() : `sip:${forwardSip.trim()}`);
+      }
+      if (destinations.length === 0) {
+        console.warn(`[signalwire webhook] inbound call ${callSid} for company ${companyId}: no subscriber or forward target \u2014 going to voicemail`);
+      }
+      return c.json(generateInboundSwml({
+        greeting: greeting || "Thanks for calling SalesVora. Connecting you now.",
+        destinations,
+        eventUrl: `${publicOrigin(c)}/api/webhooks/signalwire/swml-event`
+      }));
+    } catch (err) {
+      console.error("[signalwire webhook] Error in /voice (SWML):", err);
+      return c.json(generateInboundSwml({
+        greeting: "Thank you for calling.",
+        destinations: []
+      }));
+    }
+  }
   try {
     const params = await parseWebhookParams(c);
     const from = params.From || params.Caller || "";
@@ -151098,32 +151388,7 @@ webhooksApp.all("/signalwire/voice", async (c) => {
     const callSid = params.CallSid || "";
     const accountSid = params.AccountSid || "";
     const { companyId, greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
-    const lead = from ? await findLeadByPhone(companyId, from).catch(() => null) : null;
-    const users3 = await findAllUsers(companyId);
-    const callerId = users3.find((u) => u.role === "admin" || u.role === "superadmin")?.id ?? users3[0]?.id ?? 1;
-    const existing = callSid ? await findCallByCallSid(callSid) : null;
-    if (!existing) {
-      await createCall({
-        callSid: callSid || `SW_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        callerId,
-        adminId: void 0,
-        leadId: lead?.id ?? null,
-        companyId,
-        type: "inbound",
-        direction: "inbound",
-        toNumber: to || "unknown",
-        fromNumber: from || void 0,
-        status: "ringing",
-        customFields: {
-          signalwire: {
-            callSid,
-            accountSid,
-            provider: "signalwire"
-          }
-        },
-        startedAt: /* @__PURE__ */ new Date()
-      });
-    }
+    await logInboundSignalWireCall({ companyId, from, to, callSid, accountSid });
     const xml = generateVoiceCXml({
       greeting: greeting || "Thanks for calling SalesVora. Connecting you now.",
       forwardSip: forwardSip || void 0,
@@ -151137,6 +151402,32 @@ webhooksApp.all("/signalwire/voice", async (c) => {
     });
     return c.text(fallbackXml, 200, { "Content-Type": "application/xml; charset=utf-8" });
   }
+});
+webhooksApp.post("/signalwire/swml-event", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const callSid = body.call_id || "";
+    const existing = callSid ? await findCallByCallSid(callSid) : null;
+    if (existing) {
+      const endedAt = /* @__PURE__ */ new Date();
+      const startedAt = existing.startedAt ? new Date(existing.startedAt) : null;
+      const elapsed = startedAt ? Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1e3)) : 0;
+      if (body.event === "completed") {
+        await updateCall(existing.id, { status: "completed", endedAt, duration: existing.duration || elapsed });
+      } else if (body.event === "no_answer") {
+        await updateCall(existing.id, { status: "no_answer", endedAt });
+      } else if (body.event === "voicemail") {
+        const recordingUrl = body.record_url && !body.record_url.includes("%{") ? body.record_url : "";
+        if (recordingUrl) {
+          await updateCall(existing.id, { recordingUrl, endedAt });
+          await createRecording({ callId: existing.id, recordingUrl, duration: 0, format: "mp3" });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[signalwire webhook] Error in /swml-event:", err);
+  }
+  return c.json({ received: true });
 });
 webhooksApp.all("/signalwire/outbound-connect", async (c) => {
   try {

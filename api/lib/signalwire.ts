@@ -170,6 +170,73 @@ export async function listSignalWirePhoneNumbers(
 }
 
 /**
+ * Point SignalWire numbers' inbound calls at a SWML script URL (call_handler "relay_script").
+ * Only numbers in `numbers` are touched — the project may also hold numbers for other apps.
+ * PUT https://{space}/api/relay/rest/phone_numbers/{id}
+ */
+export async function routeSignalWireNumbersToSwml(
+  space: string,
+  projectId: string,
+  apiToken: string,
+  numbers: string[],
+  swmlUrl: string,
+): Promise<SignalWireResult<{ updated: string[]; alreadySet: string[]; notFound: string[] }>> {
+  if (!space || !projectId || !apiToken) {
+    return { ok: false, status: 400, message: "SignalWire is not configured." };
+  }
+  const cleanSpace = normalizeSpace(space);
+  const headers = {
+    Authorization: basicAuthHeader(projectId, apiToken),
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+  const wanted = [...new Set(numbers.map((n) => toE164(n)).filter((n) => n.length > 4))];
+  const updated: string[] = [];
+  const alreadySet: string[] = [];
+
+  try {
+    const owned: Array<{ id: string; number: string; handler?: string; scriptUrl?: string }> = [];
+    let url: string | undefined = `https://${cleanSpace}/api/relay/rest/phone_numbers?page_size=100`;
+    for (let page = 0; url && page < 20; page++) {
+      const res: Response = await fetch(url, { headers });
+      if (!res.ok) return { ok: false, status: res.status, message: await parseSignalWireError(res) };
+      const body: any = await res.json();
+      for (const row of body?.data ?? []) {
+        owned.push({ id: String(row.id), number: String(row.number), handler: row.call_handler, scriptUrl: row.call_relay_script_url });
+      }
+      url = body?.links?.next || undefined;
+    }
+
+    const notFound: string[] = [];
+    for (const num of wanted) {
+      const match = owned.find((o) => toE164(o.number) === num);
+      if (!match) {
+        notFound.push(num);
+        continue;
+      }
+      if (match.handler === "relay_script" && match.scriptUrl === swmlUrl) {
+        alreadySet.push(num);
+        continue;
+      }
+      const res = await fetch(`https://${cleanSpace}/api/relay/rest/phone_numbers/${encodeURIComponent(match.id)}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ call_handler: "relay_script", call_relay_script_url: swmlUrl }),
+      });
+      if (!res.ok) return { ok: false, status: res.status, message: `${num}: ${await parseSignalWireError(res)}` };
+      updated.push(num);
+    }
+    return { ok: true, data: { updated, alreadySet, notFound } };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      message: err instanceof Error ? `SignalWire number update failed: ${err.message}` : "Network error updating SignalWire numbers.",
+    };
+  }
+}
+
+/**
  * Place an outbound call via SignalWire LAML REST API.
  * POST https://{space}/api/laml/2010-04-01/Accounts/{ProjectID}/Calls.json
  */
@@ -463,6 +530,154 @@ export async function issueSignalWireSubscriberToken(
       message: err instanceof Error ? `SignalWire subscriber token failed: ${err.message}` : "Network error issuing SignalWire subscriber token.",
     };
   }
+}
+
+// Subscriber email → "/private/name" audio address. Addresses never change for a
+// subscriber, so a short cache keeps the inbound webhook fast (SignalWire waits on it).
+const subscriberAddressCache = new Map<string, { address: string | null; at: number }>();
+const SUBSCRIBER_CACHE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Resolve the Call Fabric addresses (e.g. "/private/jane") of the subscribers the browser
+ * dialer signs in as. The dialer issues tokens with `reference = user email`, so the
+ * subscriber's email is the join key. Unknown emails are simply skipped.
+ */
+export async function findSignalWireSubscriberAddresses(
+  space: string,
+  projectId: string,
+  apiToken: string,
+  emails: string[],
+): Promise<string[]> {
+  if (!space || !projectId || !apiToken || emails.length === 0) return [];
+  const cleanSpace = normalizeSpace(space);
+  const auth = basicAuthHeader(projectId, apiToken);
+  const wanted = new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean));
+  const now = Date.now();
+
+  const result: string[] = [];
+  const missing = new Set<string>();
+  for (const email of wanted) {
+    const hit = subscriberAddressCache.get(`${cleanSpace}|${email}`);
+    if (hit && now - hit.at < SUBSCRIBER_CACHE_TTL_MS) {
+      if (hit.address) result.push(hit.address);
+    } else {
+      missing.add(email);
+    }
+  }
+  if (missing.size === 0) return result;
+
+  const getJson = async (url: string): Promise<any> => {
+    const res = await fetch(url, {
+      headers: { Authorization: auth, Accept: "application/json" },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) throw new Error(await parseSignalWireError(res));
+    return res.json();
+  };
+
+  try {
+    // 1. Page through subscribers to map email → subscriber resource id
+    const idsByEmail = new Map<string, string>();
+    let url: string | undefined = `https://${cleanSpace}/api/fabric/resources/subscribers?page_size=100`;
+    for (let page = 0; url && page < 10 && idsByEmail.size < missing.size; page++) {
+      const body: any = await getJson(url);
+      for (const row of body?.data ?? []) {
+        const email = String(row?.subscriber?.email ?? "").toLowerCase();
+        if (email && missing.has(email) && row?.id) idsByEmail.set(email, String(row.id));
+      }
+      url = body?.links?.next || undefined;
+    }
+
+    // 2. Fetch each matched subscriber's audio address
+    await Promise.all(
+      [...missing].map(async (email) => {
+        const id = idsByEmail.get(email);
+        let address: string | null = null;
+        if (id) {
+          try {
+            const body: any = await getJson(`https://${cleanSpace}/api/fabric/resources/subscribers/${id}/addresses`);
+            // Docs show both `{data: [...]}` and `[{data: [...]}]` shapes.
+            const rows: any[] = Array.isArray(body) ? body.flatMap((b: any) => b?.data ?? []) : body?.data ?? [];
+            const usable = rows.find((r) => !r?.locked && (r?.channels?.audio || r?.name));
+            if (usable) {
+              address = usable.channels?.audio
+                ? String(usable.channels.audio).split("?")[0]
+                : `/private/${usable.name}`;
+            }
+          } catch (err) {
+            console.warn(`[signalwire] could not load addresses for subscriber ${email}:`, err);
+          }
+        }
+        subscriberAddressCache.set(`${cleanSpace}|${email}`, { address, at: now });
+        if (address) result.push(address);
+      }),
+    );
+  } catch (err) {
+    console.warn("[signalwire] subscriber address lookup failed:", err);
+  }
+  return result;
+}
+
+/**
+ * Generate a SWML document for an inbound call: greet, ring every agent's browser dialer
+ * (Call Fabric subscriber addresses) and/or a forward number in parallel, and fall back
+ * to voicemail when nobody answers. cXML cannot do this — its <Dial> has no noun for
+ * Fabric subscribers — so inbound numbers must use a SWML handler to reach the browser.
+ *
+ * `eventUrl` receives JSON POSTs ({event, call_id, ...}) so the CRM can track the call.
+ */
+export function generateInboundSwml(options: {
+  greeting?: string;
+  destinations: string[];
+  timeout?: number;
+  eventUrl?: string;
+  voicemailPrompt?: string;
+}): Record<string, unknown> {
+  const sayUrl = (text: string) => `say:${text.replace(/\s+/g, " ").trim()}`;
+  const notify = (event: string, extra: Record<string, string> = {}) =>
+    options.eventUrl
+      ? [{
+          request: {
+            url: options.eventUrl,
+            method: "POST",
+            body: { event, call_id: "%{call.call_id}", from: "%{call.from}", to: "%{call.to}", ...extra },
+            timeout: 5,
+          },
+        }]
+      : [];
+
+  const voicemail = [
+    { play: { url: sayUrl(options.voicemailPrompt || "Sorry, no one is available to take your call. Please leave a message after the tone.") } },
+    { record: { beep: true, format: "mp3", end_silence_timeout: 5, terminators: "#" } },
+    ...notify("voicemail", { record_url: "%{record_url}" }),
+    { hangup: {} },
+  ];
+
+  const main: unknown[] = [{ answer: {} }];
+  if (options.greeting && options.greeting.trim()) {
+    main.push({ play: { url: sayUrl(options.greeting) } });
+  }
+
+  const destinations = [...new Set(options.destinations.map((d) => d.trim()).filter(Boolean))];
+  if (destinations.length === 0) {
+    main.push(...notify("no_answer"), ...voicemail);
+  } else {
+    main.push({
+      connect: {
+        parallel: destinations.map((to) => ({ to })),
+        timeout: options.timeout ?? 25,
+        result: {
+          case: {
+            connected: [...notify("completed"), { hangup: {} }],
+            failed: [...notify("no_answer"), ...voicemail],
+          },
+          default: [...notify("no_answer"), ...voicemail],
+        },
+      },
+    });
+  }
+
+  return { version: "1.0.0", sections: { main } };
 }
 
 /**

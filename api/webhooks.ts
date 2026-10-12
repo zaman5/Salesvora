@@ -355,10 +355,11 @@ webhooksApp.post("/telnyx", async (c) => {
 // 3. SignalWire Webhooks
 // ─────────────────────────────────────────────────────────────────────────────
 import { getSignalWireConfig } from "./lib/signalwireConfig";
-import { generateVoiceCXml } from "./lib/signalwire";
+import { generateVoiceCXml, generateInboundSwml, findSignalWireSubscriberAddresses } from "./lib/signalwire";
 import { findAllCompanies } from "./queries/companies";
 import { listPhoneNumbers } from "./lib/phoneNumbers";
 import { findCallByCallSid } from "./queries/calls";
+import { toE164 } from "./lib/telnyx";
 
 async function parseWebhookParams(c: any): Promise<Record<string, string>> {
   const contentType = c.req.header("content-type") || "";
@@ -395,7 +396,7 @@ async function resolveSignalWireCompany(to?: string, accountSid?: string): Promi
           companyId: comp.id,
           defaultCallerId: sw.defaultCallerId,
           greeting: sw.inboundGreeting,
-          forwardSip: sw.inboundForwardSip || sw.sipCredential,
+          forwardSip: sw.inboundForwardSip,
           forwardNumber: sw.inboundForwardNumber,
         };
       }
@@ -411,7 +412,7 @@ async function resolveSignalWireCompany(to?: string, accountSid?: string): Promi
           companyId: comp.id,
           defaultCallerId: sw.defaultCallerId,
           greeting: sw.inboundGreeting,
-          forwardSip: sw.inboundForwardSip || sw.sipCredential,
+          forwardSip: sw.inboundForwardSip,
           forwardNumber: sw.inboundForwardNumber,
         };
       }
@@ -421,7 +422,7 @@ async function resolveSignalWireCompany(to?: string, accountSid?: string): Promi
           companyId: comp.id,
           defaultCallerId: sw?.defaultCallerId,
           greeting: sw?.inboundGreeting,
-          forwardSip: sw?.inboundForwardSip || sw?.sipCredential,
+          forwardSip: sw?.inboundForwardSip,
           forwardNumber: sw?.inboundForwardNumber,
         };
       }
@@ -436,7 +437,7 @@ async function resolveSignalWireCompany(to?: string, accountSid?: string): Promi
         companyId: comp.id,
         defaultCallerId: sw.defaultCallerId,
         greeting: sw.inboundGreeting,
-        forwardSip: sw.inboundForwardSip || sw.sipCredential,
+        forwardSip: sw.inboundForwardSip,
         forwardNumber: sw.inboundForwardNumber,
       };
     }
@@ -445,9 +446,112 @@ async function resolveSignalWireCompany(to?: string, accountSid?: string): Promi
   return { companyId: all[0]?.id ?? 1 };
 }
 
-// Inbound Voice Webhook (cXML Script URL)
-// SignalWire calls this when someone dials a SignalWire number.
+async function logInboundSignalWireCall(opts: {
+  companyId: number;
+  from: string;
+  to: string;
+  callSid: string;
+  accountSid: string;
+}) {
+  const { companyId, from, to, callSid, accountSid } = opts;
+  const lead = from ? await findLeadByPhone(companyId, from).catch(() => null) : null;
+  const users = (await findAllUsers(companyId)) as Array<{ id: number; role?: string }>;
+  const callerId = users.find((u) => u.role === "admin" || u.role === "superadmin")?.id ?? users[0]?.id ?? 1;
+
+  // Deduplicate or create inbound call
+  const existing = callSid ? await findCallByCallSid(callSid) : null;
+  if (!existing) {
+    await createCall({
+      callSid: callSid || `SW_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      callerId,
+      adminId: undefined,
+      leadId: (lead as { id?: number } | null)?.id ?? null,
+      companyId,
+      type: "inbound",
+      direction: "inbound",
+      toNumber: to || "unknown",
+      fromNumber: from || undefined,
+      status: "ringing",
+      customFields: {
+        signalwire: {
+          callSid,
+          accountSid,
+          provider: "signalwire",
+        },
+      },
+      startedAt: new Date(),
+    });
+  }
+}
+
+function publicOrigin(c: any): string {
+  const host = c.req.header("x-forwarded-host") || c.req.header("host");
+  const proto = c.req.header("x-forwarded-proto") || "https";
+  const dynamicOrigin = host ? `${proto}://${host}` : "https://salesvora.online";
+  const origin = (process.env.PUBLIC_APP_URL && process.env.PUBLIC_APP_URL !== "https://api.salesvora.com")
+    ? process.env.PUBLIC_APP_URL
+    : dynamicOrigin;
+  return origin.replace(/\/+$/, "");
+}
+
+/** SWML document fetches POST JSON with a `call` object; cXML webhooks POST form fields. */
+async function readSwmlCall(c: any): Promise<Record<string, any> | null> {
+  if (!(c.req.header("content-type") || "").includes("application/json")) return null;
+  try {
+    const body = await c.req.json();
+    return body && typeof body.call === "object" && body.call ? body.call : null;
+  } catch {
+    return null;
+  }
+}
+
+// Inbound Voice Webhook
+// SignalWire calls this when someone dials a SignalWire number. When the number's handler
+// is a SWML script pointing here, we answer with SWML that rings the agents' browser
+// dialers (Call Fabric subscribers). A cXML handler gets cXML, which can only reach
+// PSTN/SIP targets — cXML has no way to ring a browser subscriber.
 webhooksApp.all("/signalwire/voice", async (c) => {
+  const swmlCall = await readSwmlCall(c);
+  if (swmlCall) {
+    try {
+      const from = String(swmlCall.from_number || swmlCall.from || "");
+      const to = String(swmlCall.to_number || swmlCall.to || "");
+      const callSid = String(swmlCall.call_id || "");
+      const accountSid = String(swmlCall.project_id || "");
+
+      const { companyId, greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
+      await logInboundSignalWireCall({ companyId, from, to, callSid, accountSid });
+
+      const sw = await getSignalWireConfig(companyId);
+      const users = (await findAllUsers(companyId)) as Array<{ email?: string | null }>;
+      const emails = users.map((u) => u.email || "").filter(Boolean);
+      const subscribers = sw
+        ? await findSignalWireSubscriberAddresses(sw.space, sw.projectId, sw.apiToken, emails)
+        : [];
+
+      const destinations = [...subscribers];
+      if (forwardNumber && forwardNumber.trim()) destinations.push(toE164(forwardNumber.trim()));
+      if (forwardSip && forwardSip.trim()) {
+        destinations.push(forwardSip.trim().startsWith("sip:") ? forwardSip.trim() : `sip:${forwardSip.trim()}`);
+      }
+      if (destinations.length === 0) {
+        console.warn(`[signalwire webhook] inbound call ${callSid} for company ${companyId}: no subscriber or forward target — going to voicemail`);
+      }
+
+      return c.json(generateInboundSwml({
+        greeting: greeting || "Thanks for calling SalesVora. Connecting you now.",
+        destinations,
+        eventUrl: `${publicOrigin(c)}/api/webhooks/signalwire/swml-event`,
+      }));
+    } catch (err) {
+      console.error("[signalwire webhook] Error in /voice (SWML):", err);
+      return c.json(generateInboundSwml({
+        greeting: "Thank you for calling.",
+        destinations: [],
+      }));
+    }
+  }
+
   try {
     const params = await parseWebhookParams(c);
     const from = params.From || params.Caller || "";
@@ -456,36 +560,7 @@ webhooksApp.all("/signalwire/voice", async (c) => {
     const accountSid = params.AccountSid || "";
 
     const { companyId, greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
-
-    // Find lead & caller
-    const lead = from ? await findLeadByPhone(companyId, from).catch(() => null) : null;
-    const users = (await findAllUsers(companyId)) as Array<{ id: number; role?: string }>;
-    const callerId = users.find((u) => u.role === "admin" || u.role === "superadmin")?.id ?? users[0]?.id ?? 1;
-
-    // Deduplicate or create inbound call
-    const existing = callSid ? await findCallByCallSid(callSid) : null;
-    if (!existing) {
-      await createCall({
-        callSid: callSid || `SW_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        callerId,
-        adminId: undefined,
-        leadId: (lead as { id?: number } | null)?.id ?? null,
-        companyId,
-        type: "inbound",
-        direction: "inbound",
-        toNumber: to || "unknown",
-        fromNumber: from || undefined,
-        status: "ringing",
-        customFields: {
-          signalwire: {
-            callSid,
-            accountSid,
-            provider: "signalwire",
-          },
-        },
-        startedAt: new Date(),
-      });
-    }
+    await logInboundSignalWireCall({ companyId, from, to, callSid, accountSid });
 
     // Generate cXML response
     const xml = generateVoiceCXml({
@@ -502,6 +577,36 @@ webhooksApp.all("/signalwire/voice", async (c) => {
     });
     return c.text(fallbackXml, 200, { "Content-Type": "application/xml; charset=utf-8" });
   }
+});
+
+// SWML call events (posted by the `request` steps in generateInboundSwml)
+webhooksApp.post("/signalwire/swml-event", async (c) => {
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, string>;
+    const callSid = body.call_id || "";
+    const existing = callSid ? await findCallByCallSid(callSid) : null;
+    if (existing) {
+      const endedAt = new Date();
+      const startedAt = existing.startedAt ? new Date(existing.startedAt) : null;
+      const elapsed = startedAt ? Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)) : 0;
+
+      if (body.event === "completed") {
+        await updateCall(existing.id, { status: "completed", endedAt, duration: existing.duration || elapsed });
+      } else if (body.event === "no_answer") {
+        await updateCall(existing.id, { status: "no_answer", endedAt });
+      } else if (body.event === "voicemail") {
+        // An unset SWML variable is left as the literal "%{record_url}".
+        const recordingUrl = body.record_url && !body.record_url.includes("%{") ? body.record_url : "";
+        if (recordingUrl) {
+          await updateCall(existing.id, { recordingUrl, endedAt });
+          await createRecording({ callId: existing.id, recordingUrl, duration: 0, format: "mp3" });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[signalwire webhook] Error in /swml-event:", err);
+  }
+  return c.json({ received: true });
 });
 
 // Outbound Connect Webhook (cXML returned when an outbound call connects)
