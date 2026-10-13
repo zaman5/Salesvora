@@ -14,7 +14,7 @@ import {
   getSignalWireConfig, saveSignalWireConfig, maskSignalWireConfig,
   getActiveTelephonyProvider, setActiveTelephonyProvider, type TelephonyProvider,
 } from "./lib/signalwireConfig";
-import { testSignalWireConnection, listSignalWirePhoneNumbers, issueSignalWireSubscriberToken, routeSignalWireNumbersToSwml } from "./lib/signalwire";
+import { testSignalWireConnection, listSignalWirePhoneNumbers, issueSignalWireSubscriberToken, routeSignalWireNumbersToSwml, recentInboundCalls } from "./lib/signalwire";
 import { sameNumber } from "./lib/telnyxWebhook";
 import { listPhoneNumbers, addPhoneNumber, updatePhoneNumber, removePhoneNumber, togglePhoneNumber, assignPhoneNumber, numbersForCaller } from "./lib/phoneNumbers";
 
@@ -544,6 +544,20 @@ export const integrationRouter = createRouter({
         actions.push(`Removed inbound forward to ${cfg.inboundForwardSip} — calls now ring the browser dialer.`);
       }
 
+      const agents = Object.values(cfg.agentAddresses ?? {});
+      actions.push(
+        agents.length
+          ? `Browser dialers that will ring: ${agents.map((a) => `${a.email || "agent"} (${a.address})`).join(", ")}.`
+          : "No browser dialer has gone online yet — open the Dialer page (allow the microphone) and wait for \"Receiving calls\".",
+      );
+      const recent = recentInboundCalls(companyId).slice(0, 5);
+      if (recent.length === 0) {
+        actions.push("No inbound call has reached SalesVora since the server started. If you just called and it did not show up here, the number is not pointed at SalesVora.");
+      }
+      for (const r of recent) {
+        actions.push(`${r.at} — call from ${r.from || "unknown"} (${r.mode.toUpperCase()}): ${r.note}`);
+      }
+
       if (routed.data.updated.length === 0 && routed.data.alreadySet.length === 0) {
         return {
           ok: false as const,
@@ -567,6 +581,30 @@ export const integrationRouter = createRouter({
       }
       const reference = ctx.user.email || `user-${ctx.user.id}@salesvora.com`;
       return issueSignalWireSubscriberToken(cfg.space, cfg.projectId, cfg.apiToken, reference);
+    }),
+
+  // The browser dialer reports its own Call Fabric address once it is online, so the inbound
+  // webhook can ring it without having to find the subscriber through the REST API.
+  reportSignalWireAddress: callerQuery
+    .input(z.object({ address: z.string().regex(/^\/(private|public)\/[^\s?]+$/) }))
+    .mutation(async ({ ctx, input }) => {
+      const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? 1);
+      if (!companyId) return { ok: false as const };
+      const cfg = await getSignalWireConfig(companyId);
+      if (!cfg) return { ok: false as const };
+      const key = String(ctx.user.id);
+      const prev = cfg.agentAddresses?.[key];
+      // Refresh at most hourly — every dialer page load reports in.
+      if (prev?.address === input.address && Date.now() - new Date(prev.at).getTime() < 60 * 60_000) {
+        return { ok: true as const };
+      }
+      await saveSignalWireConfig(companyId, {
+        agentAddresses: {
+          ...(cfg.agentAddresses ?? {}),
+          [key]: { address: input.address, email: ctx.user.email ?? undefined, at: new Date().toISOString() },
+        },
+      });
+      return { ok: true as const };
     }),
 });
 

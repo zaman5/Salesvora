@@ -19,6 +19,9 @@ export type SignalWireConfig = {
   webhookVoiceUrl?: string; // Optional custom voice webhook URL
   webhookStatusUrl?: string; // Optional custom status webhook URL
   webhookSmsUrl?: string; // Optional custom SMS webhook URL
+  // Call Fabric address ("/private/jane") each agent's browser dialer reported after going
+  // online, keyed by user id. The inbound webhook rings these.
+  agentAddresses?: Record<string, { address: string; email?: string; at: string }>;
   updatedAt?: string;
 };
 
@@ -85,6 +88,7 @@ export async function getSignalWireConfig(companyId: number): Promise<SignalWire
       inboundForwardSip: cfg?.inboundForwardSip || "",
       inboundForwardNumber: cfg?.inboundForwardNumber || "",
       webrtcEnabled: cfg?.webrtcEnabled ?? true,
+      agentAddresses: cfg?.agentAddresses,
     };
   }
 

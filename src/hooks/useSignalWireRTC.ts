@@ -70,6 +70,7 @@ export function useSignalWireRTC({ enabled }: Options) {
   const subsRef = useRef<any[]>([]);
 
   const getTokenMutation = trpc.integration.getSignalWireSubscriberToken.useMutation();
+  const reportAddressMutation = trpc.integration.reportSignalWireAddress.useMutation();
 
   const cleanup = useCallback(() => {
     subsRef.current.forEach((sub) => {
@@ -155,7 +156,7 @@ export function useSignalWireRTC({ enabled }: Options) {
           if (incoming$) {
             const callsSub = incoming$.subscribe((calls: any[]) => {
               if (!isMounted || !Array.isArray(calls)) return;
-              const inbound = calls.find((c) => c && c !== callRef.current && c.status !== "destroyed");
+              const inbound = calls.find((c) => c && c !== callRef.current && !["disconnecting", "disconnected", "failed", "destroyed"].includes(c.status));
               if (!inbound || callStateRef.current === "ringing" || callStateRef.current === "active") return;
 
               callRef.current = inbound;
@@ -189,9 +190,35 @@ export function useSignalWireRTC({ enabled }: Options) {
             subsRef.current.push(callsSub);
           }
 
+          // Tell the server which Call Fabric address this browser answers on, so the inbound
+          // webhook rings it ("/private/jane?channel=audio" → "/private/jane").
+          let reportedAddress = "";
+          const reportAddress = (user: any) => {
+            const rows: any[] = Array.isArray(user?.addresses) ? user.addresses : [];
+            const row = rows.find((a) => !a?.locked && (a?.channels?.audio || a?.name)) ?? rows[0];
+            const address = row?.channels?.audio
+              ? String(row.channels.audio).split("?")[0]
+              : row?.name ? `/private/${row.name}` : "";
+            if (!address || address === reportedAddress || !isMounted) return;
+            reportedAddress = address;
+            reportAddressMutation.mutate({ address });
+          };
+          if (client.user$) {
+            const userSub = client.user$.subscribe((user: any) => {
+              reportAddress(user);
+              // The profile can arrive before its addresses are fetched.
+              if (user?.fetched$) {
+                const fetchedSub = user.fetched$.subscribe((done: boolean) => { if (done) reportAddress(user); });
+                subsRef.current.push(fetchedSub);
+              }
+            });
+            subsRef.current.push(userSub);
+          }
+
           try {
             await client.register();
             if (isMounted) setInboundReady(true);
+            reportAddress(client.user);
           } catch (regErr) {
             console.warn("[SignalWire WebRTC] Could not go online for inbound calls:", regErr);
             if (isMounted) setInboundReady(false);

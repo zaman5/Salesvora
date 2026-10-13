@@ -8,6 +8,7 @@ import {
   getActiveTelephonyProvider,
 } from "./lib/signalwireConfig";
 import app from "./app";
+import { findAllUsers } from "./queries/users";
 
 describe("SignalWire cXML Generation", () => {
   it("generates valid cXML for greeting and SIP forwarding", () => {
@@ -177,6 +178,26 @@ describe("SignalWire Webhooks", () => {
     expect(swml.sections.main[0]).toEqual({ answer: {} });
     // Never forwards to the outbound SIP credential (the LiveKit agent)
     expect(JSON.stringify(swml)).not.toContain("livekit-agent");
+  });
+
+  it("rings the address an agent's browser dialer reported", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ data: [], links: {} }))));
+    const users = (await findAllUsers(1)) as Array<{ id: number }>;
+    expect(users.length).toBeGreaterThan(0);
+    await saveSignalWireConfig(1, {
+      agentAddresses: { [String(users[0].id)]: { address: "/private/reported-agent", at: new Date().toISOString() } },
+    });
+
+    const res = await app.request("/api/webhooks/signalwire/voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        call: { call_id: "swml-rep-" + Date.now(), from: "+15550001111", to: "+15550002222", project_id: "6e1caf1e-238f-4ab3-b618-d164507f1250" },
+      }),
+    });
+    const swml = (await res.json()) as any;
+    const connect = swml.sections.main.find((s: any) => s.connect)?.connect;
+    expect(connect.parallel).toContainEqual({ to: "/private/reported-agent" });
   });
 
   it("records SWML events against the inbound call", async () => {

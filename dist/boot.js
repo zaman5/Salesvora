@@ -147551,7 +147551,8 @@ async function getSignalWireConfig(companyId) {
       // The SIP endpoint is the outbound credential; it is never an inbound forward target.
       inboundForwardSip: cfg?.inboundForwardSip || "",
       inboundForwardNumber: cfg?.inboundForwardNumber || "",
-      webrtcEnabled: cfg?.webrtcEnabled ?? true
+      webrtcEnabled: cfg?.webrtcEnabled ?? true,
+      agentAddresses: cfg?.agentAddresses
     };
   }
   return cfg ?? null;
@@ -148025,6 +148026,15 @@ async function findSignalWireSubscriberAddresses(space, projectId, apiToken, ema
     console.warn("[signalwire] subscriber address lookup failed:", err);
   }
   return result;
+}
+var inboundNotes = [];
+function noteInboundCall(entry) {
+  inboundNotes.unshift({ ...entry, at: (/* @__PURE__ */ new Date()).toISOString() });
+  inboundNotes.length = Math.min(inboundNotes.length, 50);
+  console.log(`[signalwire inbound] company ${entry.companyId} ${entry.mode} ${entry.from} \u2192 ${entry.to}: ${entry.note}`);
+}
+function recentInboundCalls(companyId) {
+  return inboundNotes.filter((n) => n.companyId === companyId);
 }
 function generateInboundSwml(options) {
   const sayUrl = (text2) => `say:${text2.replace(/\s+/g, " ").trim()}`;
@@ -150835,6 +150845,17 @@ var integrationRouter = createRouter({
       await saveSignalWireConfig(companyId, { inboundForwardSip: "" });
       actions.push(`Removed inbound forward to ${cfg.inboundForwardSip} \u2014 calls now ring the browser dialer.`);
     }
+    const agents = Object.values(cfg.agentAddresses ?? {});
+    actions.push(
+      agents.length ? `Browser dialers that will ring: ${agents.map((a) => `${a.email || "agent"} (${a.address})`).join(", ")}.` : 'No browser dialer has gone online yet \u2014 open the Dialer page (allow the microphone) and wait for "Receiving calls".'
+    );
+    const recent = recentInboundCalls(companyId).slice(0, 5);
+    if (recent.length === 0) {
+      actions.push("No inbound call has reached SalesVora since the server started. If you just called and it did not show up here, the number is not pointed at SalesVora.");
+    }
+    for (const r of recent) {
+      actions.push(`${r.at} \u2014 call from ${r.from || "unknown"} (${r.mode.toUpperCase()}): ${r.note}`);
+    }
     if (routed.data.updated.length === 0 && routed.data.alreadySet.length === 0) {
       return {
         ok: false,
@@ -150855,6 +150876,26 @@ var integrationRouter = createRouter({
     }
     const reference = ctx.user.email || `user-${ctx.user.id}@salesvora.com`;
     return issueSignalWireSubscriberToken(cfg.space, cfg.projectId, cfg.apiToken, reference);
+  }),
+  // The browser dialer reports its own Call Fabric address once it is online, so the inbound
+  // webhook can ring it without having to find the subscriber through the REST API.
+  reportSignalWireAddress: callerQuery.input(external_exports.object({ address: external_exports.string().regex(/^\/(private|public)\/[^\s?]+$/) })).mutation(async ({ ctx, input }) => {
+    const companyId = resolveCompanyScope(ctx.user, ctx.user.companyId ?? 1);
+    if (!companyId) return { ok: false };
+    const cfg = await getSignalWireConfig(companyId);
+    if (!cfg) return { ok: false };
+    const key = String(ctx.user.id);
+    const prev = cfg.agentAddresses?.[key];
+    if (prev?.address === input.address && Date.now() - new Date(prev.at).getTime() < 60 * 6e4) {
+      return { ok: true };
+    }
+    await saveSignalWireConfig(companyId, {
+      agentAddresses: {
+        ...cfg.agentAddresses ?? {},
+        [key]: { address: input.address, email: ctx.user.email ?? void 0, at: (/* @__PURE__ */ new Date()).toISOString() }
+      }
+    });
+    return { ok: true };
   })
 });
 
@@ -151358,16 +151399,21 @@ webhooksApp.all("/signalwire/voice", async (c) => {
       await logInboundSignalWireCall({ companyId, from, to, callSid, accountSid });
       const sw = await getSignalWireConfig(companyId);
       const users3 = await findAllUsers(companyId);
-      const emails = users3.map((u) => u.email || "").filter(Boolean);
-      const subscribers = sw ? await findSignalWireSubscriberAddresses(sw.space, sw.projectId, sw.apiToken, emails) : [];
-      const destinations = [...subscribers];
+      const reported2 = Object.entries(sw?.agentAddresses ?? {}).filter(([userId]) => users3.some((u) => String(u.id) === userId)).map(([, a]) => a.address);
+      const unreportedEmails = users3.filter((u) => !sw?.agentAddresses?.[String(u.id)]).map((u) => u.email || "").filter(Boolean);
+      const looked = sw && unreportedEmails.length ? await findSignalWireSubscriberAddresses(sw.space, sw.projectId, sw.apiToken, unreportedEmails).catch(() => []) : [];
+      const destinations = [.../* @__PURE__ */ new Set([...reported2, ...looked])];
       if (forwardNumber && forwardNumber.trim()) destinations.push(toE164(forwardNumber.trim()));
       if (forwardSip && forwardSip.trim()) {
         destinations.push(forwardSip.trim().startsWith("sip:") ? forwardSip.trim() : `sip:${forwardSip.trim()}`);
       }
-      if (destinations.length === 0) {
-        console.warn(`[signalwire webhook] inbound call ${callSid} for company ${companyId}: no subscriber or forward target \u2014 going to voicemail`);
-      }
+      noteInboundCall({
+        companyId,
+        from,
+        to,
+        mode: "swml",
+        note: destinations.length ? `ringing ${destinations.join(", ")}` : "no browser dialer is online and no forward number is set \u2014 sent to voicemail"
+      });
       return c.json(generateInboundSwml({
         greeting: greeting || "Thanks for calling SalesVora. Connecting you now.",
         destinations,
@@ -151389,6 +151435,22 @@ webhooksApp.all("/signalwire/voice", async (c) => {
     const accountSid = params.AccountSid || "";
     const { companyId, greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
     await logInboundSignalWireCall({ companyId, from, to, callSid, accountSid });
+    const sw = await getSignalWireConfig(companyId);
+    noteInboundCall({
+      companyId,
+      from,
+      to,
+      mode: "cxml",
+      note: forwardSip || forwardNumber ? `cXML webhook \u2014 forwarded to ${forwardNumber || forwardSip}; the browser dialer cannot ring on cXML` : "cXML webhook \u2014 the browser dialer cannot ring on cXML"
+    });
+    if (sw?.projectId && sw.apiToken && to) {
+      const swmlUrl = `${publicOrigin(c)}/api/webhooks/signalwire/voice`;
+      void routeSignalWireNumbersToSwml(sw.space, sw.projectId, sw.apiToken, [to], swmlUrl).then((routed) => {
+        if (!routed.ok) noteInboundCall({ companyId, from, to, mode: "cxml", note: `could not switch the number to SWML: ${routed.message}` });
+        else if (routed.data.updated.length) noteInboundCall({ companyId, from, to, mode: "cxml", note: "switched the number to SWML \u2014 call again and the dialer will ring" });
+      }).catch(() => {
+      });
+    }
     const xml = generateVoiceCXml({
       greeting: greeting || "Thanks for calling SalesVora. Connecting you now.",
       forwardSip: forwardSip || void 0,

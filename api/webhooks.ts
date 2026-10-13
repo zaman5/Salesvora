@@ -355,7 +355,7 @@ webhooksApp.post("/telnyx", async (c) => {
 // 3. SignalWire Webhooks
 // ─────────────────────────────────────────────────────────────────────────────
 import { getSignalWireConfig } from "./lib/signalwireConfig";
-import { generateVoiceCXml, generateInboundSwml, findSignalWireSubscriberAddresses } from "./lib/signalwire";
+import { generateVoiceCXml, generateInboundSwml, findSignalWireSubscriberAddresses, routeSignalWireNumbersToSwml, noteInboundCall } from "./lib/signalwire";
 import { findAllCompanies } from "./queries/companies";
 import { listPhoneNumbers } from "./lib/phoneNumbers";
 import { findCallByCallSid } from "./queries/calls";
@@ -523,20 +523,31 @@ webhooksApp.all("/signalwire/voice", async (c) => {
       await logInboundSignalWireCall({ companyId, from, to, callSid, accountSid });
 
       const sw = await getSignalWireConfig(companyId);
-      const users = (await findAllUsers(companyId)) as Array<{ email?: string | null }>;
-      const emails = users.map((u) => u.email || "").filter(Boolean);
-      const subscribers = sw
-        ? await findSignalWireSubscriberAddresses(sw.space, sw.projectId, sw.apiToken, emails)
+      const users = (await findAllUsers(companyId)) as Array<{ id: number; email?: string | null }>;
+      // Addresses the agents' browser dialers reported themselves (most reliable), then
+      // whatever the REST lookup by email finds for agents that have not reported yet.
+      const reported = Object.entries(sw?.agentAddresses ?? {})
+        .filter(([userId]) => users.some((u) => String(u.id) === userId))
+        .map(([, a]) => a.address);
+      const unreportedEmails = users
+        .filter((u) => !sw?.agentAddresses?.[String(u.id)])
+        .map((u) => u.email || "")
+        .filter(Boolean);
+      const looked = sw && unreportedEmails.length
+        ? await findSignalWireSubscriberAddresses(sw.space, sw.projectId, sw.apiToken, unreportedEmails).catch(() => [])
         : [];
 
-      const destinations = [...subscribers];
+      const destinations = [...new Set([...reported, ...looked])];
       if (forwardNumber && forwardNumber.trim()) destinations.push(toE164(forwardNumber.trim()));
       if (forwardSip && forwardSip.trim()) {
         destinations.push(forwardSip.trim().startsWith("sip:") ? forwardSip.trim() : `sip:${forwardSip.trim()}`);
       }
-      if (destinations.length === 0) {
-        console.warn(`[signalwire webhook] inbound call ${callSid} for company ${companyId}: no subscriber or forward target — going to voicemail`);
-      }
+      noteInboundCall({
+        companyId, from, to, mode: "swml",
+        note: destinations.length
+          ? `ringing ${destinations.join(", ")}`
+          : "no browser dialer is online and no forward number is set — sent to voicemail",
+      });
 
       return c.json(generateInboundSwml({
         greeting: greeting || "Thanks for calling SalesVora. Connecting you now.",
@@ -561,6 +572,26 @@ webhooksApp.all("/signalwire/voice", async (c) => {
 
     const { companyId, greeting, forwardSip, forwardNumber } = await resolveSignalWireCompany(to, accountSid);
     await logInboundSignalWireCall({ companyId, from, to, callSid, accountSid });
+
+    // cXML can never ring the browser dialer. Switch this number to the SWML handler so the
+    // next call does; this call still gets the greeting/forward below.
+    const sw = await getSignalWireConfig(companyId);
+    noteInboundCall({
+      companyId, from, to, mode: "cxml",
+      note: forwardSip || forwardNumber
+        ? `cXML webhook — forwarded to ${forwardNumber || forwardSip}; the browser dialer cannot ring on cXML`
+        : "cXML webhook — the browser dialer cannot ring on cXML",
+    });
+    if (sw?.projectId && sw.apiToken && to) {
+      // In the background: SignalWire is waiting on this response.
+      const swmlUrl = `${publicOrigin(c)}/api/webhooks/signalwire/voice`;
+      void routeSignalWireNumbersToSwml(sw.space, sw.projectId, sw.apiToken, [to], swmlUrl)
+        .then((routed) => {
+          if (!routed.ok) noteInboundCall({ companyId, from, to, mode: "cxml", note: `could not switch the number to SWML: ${routed.message}` });
+          else if (routed.data.updated.length) noteInboundCall({ companyId, from, to, mode: "cxml", note: "switched the number to SWML — call again and the dialer will ring" });
+        })
+        .catch(() => {});
+    }
 
     // Generate cXML response
     const xml = generateVoiceCXml({

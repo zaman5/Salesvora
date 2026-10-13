@@ -626,6 +626,21 @@ export async function findSignalWireSubscriberAddresses(
  *
  * `eventUrl` receives JSON POSTs ({event, call_id, ...}) so the CRM can track the call.
  */
+// The last inbound webhook hits, so "Fix Inbound Calls" can show what actually happened to
+// a test call. In memory only — it is a troubleshooting aid, not a call log.
+type InboundNote = { companyId: number; at: string; from: string; to: string; mode: "swml" | "cxml"; note: string };
+const inboundNotes: InboundNote[] = [];
+
+export function noteInboundCall(entry: Omit<InboundNote, "at">) {
+  inboundNotes.unshift({ ...entry, at: new Date().toISOString() });
+  inboundNotes.length = Math.min(inboundNotes.length, 50);
+  console.log(`[signalwire inbound] company ${entry.companyId} ${entry.mode} ${entry.from} → ${entry.to}: ${entry.note}`);
+}
+
+export function recentInboundCalls(companyId: number): InboundNote[] {
+  return inboundNotes.filter((n) => n.companyId === companyId);
+}
+
 export function generateInboundSwml(options: {
   greeting?: string;
   destinations: string[];
