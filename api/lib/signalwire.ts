@@ -499,16 +499,29 @@ export async function issueSignalWireSubscriberToken(
       /* ignore if subscriber already exists */
     }
 
-    // 2. Request token
-    const res = await fetch(endpoint, {
+    let currentToken = apiToken;
+    let res = await fetch(endpoint, {
       method: "POST",
       headers: {
-        Authorization: basicAuthHeader(projectId, apiToken),
+        Authorization: basicAuthHeader(projectId, currentToken),
         "Content-Type": "application/json",
         Accept: "application/json",
       },
       body: JSON.stringify({ reference }),
     });
+
+    if (res.status === 401 && process.env.SIGNALWIRE_API_TOKEN && process.env.SIGNALWIRE_API_TOKEN !== currentToken) {
+      currentToken = process.env.SIGNALWIRE_API_TOKEN;
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: basicAuthHeader(projectId, currentToken),
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ reference }),
+      });
+    }
 
     if (!res.ok) {
       return { ok: false, status: res.status, message: await parseSignalWireError(res) };

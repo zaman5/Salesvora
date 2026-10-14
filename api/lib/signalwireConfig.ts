@@ -80,7 +80,7 @@ export async function getSignalWireConfig(companyId: number): Promise<SignalWire
       enabled: cfg?.enabled ?? true,
       space: cfg?.space || envSpace || "salesvora.signalwire.com",
       projectId: cfg?.projectId || envProjectId,
-      apiToken: cfg?.apiToken || envApiToken,
+      apiToken: (cfg?.apiToken && !cfg.apiToken.startsWith("PT_") && !cfg.apiToken.includes("placeholder") ? cfg.apiToken : envApiToken),
       sipCredential: cfg?.sipCredential || envSipEndpoint || "livekit-agent@salesvora-d164507f1250.sip.signalwire.com",
       defaultCallerId: cfg?.defaultCallerId || envCallerId,
       inboundGreeting: cfg?.inboundGreeting || "Thanks for calling SalesVora. Connecting you now.",
