@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import type { Response } from 'express';
-import nodemailer from 'nodemailer';
 import db from '../db';
 import { requireAuth } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { applyVariables } from './send';
 import { extractInlineImages } from '../utils/inlineImages';
-import { publicAccountColumns, toPublicAccounts, MAX_LEADS_PER_REQUEST } from '../utils/security';
+import { sendAccountMail, isSmtpConnectionError } from '../utils/smtp';
+import { publicAccountColumns, toPublicAccounts, MAX_LEADS_PER_REQUEST, tlsOptionsFor } from '../utils/security';
+import { formatEmailHtml } from '../utils/emailFormat';
 
 const router = Router();
 
@@ -125,28 +126,6 @@ router.post('/send-test', requireAuth, async (req: AuthRequest, res: Response) =
   }
 
   try {
-    let transport: nodemailer.Transporter;
-
-    if (account.esp === 'Google') {
-      transport = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: account.email, pass: account.app_password },
-      });
-    } else if (account.esp === 'Microsoft') {
-      transport = nodemailer.createTransport({
-        host: 'smtp.office365.com', port: 587, secure: false,
-        auth: { user: account.email, pass: account.app_password },
-        tls: { ciphers: 'SSLv3' },
-      });
-    } else {
-      const port = parseInt(account.smtp_port || '587', 10);
-      transport = nodemailer.createTransport({
-        host: account.smtp_host, port, secure: port === 465,
-        auth: { user: account.smtp_user || account.email, pass: account.smtp_pass },
-        tls: { rejectUnauthorized: false },
-      });
-    }
-
     const senderName = [account.first_name, account.last_name].filter(Boolean).join(' ') || account.email;
 
     // Resolve {{variables}} the same way a real send would, so a test email
@@ -161,9 +140,10 @@ router.post('/send-test', requireAuth, async (req: AuthRequest, res: Response) =
     };
     const resolvedSubject = applyVariables(subject, sampleLead, account, signature);
     const resolvedBody    = applyVariables(body, sampleLead, account, signature);
-    const { html: inlinedHtml, attachments } = extractInlineImages(resolvedBody.replace(/\n/g, '<br>'));
+    const formattedHtml   = formatEmailHtml(resolvedBody);
+    const { html: inlinedHtml, attachments } = extractInlineImages(formattedHtml);
 
-    await transport.sendMail({
+    await sendAccountMail(account, {
       from:    `"${senderName}" <${account.email}>`,
       to:      toEmail,
       subject: `[TEST] ${resolvedSubject}`,
@@ -181,6 +161,9 @@ router.post('/send-test', requireAuth, async (req: AuthRequest, res: Response) =
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[send-test]', msg);
+    if (isSmtpConnectionError(err)) {
+      return res.status(400).json({ error: `${msg} The test email to ${toEmail} was not sent.` });
+    }
     return res.status(400).json({ error: `Failed to send: ${msg}` });
   }
 });
@@ -299,6 +282,134 @@ router.patch('/:id/leads/:leadId', requireAuth, (req: AuthRequest, res: Response
 
   res.json({ success: true });
 });
+
+
+// POST /api/campaigns/:id/leads/:leadId/send
+// Send the lead's current sequence step right now from a campaign account.
+router.post('/:id/leads/:leadId/send', requireAuth, async (req: AuthRequest, res: Response) => {
+  const c = db.prepare('SELECT * FROM campaigns WHERE id=? AND user_id=?').get(req.params.id, req.userId) as any;
+  if (!c) return res.status(404).json({ error: 'Campaign not found' });
+
+  const lead = db.prepare('SELECT * FROM campaign_leads WHERE id=? AND campaign_id=? AND user_id=?')
+    .get(req.params.leadId, c.id, req.userId) as any;
+  if (!lead) return res.status(404).json({ error: 'Lead not found in this campaign' });
+
+  const seqRow = db.prepare('SELECT steps_json FROM campaign_sequences WHERE campaign_id=?').get(c.id) as any;
+  const steps: any[] = seqRow?.steps_json ? (() => { try { return JSON.parse(seqRow.steps_json); } catch { return []; } })() : [];
+  if (!steps.length) {
+    return res.status(400).json({ error: 'No email sequence found. Go to Sequences tab and create at least one step.' });
+  }
+
+  const stepIdx = req.body?.stepIndex !== undefined
+    ? parseInt(req.body.stepIndex, 10)
+    : Math.min(lead.step_index ?? 0, steps.length - 1);
+  const step = steps[stepIdx] || steps[0];
+  const variations: any[] = step?.variations || [];
+  if (!variations.length) {
+    return res.status(400).json({ error: 'No variations found in this step.' });
+  }
+  const variation = variations[0];
+
+  // Prefer an account assigned to this campaign, else the user's first account
+  const assignedAccounts = db.prepare(`
+    SELECT ea.* FROM campaign_accounts ca
+    JOIN email_accounts ea ON ea.id = ca.account_id
+    WHERE ca.campaign_id = ? AND ea.user_id = ?
+  `).all(c.id, req.userId) as any[];
+  let account: any = assignedAccounts[0];
+  if (!account) {
+    account = db.prepare('SELECT * FROM email_accounts WHERE user_id=? LIMIT 1').get(req.userId);
+  }
+  if (!account) {
+    return res.status(400).json({ error: 'No sending account available. Please add an email account first in Email Accounts.' });
+  }
+
+  const sigRow    = db.prepare('SELECT signature FROM user_settings WHERE user_id=?').get(req.userId) as any;
+  const signature = sigRow?.signature || '';
+  const subject   = applyVariables(variation.subject || '(no subject)', lead, account, signature);
+  const htmlRaw   = applyVariables(variation.body || '', lead, account, signature);
+  const formattedHtml = formatEmailHtml(htmlRaw);
+  const { html: inlinedHtml, attachments: inlinedAttachments } = extractInlineImages(formattedHtml);
+
+  try {
+    const userAttachments: any[] = Array.isArray(variation.attachments) ? variation.attachments : [];
+    const mailAttachments = [
+      ...inlinedAttachments,
+      ...userAttachments.map(a => ({
+        filename: a.filename || 'attachment',
+        content: Buffer.isBuffer(a.content) ? a.content : Buffer.from(a.content, 'base64'),
+        contentType: a.contentType || 'application/octet-stream',
+      })),
+    ];
+
+    const attachmentsMeta = userAttachments.map(a => ({
+      filename: a.filename || 'attachment',
+      size: a.size || (a.content ? Math.round((a.content.length * 3) / 4) : 0),
+      contentType: a.contentType || 'application/octet-stream',
+      content: a.content || undefined,
+    }));
+
+    const senderName = [account.first_name, account.last_name].filter(Boolean).join(' ') || account.email;
+
+    await sendAccountMail(account, {
+      from:    `"${senderName}" <${account.email}>`,
+      to:      lead.email,
+      subject,
+      html:    inlinedHtml,
+      text:    htmlRaw.replace(/<[^>]+>/g, ' '),
+      attachments: mailAttachments,
+    });
+
+    const nextStep  = stepIdx + 1;
+    const newStatus = nextStep >= steps.length ? 'Completed' : 'In Progress';
+
+    // Update lead counters
+    db.prepare('UPDATE campaign_leads SET sent=sent+1, step_index=?, status=? WHERE id=?')
+      .run(nextStep, newStatus, lead.id);
+
+    // Update campaign counters
+    db.prepare('UPDATE campaigns SET sent=sent+1 WHERE id=?').run(c.id);
+
+    // Record in campaign_sends
+    db.prepare('INSERT INTO campaign_sends (campaign_id, account_id, lead_id, step_index, sent_at) VALUES (?, ?, ?, ?, ?)')
+      .run(c.id, account.id, lead.id, stepIdx, Date.now());
+
+    // Also record in inbox_cache under 'Sent' folder so it appears in Unified Inbox!
+    const now = new Date();
+    const sentUid = Math.floor(now.getTime() / 1000);
+    const sentId = `sent-${req.userId}-${account.id}-${now.getTime()}`;
+    db.prepare(`
+      INSERT INTO inbox_cache
+        (id, user_id, account_id, account_email, folder, uid, sender_name, sender_email,
+         recipient_email, subject, preview, body, attachments_json, date_raw, unread, starred, spam, synced_at)
+      VALUES (?, ?, ?, ?, 'Sent', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)
+    `).run(
+      sentId, req.userId, account.id, account.email, sentUid,
+      senderName, account.email, lead.email,
+      subject, htmlRaw.replace(/<[^>]+>/g, ' ').slice(0, 150),
+      inlinedHtml, JSON.stringify(attachmentsMeta), now.toISOString(), Date.now()
+    );
+
+    const updatedLead = db.prepare('SELECT * FROM campaign_leads WHERE id=?').get(lead.id);
+
+    return res.json({
+      success: true,
+      message: `Campaign email sent to ${lead.email} (Step ${stepIdx + 1})`,
+      lead: updatedLead,
+      fromAccount: account.email,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[campaign single send] ❌ Failed to send to ${lead.email}:`, msg);
+
+    if (isSmtpConnectionError(err)) {
+      return res.status(400).json({ error: `${msg} The email to ${lead.email} was not sent.` });
+    }
+
+    return res.status(400).json({ error: `Failed to send email: ${msg}` });
+  }
+});
+
 
 // ── Sequences (stored as JSON blob per campaign) ───────────────────────────────
 router.get('/:id/sequences', requireAuth, (req: AuthRequest, res: Response) => {

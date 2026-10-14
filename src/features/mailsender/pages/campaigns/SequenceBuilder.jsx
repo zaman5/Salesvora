@@ -20,9 +20,17 @@ const FONTS = ['Default','Arial','Arial Black','Georgia','Impact','Times New Rom
 let varSeq = 0;
 const newVariation = () => {
   varSeq += 1;
-  return { id: `v${Date.now()}_${varSeq}`, subject: '', body: '<p>{{random|Hi|Hello|Hey}} {{first_name}},</p><p><br></p><p>- {{sender_signature}}</p>' };
+  return { id: `v${Date.now()}_${varSeq}`, subject: '', body: '<p>{{random|Hi|Hello|Hey}} {{first_name}},</p><p><br></p><p>- {{sender_signature}}</p>', attachments: [] };
 };
 const letterFor = (vi) => 'ABCDEFGH'[vi] || `V${vi + 1}`;
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
 
 const makeStep = (n) => ({
   id: Date.now() + n,
@@ -32,9 +40,10 @@ const makeStep = (n) => ({
 });
 
 // ── Rich Editor ────────────────────────────────────────────────────────────────
-function RichEditor({ value, onChange }) {
+function RichEditor({ value, onChange, attachments = [], onAttachmentsChange }) {
   const editorRef  = useRef(null);
   const imgRef     = useRef(null);
+  const attachRef  = useRef(null);
   const lastRange  = useRef(null);
   const [showLink, setShowLink] = useState(false);
   const [linkUrl,  setLinkUrl]  = useState('');
@@ -97,6 +106,33 @@ function RichEditor({ value, onChange }) {
     const r = new FileReader();
     r.onload = ev => ins(`<img src="${ev.target.result}" style="max-width:100%;border-radius:6px;margin:4px 0"/>`);
     r.readAsDataURL(file);
+    e.target.value = '';
+  }
+
+  /* ── Attachment upload ── */
+  function handleAttachmentSelect(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    files.forEach(file => {
+      if (file.size > 20 * 1024 * 1024) {
+        alert(`File "${file.name}" exceeds the 20MB limit.`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result || '').toString().split(',')[1] || '';
+        const newAtt = {
+          filename: file.name,
+          content: base64,
+          contentType: file.type || 'application/octet-stream',
+          size: file.size,
+        };
+        if (onAttachmentsChange) {
+          onAttachmentsChange([...(attachments || []), newAtt]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
     e.target.value = '';
   }
 
@@ -229,6 +265,15 @@ function RichEditor({ value, onChange }) {
         <button title="Divider" onMouseDown={e=>{e.preventDefault();ins('<hr style="border:none;border-top:1px solid var(--overlay-15);margin:12px 0"/><p><br></p>');}}
           style={{background:'none',border:'none',color:'var(--text-secondary)',cursor:'pointer',padding:'3px 5px',borderRadius:4,fontSize:'0.85rem'}}>─</button>
 
+        {/* Attach File */}
+        <button title="Attach Files" onMouseDown={e=>{e.preventDefault();attachRef.current?.click();}}
+          style={{background:'none',border:'none',color:'var(--text-secondary)',cursor:'pointer',padding:'3px 6px',borderRadius:4,fontSize:'0.82rem',display:'flex',alignItems:'center',gap:3}}
+          onMouseEnter={e=>e.currentTarget.style.background='var(--overlay-8)'}
+          onMouseLeave={e=>e.currentTarget.style.background='none'}>
+          📎 <span style={{fontSize:'0.75rem',fontWeight:500}}>Attach</span>
+        </button>
+        <input ref={attachRef} type="file" multiple style={{display:'none'}} onChange={handleAttachmentSelect}/>
+
         <B title="Remove Formatting" cmd="removeFormat">✕A</B>
         <B title="Undo (Ctrl+Z)" cmd="undo">↩</B>
         <B title="Redo (Ctrl+Y)" cmd="redo">↪</B>
@@ -253,6 +298,22 @@ function RichEditor({ value, onChange }) {
           {SPINTAX_LIST.map(([l,v])=><option key={v} value={v}>{l}</option>)}
         </select>
       </div>
+
+      {/* Attachments preview bar */}
+      {attachments && attachments.length > 0 && (
+        <div style={{padding:'5px 12px',background:'var(--overlay-2)',borderBottom:'1px solid var(--border-color)',display:'flex',flexWrap:'wrap',gap:'6px',alignItems:'center',fontSize:'0.75rem'}}>
+          <span style={{color:'var(--text-muted)',fontWeight:600}}>📎 Attachments ({attachments.length}):</span>
+          {attachments.map((att, idx) => (
+            <span key={idx} style={{display:'inline-flex',alignItems:'center',gap:4,background:'var(--overlay-6)',border:'1px solid var(--border-color)',borderRadius:5,padding:'2px 8px',fontSize:'0.72rem',color:'var(--text-primary)'}}>
+              📄 {att.filename} {att.size ? <span style={{color:'var(--text-muted)'}}>({formatBytes(att.size)})</span> : null}
+              {onAttachmentsChange && (
+                <button type="button" onClick={() => onAttachmentsChange(attachments.filter((_, i) => i !== idx))}
+                  style={{border:'none',background:'none',cursor:'pointer',color:'var(--text-muted)',padding:'0 2px',fontSize:'0.8rem',lineHeight:1}} title="Remove">×</button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* ── Editor body ── */}
       <div ref={editorRef} contentEditable suppressContentEditableWarning
@@ -361,16 +422,17 @@ export default function SequenceBuilder({ campaign }) {
   function updWait(si,v){setSteps(p=>p.map((s,i)=>i===si?{...s,waitDays:parseInt(v)||0}:s));}
   function updSubj(si,vi,v){setSteps(p=>p.map((s,i)=>i!==si?s:{...s,variations:s.variations.map((vr,j)=>j!==vi?vr:{...vr,subject:v})}));}
   function updBody(si,vi,v){setSteps(p=>p.map((s,i)=>i!==si?s:{...s,variations:s.variations.map((vr,j)=>j!==vi?vr:{...vr,body:v})}));}
+  function updAttachments(si,vi,atts){setSteps(p=>p.map((s,i)=>i!==si?s:{...s,variations:s.variations.map((vr,j)=>j!==vi?vr:{...vr,attachments:atts})}));}
 
   const step = steps[activeStep];
   const vari = step?.variations[step?.activeVar];
 
   return(
-    <div style={{display:'flex',height:'calc(100vh - 280px)',minHeight:480,position:'relative'}}>
+    <div className="seq-builder" style={{display:'flex',height:'calc(100vh - 280px)',minHeight:480,position:'relative'}}>
       {toast&&<div style={{position:'fixed',bottom:24,right:24,background:'#10b981',color:'#fff',padding:'0.75rem 1.25rem',borderRadius:10,fontWeight:500,zIndex:999,boxShadow:'0 4px 16px rgba(0,0,0,0.3)',fontSize:'0.875rem'}}>{toast}</div>}
 
       {/* Left: Steps */}
-      <div style={{width:248,flexShrink:0,borderRight:'1px solid var(--border-color)',overflowY:'auto',padding:'1rem',background:'var(--overlay-1)'}}>
+      <div className="seq-steps" style={{width:248,flexShrink:0,borderRight:'1px solid var(--border-color)',overflowY:'auto',padding:'1rem',background:'var(--overlay-1)'}}>
         {loading?(
           <div style={{color:'var(--text-muted)',fontSize:'0.85rem',textAlign:'center',padding:'2rem'}}>⏳ Loading…</div>
         ):steps.map((s,si)=>(
@@ -420,8 +482,8 @@ export default function SequenceBuilder({ campaign }) {
 
       {/* Right: Editor */}
       {step&&vari&&(
-        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          <div style={{padding:'0.6rem 1rem',borderBottom:'1px solid var(--border-color)',display:'flex',alignItems:'center',gap:'0.75rem',background:'var(--overlay-1)',flexShrink:0}}>
+        <div className="seq-editor" style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <div className="seq-subject-row" style={{padding:'0.6rem 1rem',borderBottom:'1px solid var(--border-color)',display:'flex',alignItems:'center',gap:'0.75rem',background:'var(--overlay-1)',flexShrink:0}}>
             <span style={{background:'var(--accent-primary)',color:'#fff',padding:'2px 10px',borderRadius:99,fontSize:'0.75rem',fontWeight:700,flexShrink:0}}>
               Step {activeStep+1}{letterFor(step.activeVar)}
             </span>
@@ -433,7 +495,7 @@ export default function SequenceBuilder({ campaign }) {
               {saving?'Saving…':saved?'✅ Saved':'Save All'}
             </button>
           </div>
-          <RichEditor key={`${activeStep}-${step.activeVar}`} value={vari.body} onChange={v=>updBody(activeStep,step.activeVar,v)}/>
+          <RichEditor key={`${activeStep}-${step.activeVar}`} value={vari.body} onChange={v=>updBody(activeStep,step.activeVar,v)} attachments={vari.attachments||[]} onAttachmentsChange={atts=>updAttachments(activeStep,step.activeVar,atts)}/>
           <div style={{padding:'4px 14px',borderTop:'1px solid var(--border-color)',fontSize:'0.72rem',color:dirty?'var(--warning)':'var(--success)',fontWeight:500}}>
             {dirty?'● Unsaved — click Save All to persist':'✅ All changes saved'}
           </div>

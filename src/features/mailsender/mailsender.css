@@ -891,3 +891,90 @@ html:not(.dark) .mailsender-app {
   display: block;
 }
 
+
+/* ==================== INLINE-STYLE LAYOUT GUARDS (≤ 640px) ==================== */
+/* Most Mail Sender pages lay out forms, stat rows and modals with inline
+   React styles (fixed fr-column grids, 400–700px widths) that never shrink.
+   React serialises them as `grid-template-columns: 1fr 1fr` / `width: 520px`,
+   so these attribute selectors catch every one of them at phone width
+   without touching each component. Tables keep their own min-width and
+   scroll inside .table-scroll-x instead. */
+@media (max-width: 640px) {
+  /* Two/three-column form and card grids → single column */
+  .mailsender-app [style*="grid-template-columns: 1fr 1fr"],
+  .mailsender-app [style*="grid-template-columns:1fr 1fr"],
+  .mailsender-app [style*="grid-template-columns: 2fr 3fr"],
+  .mailsender-app [style*="grid-template-columns: 1.6fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  /* Four-up stat rows → two-up */
+  .mailsender-app [style*="grid-template-columns: repeat(4"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  /* CSV column mapping row: stack CSV column, field picker, samples */
+  .mailsender-app [style*="grid-template-columns: 1fr 24px 1.2fr 24px 1fr"] {
+    grid-template-columns: 1fr !important;
+    gap: 0.4rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+  .mailsender-app [style*="grid-template-columns: 1fr 24px 1.2fr 24px 1fr"] > span:nth-child(2n) { display: none; }
+
+  /* Fixed-width panels, popovers, inputs and modals never exceed the screen */
+  .mailsender-app [style*="width: 4"][style*="px"],
+  .mailsender-app [style*="width: 5"][style*="px"],
+  .mailsender-app [style*="width: 6"][style*="px"],
+  .mailsender-app [style*="width: 7"][style*="px"],
+  .mailsender-app [style*="width: 3"][style*="px"],
+  .mailsender-app [style*="width: 2"][style*="px"] {
+    max-width: 100%;
+  }
+  .mailsender-app input, .mailsender-app select, .mailsender-app textarea { max-width: 100%; }
+  /* 16px inputs stop iOS Safari zooming the page on focus */
+  .mailsender-app input:not([type="checkbox"]):not([type="radio"]),
+  .mailsender-app select, .mailsender-app textarea { font-size: 16px; }
+
+  /* Space-between toolbars (title + buttons, filters + actions) wrap
+     instead of pushing buttons off-screen */
+  .mailsender-app [style*="justify-content: space-between"] { flex-wrap: wrap; row-gap: 0.5rem; }
+
+  /* Modals: full width, scroll inside the screen instead of overflowing it */
+  .mailsender-app [style*="position: fixed"][style*="align-items: center"] { padding: 0.5rem !important; }
+  .mailsender-app [style*="position: fixed"][style*="align-items: center"] > div {
+    max-height: calc(100dvh - 1rem) !important;
+    overflow-y: auto;
+  }
+
+  .mailsender-app .data-table th, .mailsender-app .data-table td { padding: 0.6rem 0.75rem; }
+  .mailsender-app .btn { min-height: 36px; }
+}
+
+/* ==================== PHONE: PROSPECTS / HEADER ==================== */
+.mailsender-app .mobile-only { display: none; }
+@media (max-width: 768px) {
+  .mailsender-app .mobile-only { display: inline-flex; }
+
+  /* Prospects: lists OR the selected list, full width — never side by side */
+  .mailsender-app .prospects-layout { flex-direction: column; overflow: visible !important; }
+  .mailsender-app .prospects-lists { width: 100% !important; height: auto !important; padding-right: 0 !important; }
+  .mailsender-app .prospects-layout:not(.prospects-layout--detail) .prospects-detail { display: none; }
+  .mailsender-app .prospects-layout--detail .prospects-lists { display: none; }
+  .mailsender-app .prospects-layout--detail .prospects-detail { height: calc(100dvh - 190px) !important; }
+
+  /* The Salesvora top bar already shows the page name; drop the duplicate
+     title so Mail Sender's own bar is just the slim avatar/menu strip. */
+  .mailsender-app .main-header .page-title { display: none; }
+  .mailsender-app .main-header { min-height: 0; height: 48px; justify-content: flex-end; }
+}
+
+/* Sequence builder: steps list above the editor instead of beside it */
+@media (max-width: 768px) {
+  .mailsender-app .seq-builder { flex-direction: column; height: auto !important; min-height: 0 !important; }
+  .mailsender-app .seq-steps {
+    width: 100% !important; max-height: 240px;
+    border-right: none !important; border-bottom: 1px solid var(--border-color);
+  }
+  .mailsender-app .seq-editor { min-height: 520px; min-width: 0; }
+  .mailsender-app .seq-subject-row { flex-wrap: wrap; row-gap: 0.5rem !important; }
+  .mailsender-app .seq-subject-row input { min-width: 0; width: 0; }
+}

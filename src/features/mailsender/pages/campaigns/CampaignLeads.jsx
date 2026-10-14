@@ -337,17 +337,220 @@ function ProspectsPickerModal({ onImport, onClose }) {
   );
 }
 
+// ── Send Lead Email Modal (Account Picker & Preview) ──────────────────────────
+function SendLeadEmailModal({ lead, campaign, onClose, onSent, showToast }) {
+  const [accounts, setAccounts]                   = useState([]);
+  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [steps, setSteps]                         = useState([]);
+  const [stepIdx, setStepIdx]                     = useState(lead.step_index ?? 0);
+  const [loading, setLoading]                     = useState(true);
+  const [sending, setSending]                     = useState(false);
+  const [error, setError]                         = useState('');
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/accounts'),
+      api.get(`/campaigns/${campaign.id}/accounts`),
+      api.get(`/campaigns/${campaign.id}/sequences`),
+    ]).then(([allAccs, campaignAccs, seqSteps]) => {
+      const accList = Array.isArray(allAccs) ? allAccs : [];
+      setAccounts(accList);
+
+      const assignedList = Array.isArray(campaignAccs) ? campaignAccs : [];
+      const defaultAcc = assignedList[0] || accList[0];
+      if (defaultAcc?.id) setSelectedAccountId(String(defaultAcc.id));
+
+      const parsedSteps = Array.isArray(seqSteps) ? seqSteps : [];
+      setSteps(parsedSteps);
+      if (parsedSteps.length > 0) {
+        setStepIdx(Math.min(lead.step_index ?? 0, parsedSteps.length - 1));
+      }
+      setLoading(false);
+    }).catch(err => {
+      console.error('[SendLeadModal] fetch error:', err);
+      setLoading(false);
+    });
+  }, [campaign.id, lead.step_index]);
+
+  const activeStep = steps[stepIdx] || steps[0];
+  const activeVariation = activeStep?.variations?.[0];
+
+  async function handleSend() {
+    if (!selectedAccountId) {
+      setError('Please select an email account to send from.');
+      return;
+    }
+    setSending(true);
+    setError('');
+    try {
+      const res = await api.post(`/campaigns/${campaign.id}/leads/${lead.id}/send`, {
+        accountId: parseInt(selectedAccountId, 10),
+        stepIndex: stepIdx,
+      });
+
+      if (res?.error) {
+        setError(res.error);
+        showToast('❌ ' + res.error);
+      } else {
+        showToast(res?.message || `✅ Email sent to ${lead.email}`);
+        onSent(res?.lead);
+        onClose();
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to send email';
+      setError(msg);
+      showToast('❌ ' + msg);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 250 }} onClick={onClose}>
+      <div style={{ background: 'var(--bg-secondary)', borderRadius: 16, width: 540, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-lg)' }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <span style={{ fontSize: '1.3rem' }}>✉</span>
+            <div>
+              <h3 style={{ fontWeight: 700, fontSize: '1.05rem', margin: 0 }}>Send Email to Client</h3>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Select which connected email account to send from</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '4px 8px' }}>✕</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* Client Recipient Chip */}
+          <div style={{ padding: '0.85rem 1rem', background: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', background: lead.color || '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#fff', flexShrink: 0 }}>
+              {lead.initials || 'CL'}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)' }}>{lead.name || 'Client'}</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--accent-primary)', fontWeight: 500 }}>{lead.email}</div>
+              {lead.company && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{lead.company}</div>}
+            </div>
+            <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>
+              Step {stepIdx + 1}/{steps.length || 1}
+            </span>
+          </div>
+
+          {/* Account Selector */}
+          <div className="form-group">
+            <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+              <span>Send From (Connected Account) <span style={{ color: 'var(--danger)' }}>*</span></span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{accounts.length} account(s) available</span>
+            </label>
+            {loading ? (
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', padding: '0.5rem 0' }}>Loading connected accounts…</div>
+            ) : accounts.length === 0 ? (
+              <div style={{ padding: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: 8, color: 'var(--danger)', fontSize: '0.8rem' }}>
+                ⚠ No connected email accounts found. Please go to <strong>Email Accounts</strong> and connect an account first.
+              </div>
+            ) : (
+              <select
+                className="form-input"
+                value={selectedAccountId}
+                onChange={e => setSelectedAccountId(e.target.value)}
+                style={{ fontSize: '0.85rem', padding: '0.6rem 0.8rem' }}
+              >
+                {accounts.map(acc => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.email} — {acc.esp || 'SMTP'} ({acc.first_name ? `${acc.first_name} ${acc.last_name || ''}`.trim() : acc.smtp_host || 'Connected'})
+                  </option>
+                ))}
+              </select>
+            )}
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+              Your client ({lead.email}) will receive the email directly from this selected address.
+            </div>
+          </div>
+
+          {/* Step Selector */}
+          {steps.length > 1 && (
+            <div className="form-group">
+              <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                Campaign Step to Send
+              </label>
+              <select
+                className="form-input"
+                value={stepIdx}
+                onChange={e => setStepIdx(parseInt(e.target.value, 10))}
+                style={{ fontSize: '0.85rem', padding: '0.5rem 0.8rem' }}
+              >
+                {steps.map((st, i) => (
+                  <option key={st.id || i} value={i}>
+                    Step {i + 1} {i === (lead.step_index ?? 0) ? '(Next scheduled)' : ''} — {st.variations?.[0]?.subject || '(no subject)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Preview Box */}
+          {activeVariation && (
+            <div style={{ border: '1px solid var(--border-color)', borderRadius: 10, padding: '0.75rem 1rem', background: 'var(--bg-tertiary)', fontSize: '0.78rem' }}>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.3rem' }}>
+                Subject: <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>{activeVariation.subject || '(no subject)'}</span>
+              </div>
+              <div style={{ color: 'var(--text-muted)', maxHeight: 110, overflowY: 'auto', lineHeight: 1.4, borderTop: '1px dashed var(--border-color)', paddingTop: '0.4rem', marginTop: '0.4rem' }}
+                dangerouslySetInnerHTML={{ __html: activeVariation.body || '<p><em>(Empty body)</em></p>' }}
+              />
+              {Array.isArray(activeVariation.attachments) && activeVariation.attachments.length > 0 && (
+                <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center', fontSize: '0.72rem', color: 'var(--accent-primary)' }}>
+                  <span>📎 {activeVariation.attachments.length} attachment(s):</span>
+                  {activeVariation.attachments.map((a, ai) => (
+                    <span key={ai} style={{ background: 'var(--overlay-8)', padding: '2px 6px', borderRadius: 6 }}>
+                      {a.filename}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Error Banner */}
+          {error && (
+            <div style={{ padding: '0.75rem 1rem', borderRadius: 8, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', color: 'var(--danger)', fontSize: '0.78rem', lineHeight: 1.4 }}>
+              <strong>Error:</strong> {error}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', flexShrink: 0, background: 'var(--bg-secondary)' }}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={sending}>
+            Cancel
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={handleSend}
+            disabled={sending || loading || accounts.length === 0}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            {sending ? '⏳ Sending Email…' : `✉ Send to ${lead.name || lead.email.split('@')[0]}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function CampaignLeads({ campaign, active }) {
-  const [leads, setLeads]               = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [search, setSearch]             = useState('');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [selected, setSelected]         = useState([]);
-  const [modal, setModal]               = useState(null); // null|'choice'|'single'|'bulk'|'prospects'
-  const [editLead, setEditLead]         = useState(null);
-  const [actionsOpen, setActionsOpen]   = useState(null);
-  const [toast, setToast]               = useState('');
+  const [leads, setLeads]                 = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [search, setSearch]               = useState('');
+  const [filterStatus, setFilterStatus]   = useState('All');
+  const [selected, setSelected]           = useState([]);
+  const [modal, setModal]                 = useState(null); // null|'choice'|'single'|'bulk'|'prospects'
+  const [editLead, setEditLead]           = useState(null);
+  const [actionsOpen, setActionsOpen]     = useState(null);
+  const [toast, setToast]                 = useState('');
+  const [sendingLeadId, setSendingLeadId] = useState(null);
+  const [sendModalLead, setSendModalLead] = useState(null);
 
   // ── Load leads from backend ─────────────────────────────────────────────
   async function fetchLeads() {
@@ -482,6 +685,28 @@ export default function CampaignLeads({ campaign, active }) {
     }
   }
 
+  async function sendLeadEmail(lead) {
+    if (!campaign?.id || !lead.id || sendingLeadId) return;
+    setSendingLeadId(lead.id);
+    try {
+      const res = await api.post(`/campaigns/${campaign.id}/leads/${lead.id}/send`);
+      if (res?.error) {
+        showToast('❌ ' + res.error);
+      } else {
+        showToast(res?.message ? `✅ ${res.message}` : `✅ Email sent to ${lead.email}`);
+        if (res?.lead) {
+          setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...res.lead, sent: res.lead.sent, step_index: res.lead.step_index, status: res.lead.status } : l));
+        } else {
+          fetchLeads();
+        }
+      }
+    } catch {
+      showToast('❌ Failed to send email to lead');
+    } finally {
+      setSendingLeadId(null);
+    }
+  }
+
   const filtered = leads.filter(l => {
     const q  = search.toLowerCase();
     const ms = (l.name || '').toLowerCase().includes(q) || (l.email || '').toLowerCase().includes(q);
@@ -572,7 +797,7 @@ export default function CampaignLeads({ campaign, active }) {
               <th style={{ minWidth: 160 }}>Performance</th>
               <th style={{ minWidth: 160 }}>Status</th>
               <th style={{ minWidth: 130 }}>Label</th>
-              <th style={{ minWidth: 60 }}>Actions</th>
+              <th style={{ minWidth: 130 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -621,18 +846,36 @@ export default function CampaignLeads({ campaign, active }) {
                     <option value="Follow Up">Follow Up</option>
                   </select>
                 </td>
-                <td style={{ position: 'relative' }}>
-                  <button onClick={() => setActionsOpen(actionsOpen === l.email ? null : l.email)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '4px 8px' }}>⋯</button>
+                <td style={{ position: 'relative', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      style={{
+                        padding: '3px 8px',
+                        fontSize: '0.74rem',
+                        whiteSpace: 'nowrap',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px'
+                      }}
+                      title={`Send campaign email to ${l.email}`}
+                      onClick={() => setSendModalLead(l)}
+                    >
+                      ✉ Send
+                    </button>
+                    <button onClick={() => setActionsOpen(actionsOpen === l.email ? null : l.email)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '2px 6px' }}>⋯</button>
+                  </div>
                   {actionsOpen === l.email && (
-                    <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 10, boxShadow: 'var(--shadow-md)', zIndex: 50, minWidth: 160, overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 10, boxShadow: 'var(--shadow-md)', zIndex: 50, minWidth: 180, overflow: 'hidden' }}>
                       {[
+                        ['✉ Send Campaign Email', () => setSendModalLead(l)],
                         ['✏ Edit Lead',    () => { setEditLead(l); setActionsOpen(null); }],
                         ['↩ Mark Replied',  () => { patchLead(l, { status:'Replied', replied:1 }); setActionsOpen(null); showToast('Marked as Replied'); }],
                         ['✅ Mark Complete', () => { patchLead(l, { status:'Completed' }); setActionsOpen(null); showToast('Marked as Completed'); }],
                         ['🗑 Remove',       () => { removeLead(l); setActionsOpen(null); }],
                       ].map(([label, fn]) => (
                         <button key={label} onClick={() => { fn(); setActionsOpen(null); }}
-                          style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '0.6rem 1rem', color: label.includes('Remove') ? 'var(--danger)' : 'var(--text-primary)', cursor: 'pointer', fontSize: '0.8rem' }}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '0.6rem 1rem', color: label.includes('Remove') ? 'var(--danger)' : label.includes('Send') ? 'var(--accent-primary)' : 'var(--text-primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: label.includes('Send') ? 600 : 400 }}
                           onMouseEnter={e => e.currentTarget.style.background='var(--overlay-5)'}
                           onMouseLeave={e => e.currentTarget.style.background='none'}>{label}</button>
                       ))}
@@ -717,6 +960,22 @@ export default function CampaignLeads({ campaign, active }) {
           isEdit
           onAdd={handleSaveEdit}
           onClose={() => setEditLead(null)}
+        />
+      )}
+      {/* Send Lead Email Modal (Account Picker & Preview) */}
+      {sendModalLead && (
+        <SendLeadEmailModal
+          lead={sendModalLead}
+          campaign={campaign}
+          onClose={() => setSendModalLead(null)}
+          onSent={(updatedLead) => {
+            if (updatedLead) {
+              setLeads(prev => prev.map(x => x.id === updatedLead.id ? { ...x, ...updatedLead } : x));
+            } else {
+              fetchLeads();
+            }
+          }}
+          showToast={showToast}
         />
       )}
     </div>

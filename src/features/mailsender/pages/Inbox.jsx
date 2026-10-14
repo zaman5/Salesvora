@@ -46,10 +46,19 @@ function getColor(s = '') {
 
 const FOLDERS = [
   { key: 'inbox',   label: 'Inbox',       icon: '📥' },
-  { key: 'spam',    label: 'Spam / Junk', icon: '🚫' },
   { key: 'sent',    label: 'Sent',        icon: '📤' },
+  { key: 'drafts',  label: 'Drafts',      icon: '📝' },
+  { key: 'spam',    label: 'Spam / Junk', icon: '🚫' },
   { key: 'starred', label: 'Starred',     icon: '⭐' },
 ];
+
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
 
 // Strip Re:/Fwd: prefixes for thread grouping
 function normalizeSubject(s = '') {
@@ -117,6 +126,7 @@ export default function Inbox({ userId }) {
   const [active, setActive]       = useState(null);
   const [replies, setReplies]     = useState({});
   const [replyText, setReplyText] = useState('');
+  const [replyAttachments, setReplyAttachments] = useState([]);
   const [sending, setSending]     = useState(false);
   const [searchMail, setSearchMail] = useState('');
   const [showUnread, setShowUnread] = useState(false);
@@ -124,14 +134,18 @@ export default function Inbox({ userId }) {
   const [toast, setToast]         = useState('');
   const [threadEmails, setThreadEmails] = useState([]);
   const [midWidth, setMidWidth]   = useState(320);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Folders panel starts collapsed on phones so the message list gets the full width.
+  const isPhone = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+  const [sidebarOpen, setSidebarOpen] = useState(() => !isPhone());
   const [mobileShowDetail, setMobileShowDetail] = useState(false);
   const [showReply, setShowReply]   = useState(false);
   const [expandedMsgIds, setExpandedMsgIds] = useState(new Set());
   const [showAllMessages, setShowAllMessages] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [composeForm, setComposeForm] = useState({ accountId: '', to: '', subject: '', body: '' });
+  const [composeForm, setComposeForm] = useState({ id: null, accountId: '', to: '', subject: '', body: '', attachments: [] });
   const [composeSending, setComposeSending] = useState(false);
+  const fileInputRef    = useRef(null);
+  const replyFileInputRef = useRef(null);
   const autoRefreshRef  = useRef(null);
   const newestDateRef   = useRef(null);
   const dragRef         = useRef(null);
@@ -139,9 +153,123 @@ export default function Inbox({ userId }) {
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 2600); }
 
+  function handleFileSelect(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    files.forEach(file => {
+      if (file.size > 20 * 1024 * 1024) {
+        showToast(`File "${file.name}" exceeds 20MB limit`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result || '').toString().split(',')[1] || '';
+        setComposeForm(prev => ({
+          ...prev,
+          attachments: [
+            ...(prev.attachments || []),
+            {
+              filename: file.name,
+              content: base64,
+              contentType: file.type || 'application/octet-stream',
+              size: file.size,
+            }
+          ]
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  }
+
+  function removeAttachment(idx) {
+    setComposeForm(prev => ({
+      ...prev,
+      attachments: (prev.attachments || []).filter((_, i) => i !== idx)
+    }));
+  }
+
+  function handleReplyFileSelect(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    files.forEach(file => {
+      if (file.size > 20 * 1024 * 1024) {
+        showToast(`File "${file.name}" exceeds 20MB limit`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result || '').toString().split(',')[1] || '';
+        setReplyAttachments(prev => [
+          ...prev,
+          {
+            filename: file.name,
+            content: base64,
+            contentType: file.type || 'application/octet-stream',
+            size: file.size,
+          }
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  }
+
+  function removeReplyAttachment(idx) {
+    setReplyAttachments(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  async function saveDraft() {
+    if (!composeForm.to && !composeForm.subject && !composeForm.body && (!composeForm.attachments || composeForm.attachments.length === 0)) {
+      showToast('Cannot save an empty draft');
+      return;
+    }
+    const res = await api.post('/inbox/drafts', {
+      id: composeForm.id,
+      accountId: composeForm.accountId,
+      toEmail: composeForm.to,
+      subject: composeForm.subject,
+      body: composeForm.body,
+      attachments: composeForm.attachments || [],
+    });
+    if (res?.success) {
+      showToast('💾 Draft saved');
+      if (res.draft?.id) {
+        setComposeForm(p => ({ ...p, id: res.draft.id }));
+      }
+      bustCache('drafts');
+      if (folder === 'drafts') refreshEmails('drafts');
+    } else {
+      showToast('❌ ' + (res?.error || 'Failed to save draft'));
+    }
+  }
+
+  async function discardCompose() {
+    if (composeForm.id) {
+      await api.delete(`/inbox/drafts/${composeForm.id}`);
+      bustCache('drafts');
+      if (folder === 'drafts') refreshEmails('drafts');
+      showToast('Draft deleted');
+    }
+    setComposeOpen(false);
+    setComposeForm({ id: null, accountId: accounts[0]?.id || '', to: '', subject: '', body: '', attachments: [] });
+  }
+
+  function openDraftInCompose(draftItem) {
+    setComposeForm({
+      id: draftItem.draftId || (draftItem.id && String(draftItem.id).startsWith('draft-') ? Number(String(draftItem.id).replace('draft-', '')) : null),
+      accountId: draftItem.accountId || accounts[0]?.id || '',
+      to: draftItem.recipient || draftItem.email || '',
+      subject: draftItem.subject || '',
+      body: draftItem.body || '',
+      attachments: draftItem.attachments || [],
+    });
+    setComposeOpen(true);
+  }
+
   async function sendCompose() {
-    if (!composeForm.accountId || !composeForm.to || !composeForm.subject || !composeForm.body) {
-      showToast('Please fill all fields');
+    if (!composeForm.accountId || !composeForm.to || !composeForm.subject || (isHtmlEmpty(composeForm.body) && (!composeForm.attachments || composeForm.attachments.length === 0))) {
+      showToast('Please fill from, to, subject and message/attachment');
       return;
     }
     setComposeSending(true);
@@ -149,19 +277,23 @@ export default function Inbox({ userId }) {
       accountId: composeForm.accountId,
       toEmail: composeForm.to,
       subject: composeForm.subject,
-      body: composeForm.body
+      body: composeForm.body,
+      attachments: composeForm.attachments || [],
+      draftId: composeForm.id,
     });
     setComposeSending(false);
     if (res?.success) {
       showToast('✅ Email sent successfully!');
       setComposeOpen(false);
-      setComposeForm({ accountId: '', to: '', subject: '', body: '' });
+      setComposeForm({ id: null, accountId: accounts[0]?.id || '', to: '', subject: '', body: '', attachments: [] });
       bustCache('sent');
-      if (folder === 'sent') refreshEmails('sent');
+      bustCache('drafts');
+      if (folder === 'sent' || folder === 'drafts') refreshEmails(folder);
     } else {
       showToast('❌ ' + (res?.error || 'Failed to send email'));
     }
   }
+
 
   // ── Clear ALL caches when user switches (prevents cross-user data leaks) ──
   useEffect(() => {
@@ -412,23 +544,31 @@ export default function Inbox({ userId }) {
 
   /* ── Send reply via real SMTP ── */
   async function sendReply() {
-    if (!replyText.trim() || !active || sending) return;
+    if ((!replyText.trim() && replyAttachments.length === 0) || !active || sending) return;
     setSending(true);
     const res = await api.post('/inbox/reply', {
       accountId: active.accountId,
       toEmail:   active.email,
       subject:   active.subject,
       body:      replyText.trim(),
+      attachments: replyAttachments,
     });
     setSending(false);
 
     if (res?.success) {
-      const newMsg = { from: 'me', body: replyText.trim(), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+      const newMsg = {
+        from: 'me',
+        body: replyText.trim(),
+        attachments: [...replyAttachments],
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
       setReplies(prev => ({ ...prev, [active.id]: [...(prev[active.id] || []), newMsg] }));
       setReplyText('');
+      setReplyAttachments([]);
       setShowReply(false); // close reply box after sending
       showToast('✅ Reply sent');
       bustCache('sent');
+      if (folder === 'sent') refreshEmails('sent');
     } else {
       showToast('❌ ' + (res?.error || 'Failed to send reply'));
     }
@@ -455,8 +595,10 @@ export default function Inbox({ userId }) {
 
   const enriched = dedupedEmails.map(e => ({
     ...e,
-    initials:   getInitials(e.name, e.email),
-    color:      getColor(e.email),
+    initials:   (folder === 'sent' || folder === 'drafts' || e.folder === 'Sent' || e.isDraft)
+      ? getInitials(e.recipient || e.to || e.name, e.recipient || e.to || e.email)
+      : getInitials(e.name, e.email),
+    color:      getColor((folder === 'sent' || folder === 'drafts' || e.folder === 'Sent' || e.isDraft) ? (e.recipient || e.to || e.email) : e.email),
     tags:       e.spam ? ['Spam'] : detectTags(e.subject, e.body),
     isSelfSent: ownEmails.has((e.email || '').toLowerCase()),
   }));
@@ -464,7 +606,8 @@ export default function Inbox({ userId }) {
   const displayed = enriched.filter(e => {
     if (folder === 'inbox' && e.isSelfSent) return false;
     const q = searchMail.toLowerCase();
-    return (!q || e.name.toLowerCase().includes(q) || e.subject.toLowerCase().includes(q) || e.email.toLowerCase().includes(q))
+    const recipient = (e.recipient || e.to || '').toLowerCase();
+    return (!q || e.name.toLowerCase().includes(q) || e.subject.toLowerCase().includes(q) || e.email.toLowerCase().includes(q) || recipient.includes(q))
         && (!showUnread || e.unread)
         && (filterAcc === 'all' || e.account === filterAcc);
   });
@@ -534,7 +677,7 @@ export default function Inbox({ userId }) {
                 className="btn btn-primary btn-sm"
                 style={{ width: '100%', fontSize: '0.8rem' }}
                 onClick={() => {
-                  setComposeForm({ accountId: accounts[0]?.id || '', to: '', subject: '', body: '' });
+                  setComposeForm({ id: null, accountId: accounts[0]?.id || '', to: '', subject: '', body: '', attachments: [] });
                   setComposeOpen(true);
                 }}
               >
@@ -547,7 +690,7 @@ export default function Inbox({ userId }) {
                 (a flex column with many children otherwise compresses them all). */}
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
               {FOLDERS.map(f => (
-                <button key={f.key} type="button" aria-current={folder === f.key ? 'true' : undefined} onClick={() => setFolder(f.key)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 1rem', cursor: 'pointer', width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit', border: 'none', background: folder === f.key ? 'rgba(99,102,241,0.12)' : 'transparent', borderLeft: folder === f.key ? '3px solid var(--accent-primary)' : '3px solid transparent' }}
+                <button key={f.key} type="button" aria-current={folder === f.key ? 'true' : undefined} onClick={() => { setFolder(f.key); if (isPhone()) setSidebarOpen(false); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 1rem', cursor: 'pointer', width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit', border: 'none', background: folder === f.key ? 'rgba(99,102,241,0.12)' : 'transparent', borderLeft: folder === f.key ? '3px solid var(--accent-primary)' : '3px solid transparent' }}
                   onMouseEnter={e => { if (folder !== f.key) e.currentTarget.style.background = 'var(--overlay-4)'; }}
                   onMouseLeave={e => { if (folder !== f.key) e.currentTarget.style.background = 'transparent'; }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -562,7 +705,7 @@ export default function Inbox({ userId }) {
                 <div style={{ height: 1, background: 'var(--border-color)', margin: '0.5rem 0' }} />
                 <div style={{ padding: '0.35rem 1rem', fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.07em', whiteSpace: 'nowrap' }}>ACCOUNTS</div>
                 {[{ email: 'all', label: '📥 All Accounts' }, ...accounts.map(a => ({ email: a.email, label: `📧 ${a.email}` }))].map(a => (
-                  <button key={a.email} type="button" aria-current={filterAcc === a.email ? 'true' : undefined} onClick={() => setFilterAcc(a.email)} title={a.email}
+                  <button key={a.email} type="button" aria-current={filterAcc === a.email ? 'true' : undefined} onClick={() => { setFilterAcc(a.email); if (isPhone()) setSidebarOpen(false); }} title={a.email}
                     style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', fontFamily: 'inherit', padding: '0.45rem 1rem', cursor: 'pointer', fontSize: '0.78rem', color: filterAcc === a.email ? 'var(--accent-primary)' : 'var(--text-secondary)', background: filterAcc === a.email ? 'rgba(99,102,241,0.08)' : 'transparent', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: filterAcc === a.email ? 600 : 400 }}>{a.label}</button>
                 ))}
               </>)}
@@ -648,10 +791,33 @@ export default function Inbox({ userId }) {
               {threadList.map(thread => {
                 const t = thread.latest;
                 const isActive = active?.id === t.id;
+                const hasAttachments = thread.all.some(e => (e.attachments && e.attachments.length > 0) || (e.attachments_json && e.attachments_json !== '[]'));
+                const isSentOrDraft = folder === 'sent' || folder === 'drafts' || t.folder === 'Sent' || t.isDraft;
+                const displayName = isSentOrDraft
+                  ? (t.recipient ? `To: ${t.recipient}` : (t.to ? `To: ${t.to}` : (t.name || t.email)))
+                  : (t.name || t.email);
+
                 return (
                   <div key={thread.key} role="button" tabIndex={0} aria-current={isActive ? 'true' : undefined}
-                    onClick={() => { openThread(thread); setMobileShowDetail(true); }}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openThread(thread); setMobileShowDetail(true); } }}
+                    onClick={() => {
+                      if (folder === 'drafts' || t.isDraft) {
+                        openDraftInCompose(t);
+                      } else {
+                        openThread(thread);
+                        setMobileShowDetail(true);
+                      }
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (folder === 'drafts' || t.isDraft) {
+                          openDraftInCompose(t);
+                        } else {
+                          openThread(thread);
+                          setMobileShowDetail(true);
+                        }
+                      }
+                    }}
                     style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--overlay-4)', cursor: 'pointer', background: isActive ? 'rgba(99,102,241,0.1)' : 'transparent', borderLeft: isActive ? '3px solid var(--accent-primary)' : '3px solid transparent', transition: 'background 0.12s' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', marginBottom: '0.3rem' }}>
                       <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -660,8 +826,11 @@ export default function Inbox({ userId }) {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontWeight: thread.hasUnread ? 700 : 500, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{t.name || t.email}</span>
+                          <span style={{ fontWeight: thread.hasUnread ? 700 : 500, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
+                            {displayName}
+                          </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexShrink: 0 }}>
+                            {hasAttachments && <span title="Has attachments" style={{ fontSize: '0.72rem' }}>📎</span>}
                             {thread.count > 1 && <span style={{ fontSize: '0.6rem', background: 'rgba(99,102,241,0.25)', color: 'var(--accent-primary)', borderRadius: 99, padding: '1px 5px', fontWeight: 700 }}>{thread.count}</span>}
                             <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{t.date}</span>
                           </div>
@@ -671,6 +840,7 @@ export default function Inbox({ userId }) {
                     </div>
                     <div style={{ display: 'flex', gap: '0.35rem', marginLeft: 40, alignItems: 'center' }}>
                       <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>📧 {t.account}</span>
+                      {t.isDraft && <span style={{ fontSize: '0.62rem', padding: '1px 6px', borderRadius: 99, background: 'rgba(234, 179, 8, 0.15)', color: '#eab308', fontWeight: 600 }}>Draft</span>}
                       {t.tags?.map(tag => <span key={tag} style={{ fontSize: '0.62rem', padding: '1px 6px', borderRadius: 99, background: TAG_COLORS[tag] || 'var(--overlay-8)', color: TAG_TEXT[tag] || 'var(--text-muted)', fontWeight: 600 }}>{tag}</span>)}
                       <button onClick={ev => toggleStar(t.id, ev)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.82rem', color: t.starred ? 'var(--warning-text)' : 'var(--text-muted)', flexShrink: 0 }}>★</button>
                     </div>
@@ -722,12 +892,22 @@ export default function Inbox({ userId }) {
             {/* ── GMAIL-STYLE SUBJECT ROW ── */}
             <div style={{ padding: '1rem 1.5rem 0.75rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <span style={{ fontWeight: 700, fontSize: '1.15rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
-                {active.subject}
+                {active.subject || '(No Subject)'}
               </span>
-              {/* Inbox badge */}
-              <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: 4, border: '1px solid var(--overlay-20)', color: 'var(--text-secondary)', fontWeight: 500, flexShrink: 0 }}>
-                Inbox ✕
-              </span>
+              {/* Draft badge & edit button if draft */}
+              {(folder === 'drafts' || active.isDraft) ? (
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => openDraftInCompose(active)}
+                  style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  ✏️ Edit Draft
+                </button>
+              ) : (
+                <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: 4, border: '1px solid var(--overlay-20)', color: 'var(--text-secondary)', fontWeight: 500, flexShrink: 0 }}>
+                  {folder === 'sent' || active.folder === 'Sent' ? 'Sent' : 'Inbox'} ✕
+                </span>
+              )}
               {/* Nav icons */}
               <div style={{ display: 'flex', gap: '0.3rem', flexShrink: 0 }}>
                 {['⬆', '⬇'].map((ic, i) => (
@@ -779,7 +959,9 @@ export default function Inbox({ userId }) {
                       </div>
                       {/* Name */}
                       <div style={{ fontWeight: 600, fontSize: '0.83rem', flexShrink: 0, minWidth: 110, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {msg.name || msg.email}
+                        {folder === 'sent' || msg.folder === 'Sent' || folder === 'drafts' || msg.isDraft
+                          ? (msg.recipient ? `To: ${msg.recipient}` : (msg.to ? `To: ${msg.to}` : (msg.name || msg.email)))
+                          : (msg.name || msg.email)}
                       </div>
                       {/* Preview snippet */}
                       <div style={{ flex: 1, fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -803,12 +985,18 @@ export default function Inbox({ userId }) {
                         {initials}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{msg.name || msg.email}</span>
-                          {msg.name && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>&lt;{msg.email}&gt;</span>}
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                            {folder === 'sent' || msg.folder === 'Sent' || folder === 'drafts' || msg.isDraft
+                              ? (msg.recipient ? `To: ${msg.recipient}` : (msg.to ? `To: ${msg.to}` : (msg.name || msg.email)))
+                              : (msg.name || msg.email)}
+                          </span>
+                          {msg.email && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>&lt;{msg.email}&gt;</span>}
                         </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
-                          to {msg.account || active.account} ▾
+                          {folder === 'sent' || msg.folder === 'Sent'
+                            ? `from ${msg.account || active.account} to ${msg.recipient || msg.to || 'recipient'}`
+                            : `to ${msg.account || active.account}`} ▾
                         </div>
                       </div>
                       {/* Right: time + actions */}
@@ -845,6 +1033,49 @@ export default function Inbox({ userId }) {
                         </>
                       )}
 
+                      {/* Display attachments if message has any */}
+                      {(() => {
+                        const atts = Array.isArray(msg.attachments) ? msg.attachments : (msg.attachments_json ? (typeof msg.attachments_json === 'string' ? JSON.parse(msg.attachments_json) : msg.attachments_json) : []);
+                        if (!atts || atts.length === 0) return null;
+                        return (
+                          <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span>📎 Attachments ({atts.length})</span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                              {atts.map((att, attIdx) => {
+                                const downloadUrl = att.content ? `data:${att.contentType || 'application/octet-stream'};base64,${att.content}` : null;
+                                return (
+                                  <div key={attIdx} style={{
+                                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                    padding: '0.45rem 0.8rem', borderRadius: 8,
+                                    background: 'var(--overlay-4)', border: '1px solid var(--border-color)',
+                                    fontSize: '0.78rem'
+                                  }}>
+                                    <span style={{ fontSize: '1.1rem' }}>📄</span>
+                                    <div style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>{att.filename}</div>
+                                      {att.size ? <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{formatBytes(att.size)}</div> : null}
+                                    </div>
+                                    {downloadUrl ? (
+                                      <a
+                                        href={downloadUrl}
+                                        download={att.filename || 'attachment'}
+                                        className="btn btn-ghost btn-xs"
+                                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', textDecoration: 'none', color: 'var(--accent-primary)', marginLeft: '0.25rem' }}
+                                        title="Download attachment"
+                                      >
+                                        ⬇ Download
+                                      </a>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {/* Sent replies inline */}
                       {(replies[msg.id] || []).map((r, i) => (
                         <div key={i} style={{ display: 'flex', gap: '0.5rem', flexDirection: 'row-reverse', marginTop: '0.75rem' }}>
@@ -854,6 +1085,13 @@ export default function Inbox({ userId }) {
                               style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.22)', borderRadius: '10px 2px 10px 10px', padding: '0.55rem 0.85rem', fontSize: '0.84rem', lineHeight: 1.65 }}
                               dangerouslySetInnerHTML={{ __html: r.body }}
                             />
+                            {r.attachments && r.attachments.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.3rem' }}>
+                                {r.attachments.map((a, ai) => (
+                                  <span key={ai} style={{ fontSize: '0.68rem', padding: '1px 6px', background: 'var(--overlay-6)', borderRadius: 4 }}>📎 {a.filename}</span>
+                                ))}
+                              </div>
+                            )}
                             <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.2rem', textAlign: 'right' }}>Sent · {r.time}</div>
                           </div>
                         </div>
@@ -884,6 +1122,13 @@ export default function Inbox({ userId }) {
             {/* ── REPLY BOX (Gmail style — bottom of panel) ── */}
             {showReply && (
               <div style={{ padding: '0.75rem 1.5rem 1rem', borderTop: '1px solid var(--border-color)' }}>
+                <input
+                  type="file"
+                  multiple
+                  ref={replyFileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleReplyFileSelect}
+                />
                 <div style={{ border: '1px solid rgba(99,102,241,0.45)', borderRadius: 10, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}>
                   <div style={{ padding: '0.5rem 1rem', borderBottom: '1px solid var(--overlay-7)', fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', gap: '1.5rem' }}>
                     <span>From: <strong style={{ color: 'var(--text-secondary)' }}>{active.account}</strong></span>
@@ -893,14 +1138,38 @@ export default function Inbox({ userId }) {
                     placeholder={`Reply to ${active.name || active.email}…`}
                     value={replyText}
                     onChange={setReplyText}
+                    attachments={replyAttachments}
+                    onAttachmentsChange={setReplyAttachments}
                     style={{ border: 'none', borderRadius: 0 }}
                   />
-                  <div style={{ padding: '0.5rem 1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', borderTop: '1px solid var(--overlay-5)' }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => { setShowReply(false); setReplyText(''); }}>Discard</button>
 
-                    <button className="btn btn-primary btn-sm" onClick={sendReply} disabled={isHtmlEmpty(replyText) || sending}>
-                      {sending ? 'Sending…' : '↑ Send Reply'}
+                  {/* Reply attachment chips */}
+                  {replyAttachments.length > 0 && (
+                    <div style={{ padding: '0.4rem 0.75rem', background: 'var(--overlay-2)', borderTop: '1px solid var(--border-color)', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                      {replyAttachments.map((att, i) => (
+                        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'var(--overlay-6)', border: '1px solid var(--border-color)', borderRadius: 6, padding: '0.2rem 0.5rem', fontSize: '0.72rem' }}>
+                          📎 {att.filename} <span style={{ color: 'var(--text-muted)' }}>({formatBytes(att.size)})</span>
+                          <button onClick={() => removeReplyAttachment(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0 2px', fontSize: '0.8rem', lineHeight: 1 }}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ padding: '0.5rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--overlay-5)' }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => replyFileInputRef.current?.click()}
+                      style={{ fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                    >
+                      📎 Attach Files
                     </button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => { setShowReply(false); setReplyText(''); setReplyAttachments([]); }}>Discard</button>
+                      <button className="btn btn-primary btn-sm" onClick={sendReply} disabled={(isHtmlEmpty(replyText) && replyAttachments.length === 0) || sending}>
+                        {sending ? 'Sending…' : '↑ Send Reply'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -913,13 +1182,22 @@ export default function Inbox({ userId }) {
       {/* ── COMPOSE MODAL ── */}
       {composeOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="card" style={{ width: 600, maxWidth: '90%', background: 'var(--bg-primary)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}>
-            <div style={{ padding: '1rem 1.5rem', background: 'var(--overlay-3)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>New Message</h3>
+          <input
+            type="file"
+            multiple
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+          />
+          <div className="card" style={{ width: 620, maxWidth: '92%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}>
+            <div style={{ padding: '1rem 1.5rem', background: 'var(--overlay-3)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>
+                {composeForm.id ? 'Edit Draft' : 'New Message'}
+              </h3>
               <button onClick={() => setComposeOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.2rem', cursor: 'pointer' }}>×</button>
             </div>
             
-            <div style={{ padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto', flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
                 <span style={{ width: 80, color: 'var(--text-muted)', fontSize: '0.85rem' }}>From:</span>
                 <select 
@@ -961,19 +1239,51 @@ export default function Inbox({ userId }) {
                 placeholder="Write your message here..."
                 value={composeForm.body}
                 onChange={val => setComposeForm(p => ({ ...p, body: val }))}
-                style={{ marginTop: '0.5rem', minHeight: 280 }}
+                attachments={composeForm.attachments || []}
+                onAttachmentsChange={newAtts => setComposeForm(p => ({ ...p, attachments: newAtts }))}
+                style={{ marginTop: '0.5rem', minHeight: 240 }}
               />
+
+              {/* Attachments list */}
+              {composeForm.attachments && composeForm.attachments.length > 0 && (
+                <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'var(--overlay-2)', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                    📎 Attachments ({composeForm.attachments.length}):
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                    {composeForm.attachments.map((att, i) => (
+                      <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'var(--overlay-6)', border: '1px solid var(--border-color)', borderRadius: 6, padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
+                        📄 {att.filename} <span style={{ color: 'var(--text-muted)' }}>({formatBytes(att.size)})</span>
+                        <button onClick={() => removeAttachment(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0 2px', fontSize: '0.85rem', lineHeight: 1 }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div style={{ padding: '1rem 1.5rem', background: 'var(--overlay-1)', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button className="btn btn-ghost text-muted" onClick={() => setComposeOpen(false)}>Discard</button>
-              <button 
-                className="btn btn-primary" 
-                onClick={sendCompose} 
-                disabled={composeSending || !composeForm.accountId || !composeForm.to || !composeForm.subject || isHtmlEmpty(composeForm.body)}
-              >
-                {composeSending ? 'Sending...' : 'Send Message'}
-              </button>
+            <div style={{ padding: '0.875rem 1.5rem', background: 'var(--overlay-1)', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button className="btn btn-ghost text-muted btn-sm" onClick={discardCompose}>Discard</button>
+                <button className="btn btn-secondary btn-sm" onClick={saveDraft}>💾 Save Draft</button>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  📎 Attach
+                </button>
+                <button 
+                  className="btn btn-primary btn-sm" 
+                  onClick={sendCompose} 
+                  disabled={composeSending || !composeForm.accountId || !composeForm.to || !composeForm.subject || (isHtmlEmpty(composeForm.body) && (!composeForm.attachments || composeForm.attachments.length === 0))}
+                >
+                  {composeSending ? 'Sending...' : 'Send Message'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

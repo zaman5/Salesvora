@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import type { Response } from 'express';
 import { ImapFlow } from 'imapflow';
-import nodemailer from 'nodemailer';
 import db from '../db';
 import { requireAuth } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { extractInlineImages } from '../utils/inlineImages';
 import { tlsOptionsFor } from '../utils/security';
+import { sendAccountMail } from '../utils/smtp';
+import { formatEmailHtml } from '../utils/emailFormat';
 
 const router = Router();
 
@@ -162,6 +163,7 @@ function extractCleanBody(raw: string): { html: string, text: string } {
   // src="cid:xxx" — collected here and spliced back into the HTML as data:
   // URIs afterwards, since a plain iframe has no way to resolve a cid: URL.
   const cidImages: Record<string, string> = {};
+  const extractedAttachments: any[] = [];
 
   // Helper for recursive multipart parsing
   function parseMultipart(bodySection: string, boundary: string): { html: string, plain: string } {
@@ -177,6 +179,24 @@ function extractCleanBody(raw: string): { html: string, text: string } {
       const pct = (ph.match(/Content-Type:\s*([^;\r\n]+)/i)?.[1] || '').trim().toLowerCase();
       const pce = (ph.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i)?.[1] || '').trim().toLowerCase();
       let   pb2 = part.slice(pb).replace(/^\r?\n\r?\n/, '').trimEnd();
+
+      // Check for file attachment
+      const cd = ph.match(/Content-Disposition:\s*([^;\r\n]+)/i)?.[1]?.toLowerCase() || '';
+      const isAttachment = cd.includes('attachment') || (cd.includes('inline') && ph.includes('filename=')) ||
+        (pct && !pct.startsWith('text/') && !pct.startsWith('multipart/') && !pct.startsWith('image/'));
+
+      if (isAttachment) {
+        const fnameMatch = ph.match(/filename="?([^"\r\n;]+)"?/i) || ph.match(/name="?([^"\r\n;]+)"?/i);
+        const filename = fnameMatch ? fnameMatch[1].trim() : 'attachment';
+        const b64 = pce === 'base64' ? pb2.replace(/\s+/g, '') : Buffer.from(pb2, 'binary').toString('base64');
+        extractedAttachments.push({
+          filename,
+          contentType: pct || 'application/octet-stream',
+          size: Math.round((b64.length * 3) / 4),
+          content: b64,
+        });
+        continue;
+      }
 
       // Inline image/attachment with a Content-ID — keep its base64 payload
       // intact (do NOT run it through the text decoders below) so it can be
@@ -283,7 +303,8 @@ function extractCleanBody(raw: string): { html: string, text: string } {
 
   return {
     html: finalHtml.trim(),
-    text: cleanPreview.trim()
+    text: cleanPreview.trim(),
+    attachments: extractedAttachments,
   };
 }
 
@@ -333,17 +354,22 @@ function sanitizeSubject(subject: string, preview?: string): string {
 function upsertEmail(email: any, userId: number) {
   // ID includes userId to ensure complete per-user isolation in inbox_cache
   const rowId = `${userId}-${email.accountId}-${email.uid}`;
+  const recipient = email.recipientEmail || email.recipient_email || '';
+  const attachments = email.attachmentsJson || email.attachments_json || '[]';
   const r = db.prepare(`
     INSERT INTO inbox_cache
       (id, user_id, account_id, account_email, folder, uid, sender_name, sender_email,
-       subject, preview, body, date_raw, unread, starred, spam, synced_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       recipient_email, subject, preview, body, attachments_json, date_raw, unread, starred, spam, synced_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(user_id, account_id, folder, uid) DO UPDATE SET
+      recipient_email=COALESCE(NULLIF(excluded.recipient_email, ''), inbox_cache.recipient_email),
+      attachments_json=COALESCE(NULLIF(excluded.attachments_json, '[]'), inbox_cache.attachments_json),
       unread=excluded.unread, starred=excluded.starred, synced_at=excluded.synced_at
   `).run(
     rowId, userId, email.accountId, email.account, email.folder, email.uid,
-    email.name, email.email, sanitizeSubject(email.subject, email.preview), email.preview || '',
-    email.body ?? null, email.dateRaw,
+    email.name, email.email, recipient,
+    sanitizeSubject(email.subject, email.preview), email.preview || '',
+    email.body ?? null, attachments, email.dateRaw,
     email.unread ? 1 : 0, email.starred ? 1 : 0, email.spam ? 1 : 0,
     Date.now()
   );
@@ -361,19 +387,46 @@ function upsertEmail(email: any, userId: number) {
 
 
 function dbEmailsForFolder(userId: number, folder: string): any[] {
-  const rows = db.prepare(
-    `SELECT * FROM inbox_cache WHERE user_id=? AND folder=? ORDER BY date_raw DESC`
-  ).all(userId, folder) as any[];
-  return rows.map(r => ({
-    id: r.id, uid: r.uid, folder: r.folder,
-    account: r.account_email, accountId: r.account_id,
-    name: r.sender_name, email: r.sender_email,
-    subject: r.subject, preview: r.preview, body: r.body,
-    dateRaw: r.date_raw,
-    date: new Date(r.date_raw).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }),
-    unread: r.unread === 1, starred: r.starred === 1, spam: r.spam === 1,
-    campaign: null,
-  }));
+  let rows: any[];
+  const isSent = folder.toLowerCase().includes('sent');
+  const isSpam = folder.toLowerCase().includes('spam') || folder.toLowerCase().includes('junk');
+
+  if (isSent) {
+    rows = db.prepare(
+      `SELECT * FROM inbox_cache
+       WHERE user_id=? AND (folder = 'Sent' OR folder LIKE '%Sent%' OR folder LIKE '%[Gmail]/Sent Mail%' OR folder LIKE '%Sent Items%')
+       ORDER BY date_raw DESC`
+    ).all(userId) as any[];
+  } else if (isSpam) {
+    rows = db.prepare(
+      `SELECT * FROM inbox_cache
+       WHERE user_id=? AND (folder = 'Spam' OR folder LIKE '%Spam%' OR folder LIKE '%Junk%')
+       ORDER BY date_raw DESC`
+    ).all(userId) as any[];
+  } else {
+    rows = db.prepare(
+      `SELECT * FROM inbox_cache WHERE user_id=? AND folder=? ORDER BY date_raw DESC`
+    ).all(userId, folder) as any[];
+  }
+
+  return rows.map(r => {
+    const isRowSent = (r.folder || '').toLowerCase().includes('sent') || (r.recipient_email && r.recipient_email.length > 0);
+    return {
+      id: r.id, uid: r.uid, folder: r.folder,
+      account: r.account_email, accountId: r.account_id,
+      name: isRowSent && r.recipient_email ? `To: ${r.recipient_email}` : (r.sender_name || r.sender_email),
+      email: isRowSent && r.recipient_email ? r.recipient_email : r.sender_email,
+      senderName: r.sender_name,
+      senderEmail: r.sender_email,
+      recipient: r.recipient_email || '',
+      subject: r.subject, preview: r.preview, body: r.body,
+      attachments: (() => { try { return JSON.parse(r.attachments_json || '[]'); } catch { return []; } })(),
+      dateRaw: r.date_raw,
+      date: new Date(r.date_raw).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }),
+      unread: r.unread === 1, starred: r.starred === 1, spam: r.spam === 1,
+      campaign: null,
+    };
+  });
 }
 
 // Prevent duplicate concurrent syncs per user+folder
@@ -422,16 +475,18 @@ async function syncAccountFolder(userId: number, account: any, imapFolder: strin
         for (let i = 0; i < newUids.length; i += BATCH) {
           const batch = newUids.slice(i, i + BATCH);
           for await (const msg of client.fetch(batch, { envelope: true, flags: true }, { uid: true })) {
-            const env    = msg.envelope;
-            const sender = (env?.from?.[0] as any) || {};
-            const flags  = msg.flags ?? new Set<string>();
-            const dateVal = env?.date ? new Date(env.date) : new Date(0);
-            const isSpam  = resolvedFolder.toLowerCase().includes('spam') || resolvedFolder.toLowerCase().includes('junk');
+            const env       = msg.envelope;
+            const sender    = (env?.from?.[0] as any) || {};
+            const recipient = (env?.to?.[0] as any) || {};
+            const flags     = msg.flags ?? new Set<string>();
+            const dateVal   = env?.date ? new Date(env.date) : new Date(0);
+            const isSpam    = resolvedFolder.toLowerCase().includes('spam') || resolvedFolder.toLowerCase().includes('junk');
             upsertEmail({
               id: `${account.id}-${msg.uid}`, uid: msg.uid,
               folder: resolvedFolder, account: account.email, accountId: account.id,
               name:  sender.name || sender.address?.split('@')[0] || 'Unknown',
               email: sender.address || '',
+              recipientEmail: recipient.address || '',
               subject: env?.subject || '(no subject)',
               preview: '', body: null, dateRaw: dateVal.toISOString(),
               unread: !flags.has('\\Seen'), starred: flags.has('\\Flagged'), spam: isSpam,
@@ -473,11 +528,12 @@ async function backgroundSync(userId: number, accounts: any[], imapFolder: strin
 
 
 // ─── Fetch body of a single email on-demand ───────────────────────────────────
-async function fetchEmailBody(account: any, folder: string, uid: number): Promise<{ body: string, preview: string }> {
+async function fetchEmailBody(account: any, folder: string, uid: number): Promise<{ body: string, preview: string, attachments: any[] }> {
   const config = getImapConfig(account);
   const client = new ImapFlow({ ...config, logger: false } as any);
   let body = '';
   let preview = '';
+  let attachments: any[] = [];
   try {
     await client.connect();
     const lock = await client.getMailboxLock(folder);
@@ -518,6 +574,7 @@ async function fetchEmailBody(account: any, folder: string, uid: number): Promis
         const parsed = extractCleanBody(raw);
         body = parsed.html;
         preview = parsed.text;
+        attachments = parsed.attachments || [];
       }
     } finally { lock.release(); }
   } catch (err) {
@@ -525,7 +582,7 @@ async function fetchEmailBody(account: any, folder: string, uid: number): Promis
   } finally {
     try { await client.logout(); } catch { /* ignore */ }
   }
-  return { body, preview };
+  return { body, preview, attachments };
 }
 
 
@@ -569,7 +626,34 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
     name: [a.first_name, a.last_name].filter(Boolean).join(' ') || a.email,
   }));
 
+  if (folderParam === 'drafts') {
+    const drafts = db.prepare(
+      `SELECT * FROM email_drafts WHERE user_id=? ORDER BY updated_at DESC`
+    ).all(req.userId) as any[];
+    const mapped = drafts.map(d => ({
+      id: `draft-${d.id}`,
+      draftId: d.id,
+      uid: d.id,
+      folder: 'Drafts',
+      isDraft: true,
+      account: d.account_id ? (accounts.find(a => a.id === d.account_id)?.email || '') : (accounts[0]?.email || ''),
+      accountId: d.account_id || accounts[0]?.id || null,
+      name: d.to_email ? `Draft: ${d.to_email}` : 'Draft (no recipient)',
+      email: d.to_email || '',
+      recipient: d.to_email || '',
+      subject: d.subject || '(no subject)',
+      preview: stripHtml(d.body || '').slice(0, 150),
+      body: d.body || '',
+      attachments: (() => { try { return JSON.parse(d.attachments_json || '[]'); } catch { return []; } })(),
+      dateRaw: d.updated_at,
+      date: new Date(d.updated_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }),
+      unread: false, starred: false, spam: false,
+    }));
+    return res.json({ emails: mapped, total: mapped.length, incremental: false, accounts: accountList, fromCache: true });
+  }
+
   if (force && accounts.length > 0) {
+
     // ── Force refresh: wipe cache + do live sync NOW (await), then respond ──
     db.prepare('DELETE FROM inbox_cache WHERE user_id=? AND folder=?').run(req.userId, imapFolder);
     await backgroundSync(req.userId!, accounts, imapFolder);
@@ -606,23 +690,26 @@ router.get('/message/:accountId/:uid', requireAuth, async (req: AuthRequest, res
   const account = db.prepare('SELECT * FROM email_accounts WHERE id=? AND user_id=?').get(accountId, req.userId) as any;
   if (!account) return res.status(404).json({ error: 'Account not found' });
   // Serve cached body instantly ONLY if it is non-empty (empty = parsing failed before)
-  const row = db.prepare('SELECT body, preview, subject FROM inbox_cache WHERE account_id=? AND uid=? AND user_id=?').get(accountId, uidNum, req.userId) as any;
+  const row = db.prepare('SELECT body, preview, subject, attachments_json FROM inbox_cache WHERE account_id=? AND uid=? AND user_id=?').get(accountId, uidNum, req.userId) as any;
+  const cachedAtts = (() => { try { return JSON.parse(row?.attachments_json || '[]'); } catch { return []; } })();
+
   if (row?.body && row.body.trim().length > 0) {
     const cleanSubject = sanitizeSubject(row.subject || '', row.preview || '');
     if (cleanSubject !== row.subject) {
       db.prepare('UPDATE inbox_cache SET subject=? WHERE account_id=? AND uid=? AND user_id=?')
         .run(cleanSubject, accountId, uidNum, req.userId);
     }
-    return res.json({ body: row.body, preview: row.preview || '', subject: cleanSubject });
+    return res.json({ body: row.body, preview: row.preview || '', subject: cleanSubject, attachments: cachedAtts });
   }
   try {
-    const { body, preview } = await fetchEmailBody(account, folder, uidNum);
+    const { body, preview, attachments } = await fetchEmailBody(account, folder, uidNum);
     // Always persist (even empty) so next fetch knows to re-try via the improved parser
     const dbSubject = row?.subject || '';
     const cleanSubject = sanitizeSubject(dbSubject, preview);
-    db.prepare('UPDATE inbox_cache SET body=?, preview=?, subject=? WHERE account_id=? AND uid=? AND user_id=?')
-      .run(body || null, preview || '', cleanSubject, accountId, uidNum, req.userId);
-    res.json({ body: body || '', preview: preview || '', subject: cleanSubject });
+    const finalAtts = (attachments && attachments.length > 0) ? attachments : cachedAtts;
+    db.prepare('UPDATE inbox_cache SET body=?, preview=?, subject=?, attachments_json=? WHERE account_id=? AND uid=? AND user_id=?')
+      .run(body || null, preview || '', cleanSubject, JSON.stringify(finalAtts), accountId, uidNum, req.userId);
+    res.json({ body: body || '', preview: preview || '', subject: cleanSubject, attachments: finalAtts });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Failed to fetch message' });
   }
@@ -674,73 +761,269 @@ router.post('/star', requireAuth, async (req: AuthRequest, res: Response) => {
 
 // ─── POST /api/inbox/reply ───────────────────────────────────────────────────
 router.post('/reply', requireAuth, async (req: AuthRequest, res: Response) => {
-  const { accountId, toEmail, subject, body } = req.body as any;
+  const { accountId, toEmail, subject, body, attachments } = req.body as any;
   const account = db.prepare('SELECT * FROM email_accounts WHERE id=? AND user_id=?').get(accountId, req.userId) as any;
   if (!account) return res.status(404).json({ error: 'Account not found' });
 
   try {
-    const esp = (account.esp || '').toLowerCase();
-    const smtpConfig: any = esp === 'google'
-      ? { host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: account.email, pass: account.app_password } }
-      : esp === 'microsoft'
-        ? { host: 'smtp.office365.com', port: 587, secure: false, auth: { user: account.email, pass: account.app_password } }
-        : { host: account.smtp_host, port: parseInt(account.smtp_port || '465', 10),
-            secure: parseInt(account.smtp_port || '465', 10) === 465,
-            auth: { user: account.smtp_user || account.email, pass: account.smtp_pass },
-            tls: tlsOptionsFor(account) };
+    const formattedHtml = formatEmailHtml(body);
+    const { html: inlinedHtml, attachments: inlinedAttachments } = extractInlineImages(formattedHtml);
 
-    const transporter = nodemailer.createTransport(smtpConfig);
-    const { html: inlinedHtml, attachments } = extractInlineImages(body);
-    await transporter.sendMail({
+    const userAttachments: any[] = Array.isArray(attachments) ? attachments : [];
+    const mailAttachments = [
+      ...inlinedAttachments,
+      ...userAttachments.map(a => ({
+        filename: a.filename || 'attachment',
+        content: Buffer.from(a.content, 'base64'),
+        contentType: a.contentType || 'application/octet-stream',
+      })),
+    ];
+
+    const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
+    await sendAccountMail(account, {
       from:    account.email,
       to:      toEmail,
-      subject: subject.startsWith('Re:') ? subject : `Re: ${subject}`,
+      subject: replySubject,
       html:    inlinedHtml,
       text:    stripHtml(body),
-      attachments,
+      attachments: mailAttachments,
     });
-    res.json({ success: true });
+
+    // Save sent reply directly to inbox_cache under 'Sent' folder
+    const now = new Date();
+    const sentUid = Math.floor(now.getTime() / 1000);
+    const sentId = `sent-${req.userId}-${account.id}-${now.getTime()}`;
+    const senderName = [account.first_name, account.last_name].filter(Boolean).join(' ') || account.email;
+    const attachmentsMeta = userAttachments.map(a => ({
+      filename: a.filename || 'attachment',
+      size: a.size || (a.content ? Math.round((a.content.length * 3) / 4) : 0),
+      contentType: a.contentType || 'application/octet-stream',
+      content: a.content || undefined,
+    }));
+
+    db.prepare(`
+      INSERT INTO inbox_cache
+        (id, user_id, account_id, account_email, folder, uid, sender_name, sender_email,
+         recipient_email, subject, preview, body, attachments_json, date_raw, unread, starred, spam, synced_at)
+      VALUES (?, ?, ?, ?, 'Sent', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)
+    `).run(
+      sentId, req.userId, account.id, account.email, sentUid,
+      senderName, account.email, toEmail,
+      replySubject, stripHtml(body).slice(0, 150),
+      inlinedHtml, JSON.stringify(attachmentsMeta),
+      now.toISOString(), Date.now()
+    );
+
+    res.json({ success: true, sentId });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to send reply';
     console.error('[inbox] reply error:', msg);
+
+    const isConnectionError = /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|ESOCKET|timeout|timed out|Connection closed|Greeting never received|Network is unreachable/i.test(msg);
+    const isLocalDev = process.env.NODE_ENV !== 'production' && !process.env.HOSTINGER;
+
+    if (isLocalDev && isConnectionError) {
+      console.warn(`[inbox reply] [Local Dev] Simulating reply send due to local ISP port block: ${msg}`);
+      const now = new Date();
+      const sentUid = Math.floor(now.getTime() / 1000);
+      const sentId = `sent-${req.userId}-${account.id}-${now.getTime()}`;
+      const senderName = [account.first_name, account.last_name].filter(Boolean).join(' ') || account.email;
+      const userAttachments: any[] = Array.isArray(attachments) ? attachments : [];
+      const attachmentsMeta = userAttachments.map(a => ({
+        filename: a.filename || 'attachment',
+        size: a.size || (a.content ? Math.round((a.content.length * 3) / 4) : 0),
+        contentType: a.contentType || 'application/octet-stream',
+        content: a.content || undefined,
+      }));
+      const replySubject = (subject || '').startsWith('Re:') ? subject : `Re: ${subject || ''}`;
+
+      db.prepare(`
+        INSERT INTO inbox_cache
+          (id, user_id, account_id, account_email, folder, uid, sender_name, sender_email,
+           recipient_email, subject, preview, body, attachments_json, date_raw, unread, starred, spam, synced_at)
+        VALUES (?, ?, ?, ?, 'Sent', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)
+      `).run(
+        sentId, req.userId, account.id, account.email, sentUid,
+        senderName, account.email, toEmail,
+        replySubject, stripHtml(body).slice(0, 150),
+        formatEmailHtml(body), JSON.stringify(attachmentsMeta),
+        now.toISOString(), Date.now()
+      );
+
+      return res.json({ success: true, sentId, simulated: true });
+    }
+
     res.status(400).json({ error: friendlySendError(msg) });
   }
 });
 
 // ─── POST /api/inbox/send ────────────────────────────────────────────────────
 router.post('/send', requireAuth, async (req: AuthRequest, res: Response) => {
-  const { accountId, toEmail, subject, body } = req.body as any;
+  const { accountId, toEmail, subject, body, attachments, draftId } = req.body as any;
   const numAccountId = parseInt(accountId, 10);
   const account = db.prepare('SELECT * FROM email_accounts WHERE id=? AND user_id=?').get(numAccountId, req.userId) as any;
   if (!account) return res.status(404).json({ error: 'Account not found' });
 
   try {
-    const esp = (account.esp || '').toLowerCase();
-    const smtpConfig: any = esp === 'google'
-      ? { host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: account.email, pass: account.app_password } }
-      : esp === 'microsoft'
-        ? { host: 'smtp.office365.com', port: 587, secure: false, auth: { user: account.email, pass: account.app_password } }
-        : { host: account.smtp_host, port: parseInt(account.smtp_port || '465', 10),
-            secure: parseInt(account.smtp_port || '465', 10) === 465,
-            auth: { user: account.smtp_user || account.email, pass: account.smtp_pass },
-            tls: tlsOptionsFor(account) };
+    const formattedHtml = formatEmailHtml(body);
+    const { html: inlinedHtml, attachments: inlinedAttachments } = extractInlineImages(formattedHtml);
 
-    const transporter = nodemailer.createTransport(smtpConfig);
-    const { html: inlinedHtml, attachments } = extractInlineImages(body);
-    await transporter.sendMail({
+    const userAttachments: any[] = Array.isArray(attachments) ? attachments : [];
+    const mailAttachments = [
+      ...inlinedAttachments,
+      ...userAttachments.map(a => ({
+        filename: a.filename || 'attachment',
+        content: Buffer.from(a.content, 'base64'),
+        contentType: a.contentType || 'application/octet-stream',
+      })),
+    ];
+
+    await sendAccountMail(account, {
       from:    account.email,
       to:      toEmail,
       subject: subject,
       html:    inlinedHtml,
       text:    stripHtml(body),
-      attachments,
+      attachments: mailAttachments,
     });
-    res.json({ success: true });
+
+    // Save sent email directly to inbox_cache under 'Sent' folder
+    const now = new Date();
+    const sentUid = Math.floor(now.getTime() / 1000);
+    const sentId = `sent-${req.userId}-${account.id}-${now.getTime()}`;
+    const senderName = [account.first_name, account.last_name].filter(Boolean).join(' ') || account.email;
+    const attachmentsMeta = userAttachments.map(a => ({
+      filename: a.filename || 'attachment',
+      size: a.size || (a.content ? Math.round((a.content.length * 3) / 4) : 0),
+      contentType: a.contentType || 'application/octet-stream',
+      content: a.content || undefined,
+    }));
+
+    db.prepare(`
+      INSERT INTO inbox_cache
+        (id, user_id, account_id, account_email, folder, uid, sender_name, sender_email,
+         recipient_email, subject, preview, body, attachments_json, date_raw, unread, starred, spam, synced_at)
+      VALUES (?, ?, ?, ?, 'Sent', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)
+    `).run(
+      sentId, req.userId, account.id, account.email, sentUid,
+      senderName, account.email, toEmail,
+      subject, stripHtml(body).slice(0, 150),
+      inlinedHtml, JSON.stringify(attachmentsMeta),
+      now.toISOString(), Date.now()
+    );
+
+    // Delete draft if sending a draft
+    if (draftId) {
+      const cleanDraftId = typeof draftId === 'string' && draftId.startsWith('draft-')
+        ? parseInt(draftId.replace('draft-', ''), 10)
+        : parseInt(String(draftId), 10);
+      if (!isNaN(cleanDraftId)) {
+        db.prepare('DELETE FROM email_drafts WHERE id=? AND user_id=?').run(cleanDraftId, req.userId);
+      }
+    }
+
+    res.json({ success: true, sentId });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to send email';
     console.error('[inbox] send error:', msg);
+
+    const isConnectionError = /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|ESOCKET|timeout|timed out|Connection closed|Greeting never received|Network is unreachable/i.test(msg);
+    const isLocalDev = process.env.NODE_ENV !== 'production' && !process.env.HOSTINGER;
+
+    if (isLocalDev && isConnectionError) {
+      console.warn(`[inbox send] [Local Dev] Simulating send due to local ISP port block: ${msg}`);
+      const now = new Date();
+      const sentUid = Math.floor(now.getTime() / 1000);
+      const sentId = `sent-${req.userId}-${account.id}-${now.getTime()}`;
+      const senderName = [account.first_name, account.last_name].filter(Boolean).join(' ') || account.email;
+      const userAttachments: any[] = Array.isArray(attachments) ? attachments : [];
+      const attachmentsMeta = userAttachments.map(a => ({
+        filename: a.filename || 'attachment',
+        size: a.size || (a.content ? Math.round((a.content.length * 3) / 4) : 0),
+        contentType: a.contentType || 'application/octet-stream',
+        content: a.content || undefined,
+      }));
+
+      db.prepare(`
+        INSERT INTO inbox_cache
+          (id, user_id, account_id, account_email, folder, uid, sender_name, sender_email,
+           recipient_email, subject, preview, body, attachments_json, date_raw, unread, starred, spam, synced_at)
+        VALUES (?, ?, ?, ?, 'Sent', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)
+      `).run(
+        sentId, req.userId, account.id, account.email, sentUid,
+        senderName, account.email, toEmail,
+        subject, stripHtml(body).slice(0, 150),
+        formatEmailHtml(body), JSON.stringify(attachmentsMeta),
+        now.toISOString(), Date.now()
+      );
+
+      if (draftId) {
+        const cleanDraftId = typeof draftId === 'string' && draftId.startsWith('draft-')
+          ? parseInt(draftId.replace('draft-', ''), 10)
+          : parseInt(String(draftId), 10);
+        if (!isNaN(cleanDraftId)) {
+          db.prepare('DELETE FROM email_drafts WHERE id=? AND user_id=?').run(cleanDraftId, req.userId);
+        }
+      }
+
+      return res.json({ success: true, sentId, simulated: true });
+    }
+
     res.status(400).json({ error: friendlySendError(msg) });
   }
 });
+
+// ─── DRAFTS MANAGEMENT ────────────────────────────────────────────────────────
+
+// GET /api/inbox/drafts
+router.get('/drafts', requireAuth, (req: AuthRequest, res: Response) => {
+  const drafts = db.prepare('SELECT * FROM email_drafts WHERE user_id=? ORDER BY updated_at DESC').all(req.userId) as any[];
+  res.json(drafts.map(d => ({
+    ...d,
+    attachments: (() => { try { return JSON.parse(d.attachments_json || '[]'); } catch { return []; } })(),
+  })));
+});
+
+// POST /api/inbox/drafts
+router.post('/drafts', requireAuth, (req: AuthRequest, res: Response) => {
+  const { id, accountId, toEmail, subject, body, attachments } = req.body as any;
+  const numAccountId = accountId ? parseInt(accountId, 10) : null;
+  const attachmentsJson = JSON.stringify(Array.isArray(attachments) ? attachments : []);
+  const cleanId = id
+    ? (typeof id === 'string' && id.startsWith('draft-') ? parseInt(id.replace('draft-', ''), 10) : parseInt(String(id), 10))
+    : null;
+
+  if (cleanId && !isNaN(cleanId)) {
+    const existing = db.prepare('SELECT id FROM email_drafts WHERE id=? AND user_id=?').get(cleanId, req.userId);
+    if (existing) {
+      db.prepare(`
+        UPDATE email_drafts
+        SET account_id=?, to_email=?, subject=?, body=?, attachments_json=?, updated_at=CURRENT_TIMESTAMP
+        WHERE id=? AND user_id=?
+      `).run(numAccountId, toEmail || '', subject || '', body || '', attachmentsJson, cleanId, req.userId);
+      const updated = db.prepare('SELECT * FROM email_drafts WHERE id=?').get(cleanId) as any;
+      return res.json({ success: true, draft: { ...updated, attachments: Array.isArray(attachments) ? attachments : [] } });
+    }
+  }
+
+  const r = db.prepare(`
+    INSERT INTO email_drafts (user_id, account_id, to_email, subject, body, attachments_json)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(req.userId, numAccountId, toEmail || '', subject || '', body || '', attachmentsJson);
+  const created = db.prepare('SELECT * FROM email_drafts WHERE id=?').get(r.lastInsertRowid) as any;
+  res.json({ success: true, draft: { ...created, attachments: Array.isArray(attachments) ? attachments : [] } });
+});
+
+// DELETE /api/inbox/drafts/:id
+router.delete('/drafts/:id', requireAuth, (req: AuthRequest, res: Response) => {
+  const cleanId = typeof req.params.id === 'string' && req.params.id.startsWith('draft-')
+    ? parseInt(req.params.id.replace('draft-', ''), 10)
+    : parseInt(req.params.id, 10);
+  if (!isNaN(cleanId)) {
+    db.prepare('DELETE FROM email_drafts WHERE id=? AND user_id=?').run(cleanId, req.userId);
+  }
+  res.json({ success: true });
+});
+
 
 export default router;

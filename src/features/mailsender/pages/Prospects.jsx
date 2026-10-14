@@ -351,10 +351,10 @@ export default function Prospects() {
       </div>
 
       {/* Main layout: sidebar + detail — fills remaining height */}
-      <div style={{ display: 'flex', gap: '1.5rem', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div className={`prospects-layout${activeLead ? ' prospects-layout--detail' : ''}`} style={{ display: 'flex', gap: '1.5rem', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
         {/* Left: Lists sidebar — scrolls independently */}
-        <div style={{ width: 280, flexShrink: 0, height: '100%', overflowY: 'auto', paddingRight: '0.25rem' }}>
+        <div className="prospects-lists" style={{ width: 280, flexShrink: 0, height: '100%', overflowY: 'auto', paddingRight: '0.25rem' }}>
           <div className="search-box" style={{ marginBottom: '0.75rem' }}>
             <span className="text-muted">🔍</span>
             <input placeholder="Search lists..." value={searchList} onChange={e => setSearchList(e.target.value)} />
@@ -440,7 +440,7 @@ export default function Prospects() {
         )}
 
         {/* Right: Lead detail — fills remaining width and height */}
-        <div style={{ flex: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}>
+        <div className="prospects-detail" style={{ flex: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}>
           {!activeLead ? (
             <div className="card card-p" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
               <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>👈</div>
@@ -451,9 +451,12 @@ export default function Prospects() {
             <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {/* List header */}
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '1rem' }}>{activeLead.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
+                  <button type="button" className="btn btn-secondary btn-sm mobile-only" onClick={() => setSelectedList(null)} aria-label="Back to lists">←</button>
+                  <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeLead.name}</div>
                   <div className="fs-xs text-muted">{(activeLead.count || 0).toLocaleString()} leads</div>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                   <button

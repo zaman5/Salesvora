@@ -222,9 +222,11 @@ db.exec(`
     uid INTEGER NOT NULL,
     sender_name TEXT DEFAULT '',
     sender_email TEXT DEFAULT '',
+    recipient_email TEXT DEFAULT '',
     subject TEXT DEFAULT '',
     preview TEXT DEFAULT '',
     body TEXT DEFAULT NULL,
+    attachments_json TEXT DEFAULT '[]',
     date_raw TEXT NOT NULL,
     unread INTEGER DEFAULT 1,
     starred INTEGER DEFAULT 0,
@@ -419,4 +421,27 @@ try {
   console.error('[MailDB] Error seeding default warmup status:', e);
 }
 
+try { db.prepare(`ALTER TABLE inbox_cache ADD COLUMN recipient_email TEXT DEFAULT ''`).run(); } catch (_) { /* exists */ }
+try { db.prepare(`ALTER TABLE inbox_cache ADD COLUMN attachments_json TEXT DEFAULT '[]'`).run(); } catch (_) { /* exists */ }
+
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      account_id INTEGER,
+      to_email TEXT DEFAULT '',
+      subject TEXT DEFAULT '',
+      body TEXT DEFAULT '',
+      attachments_json TEXT DEFAULT '[]',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+} catch (e) {
+  console.error('[MailDB] Error creating email_drafts table:', e);
+}
+
 export default db;
+
