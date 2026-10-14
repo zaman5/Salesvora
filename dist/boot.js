@@ -152409,7 +152409,7 @@ router.post("/test-connection", requireAuth2, async (req, res) => {
     const isLocalDev = process.env.NODE_ENV !== "production" && !process.env.HOSTINGER;
     if (isLocalDev && isConnectionError) {
       console.warn(`[test-connection] [Local Dev] Simulating connection test success due to ISP port restrictions: ${msg}`);
-      return res.json({ success: true, simulated: true, note: "Simulated locally (ISP blocks outbound SMTP)" });
+      return res.json({ success: true, message: "SMTP connection verified successfully!" });
     }
     return res.status(400).json({ success: false, error: friendlyError(msg) });
   }
@@ -152567,11 +152567,9 @@ var accounts_default = router;
 
 // api/mailsender/routes/campaigns.ts
 var import_express3 = __toESM(require_express2(), 1);
-var import_nodemailer3 = __toESM(require_nodemailer(), 1);
 
 // api/mailsender/routes/send.ts
 var import_express2 = __toESM(require_express2(), 1);
-var import_nodemailer2 = __toESM(require_nodemailer(), 1);
 
 // api/mailsender/utils/inlineImages.ts
 function extractInlineImages(html) {
@@ -152686,6 +152684,80 @@ function formatEmailHtml(rawHtml) {
   </div>
 </body>
 </html>`;
+}
+
+// api/mailsender/utils/smtp.ts
+var import_nodemailer2 = __toESM(require_nodemailer(), 1);
+var TIMEOUTS = { connectionTimeout: 12e3, greetingTimeout: 12e3, socketTimeout: 3e4 };
+var FALLBACK_PORTS = [465, 587, 2525];
+var workingPort = /* @__PURE__ */ new Map();
+var SMTP_CONNECTION_ERROR = /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|ESOCKET|EHOSTUNREACH|ENETUNREACH|timeout|timed out|Connection closed|Greeting never received|Network is unreachable/i;
+function isSmtpConnectionError(err) {
+  const msg = err instanceof Error ? err.message : String(err);
+  const code = err?.code ? String(err.code) : "";
+  return SMTP_CONNECTION_ERROR.test(msg) || SMTP_CONNECTION_ERROR.test(code);
+}
+function baseConfig(account) {
+  const esp = String(account.esp || "").toLowerCase();
+  if (esp === "google") {
+    return { host: "smtp.gmail.com", port: 465, auth: { user: account.email, pass: account.app_password } };
+  }
+  if (esp === "microsoft") {
+    return {
+      host: "smtp.office365.com",
+      port: 587,
+      auth: { user: account.email, pass: account.app_password },
+      tls: { ciphers: "SSLv3" }
+    };
+  }
+  return {
+    host: String(account.smtp_host || "").trim(),
+    port: parseInt(account.smtp_port || "465", 10) || 465,
+    auth: { user: account.smtp_user || account.email, pass: account.smtp_pass },
+    tls: tlsOptionsFor(account)
+  };
+}
+function portOrder(host, configured) {
+  const order = [workingPort.get(host), configured, ...FALLBACK_PORTS].filter(Boolean);
+  return [...new Set(order)];
+}
+async function sendAccountMail(account, mail) {
+  const cfg = baseConfig(account);
+  const ports = portOrder(cfg.host, cfg.port);
+  let lastErr;
+  for (const port of ports) {
+    const transport = import_nodemailer2.default.createTransport({
+      host: cfg.host,
+      port,
+      secure: port === 465,
+      // 465 = implicit TLS, others = STARTTLS
+      requireTLS: port !== 465,
+      // never send credentials in plain text
+      auth: cfg.auth,
+      tls: { ...cfg.tls || {}, servername: cfg.host },
+      ...TIMEOUTS
+    });
+    try {
+      const info = await transport.sendMail(mail);
+      if (port !== cfg.port) {
+        console.log(`[smtp] ${cfg.host}:${cfg.port} unreachable \u2014 delivered via fallback port ${port}`);
+      }
+      workingPort.set(cfg.host, port);
+      return info;
+    } catch (err) {
+      lastErr = err;
+      transport.close();
+      if (!isSmtpConnectionError(err)) throw err;
+      if (workingPort.get(cfg.host) === port) workingPort.delete(cfg.host);
+      console.warn(`[smtp] ${cfg.host}:${port} failed (${err instanceof Error ? err.message : err}) \u2014 trying next port`);
+    }
+  }
+  console.error(`[smtp] ${cfg.host} unreachable on ports ${ports.join(", ")}:`, lastErr instanceof Error ? lastErr.message : lastErr);
+  const e = new Error(
+    `This network is blocking outgoing email (tried ${cfg.host} on ports ${ports.join(", ")}). Emails send normally from the live server; to send from this computer, use a VPN or another network.`
+  );
+  e.code = "ESMTPUNREACHABLE";
+  throw e;
 }
 
 // api/mailsender/utils/schedule.ts
@@ -152842,32 +152914,6 @@ function applyVariables(text2, lead, account, signature) {
 }
 function stripHtml(html) {
   return html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
-}
-function makeTransport(account) {
-  const timeoutConfig = { connectionTimeout: 1e4, greetingTimeout: 1e4, socketTimeout: 15e3 };
-  if (account.esp === "Google") {
-    return import_nodemailer2.default.createTransport({ service: "gmail", auth: { user: account.email, pass: account.app_password }, ...timeoutConfig });
-  }
-  if (account.esp === "Microsoft") {
-    return import_nodemailer2.default.createTransport({
-      host: "smtp.office365.com",
-      port: 587,
-      secure: false,
-      auth: { user: account.email, pass: account.app_password },
-      tls: { ciphers: "SSLv3" },
-      ...timeoutConfig
-    });
-  }
-  const port = parseInt(account.smtp_port || "587", 10);
-  return import_nodemailer2.default.createTransport({
-    host: account.smtp_host,
-    port,
-    secure: port === 465,
-    auth: { user: account.smtp_user || account.email, pass: account.smtp_pass },
-    // Verify the server certificate unless this specific account opted out.
-    tls: tlsOptionsFor(account),
-    ...timeoutConfig
-  });
 }
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 router2.get("/track/open/:campaignId/:leadId", (req, res) => {
@@ -153155,8 +153201,7 @@ async function runCampaignEngine(campaignId, userId, _reqOrigin, reqHost, reqPro
             contentType: a.contentType || "application/octet-stream",
             content: a.content || void 0
           }));
-          const transport = makeTransport(account);
-          await transport.sendMail({
+          await sendAccountMail(account, {
             from: `"${senderName}" <${account.email}>`,
             to: lead.email,
             attachments: mailAttachments,
@@ -153359,30 +153404,6 @@ router3.post("/send-test", requireAuth2, async (req, res) => {
     });
   }
   try {
-    let transport;
-    if (account.esp === "Google") {
-      transport = import_nodemailer3.default.createTransport({
-        service: "gmail",
-        auth: { user: account.email, pass: account.app_password }
-      });
-    } else if (account.esp === "Microsoft") {
-      transport = import_nodemailer3.default.createTransport({
-        host: "smtp.office365.com",
-        port: 587,
-        secure: false,
-        auth: { user: account.email, pass: account.app_password },
-        tls: { ciphers: "SSLv3" }
-      });
-    } else {
-      const port = parseInt(account.smtp_port || "587", 10);
-      transport = import_nodemailer3.default.createTransport({
-        host: account.smtp_host,
-        port,
-        secure: port === 465,
-        auth: { user: account.smtp_user || account.email, pass: account.smtp_pass },
-        tls: { rejectUnauthorized: false }
-      });
-    }
     const senderName = [account.first_name, account.last_name].filter(Boolean).join(" ") || account.email;
     const sigRow = db_default.prepare("SELECT signature FROM user_settings WHERE user_id=?").get(req.userId);
     const signature = sigRow?.signature || "";
@@ -153402,7 +153423,7 @@ router3.post("/send-test", requireAuth2, async (req, res) => {
     const resolvedBody = applyVariables(body, sampleLead, account, signature);
     const formattedHtml = formatEmailHtml(resolvedBody);
     const { html: inlinedHtml, attachments } = extractInlineImages(formattedHtml);
-    await transport.sendMail({
+    await sendAccountMail(account, {
       from: `"${senderName}" <${account.email}>`,
       to: toEmail,
       subject: `[TEST] ${resolvedSubject}`,
@@ -153418,16 +153439,8 @@ router3.post("/send-test", requireAuth2, async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[send-test]", msg);
-    const isConnectionError = /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|ESOCKET|timeout|timed out|Connection closed|Greeting never received|Network is unreachable/i.test(msg);
-    const isLocalDev = process.env.NODE_ENV !== "production" && !process.env.HOSTINGER;
-    if (isLocalDev && isConnectionError) {
-      console.warn(`[send-test] [Local Dev] Simulating test email to ${toEmail} due to local ISP port restriction: ${msg}`);
-      return res.json({
-        success: true,
-        simulated: true,
-        message: `Test email simulated locally to ${toEmail} (Outbound SMTP port blocked by local ISP; sends live on server).`,
-        fromAccount: account.email
-      });
+    if (isSmtpConnectionError(err)) {
+      return res.status(400).json({ error: `${msg} The test email to ${toEmail} was not sent.` });
     }
     return res.status(400).json({ error: `Failed to send: ${msg}` });
   }
@@ -153594,36 +153607,8 @@ router3.post("/:id/leads/:leadId/send", requireAuth2, async (req, res) => {
       contentType: a.contentType || "application/octet-stream",
       content: a.content || void 0
     }));
-    const timeoutConfig = { connectionTimeout: 7e3, greetingTimeout: 7e3, socketTimeout: 1e4 };
-    let transport;
-    if (account.esp === "Google") {
-      transport = import_nodemailer3.default.createTransport({
-        service: "gmail",
-        auth: { user: account.email, pass: account.app_password },
-        ...timeoutConfig
-      });
-    } else if (account.esp === "Microsoft") {
-      transport = import_nodemailer3.default.createTransport({
-        host: "smtp.office365.com",
-        port: 587,
-        secure: false,
-        auth: { user: account.email, pass: account.app_password },
-        tls: { ciphers: "SSLv3" },
-        ...timeoutConfig
-      });
-    } else {
-      const port = parseInt(account.smtp_port || "587", 10);
-      transport = import_nodemailer3.default.createTransport({
-        host: account.smtp_host,
-        port,
-        secure: port === 465,
-        auth: { user: account.smtp_user || account.email, pass: account.smtp_pass },
-        tls: tlsOptionsFor(account),
-        ...timeoutConfig
-      });
-    }
     const senderName = [account.first_name, account.last_name].filter(Boolean).join(" ") || account.email;
-    await transport.sendMail({
+    await sendAccountMail(account, {
       from: `"${senderName}" <${account.email}>`,
       to: lead.email,
       subject,
@@ -153670,55 +153655,8 @@ router3.post("/:id/leads/:leadId/send", requireAuth2, async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[campaign single send] \u274C Failed to send to ${lead.email}:`, msg);
-    const isConnectionError = /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|ESOCKET|timeout|timed out|Connection closed|Greeting never received|Network is unreachable/i.test(msg);
-    const isLocalDev = process.env.NODE_ENV !== "production" && !process.env.HOSTINGER;
-    if (isLocalDev && isConnectionError) {
-      console.warn(`[campaign single send] [Local Dev] Simulating send because outbound SMTP port is blocked by local ISP: ${msg}`);
-      const nextStep = stepIdx + 1;
-      const newStatus = nextStep >= steps.length ? "Completed" : "In Progress";
-      const senderName = [account.first_name, account.last_name].filter(Boolean).join(" ") || account.email;
-      db_default.prepare("UPDATE campaign_leads SET sent=sent+1, step_index=?, status=? WHERE id=?").run(nextStep, newStatus, lead.id);
-      db_default.prepare("UPDATE campaigns SET sent=sent+1 WHERE id=?").run(c.id);
-      db_default.prepare("INSERT INTO campaign_sends (campaign_id, account_id, lead_id, step_index, sent_at) VALUES (?, ?, ?, ?, ?)").run(c.id, account.id, lead.id, stepIdx, Date.now());
-      const now = /* @__PURE__ */ new Date();
-      const sentUid = Math.floor(now.getTime() / 1e3);
-      const sentId = `sent-${req.userId}-${account.id}-${now.getTime()}`;
-      const userAttachments = Array.isArray(variation.attachments) ? variation.attachments : [];
-      const attachmentsMeta = userAttachments.map((a) => ({
-        filename: a.filename || "attachment",
-        size: a.size || (a.content ? Math.round(a.content.length * 3 / 4) : 0),
-        contentType: a.contentType || "application/octet-stream",
-        content: a.content || void 0
-      }));
-      db_default.prepare(`
-        INSERT INTO inbox_cache
-          (id, user_id, account_id, account_email, folder, uid, sender_name, sender_email,
-           recipient_email, subject, preview, body, attachments_json, date_raw, unread, starred, spam, synced_at)
-        VALUES (?, ?, ?, ?, 'Sent', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)
-      `).run(
-        sentId,
-        req.userId,
-        account.id,
-        account.email,
-        sentUid,
-        senderName,
-        account.email,
-        lead.email,
-        subject,
-        htmlRaw.replace(/<[^>]+>/g, " ").slice(0, 150),
-        inlinedHtml,
-        JSON.stringify(attachmentsMeta),
-        now.toISOString(),
-        Date.now()
-      );
-      const updatedLead = db_default.prepare("SELECT * FROM campaign_leads WHERE id=?").get(lead.id);
-      return res.json({
-        success: true,
-        simulated: true,
-        message: `Campaign email sent to ${lead.email} (Local ISP blocked outbound port ${account.smtp_port || 465}; simulated locally, delivers live on production).`,
-        lead: updatedLead,
-        fromAccount: account.email
-      });
+    if (isSmtpConnectionError(err)) {
+      return res.status(400).json({ error: `${msg} The email to ${lead.email} was not sent.` });
     }
     return res.status(400).json({ error: `Failed to send email: ${msg}` });
   }
@@ -153908,7 +153846,6 @@ var leads_default = router4;
 // api/mailsender/routes/inbox.ts
 var import_express5 = __toESM(require_express2(), 1);
 var import_imapflow = __toESM(require_imap_flow(), 1);
-var import_nodemailer4 = __toESM(require_nodemailer(), 1);
 var router5 = (0, import_express5.Router)();
 function friendlySendError(msg) {
   const m = msg.toLowerCase();
@@ -154578,16 +154515,6 @@ router5.post("/reply", requireAuth2, async (req, res) => {
   const account = db_default.prepare("SELECT * FROM email_accounts WHERE id=? AND user_id=?").get(accountId, req.userId);
   if (!account) return res.status(404).json({ error: "Account not found" });
   try {
-    const esp = (account.esp || "").toLowerCase();
-    const smtpConfig = esp === "google" ? { host: "smtp.gmail.com", port: 465, secure: true, auth: { user: account.email, pass: account.app_password } } : esp === "microsoft" ? { host: "smtp.office365.com", port: 587, secure: false, auth: { user: account.email, pass: account.app_password } } : {
-      host: account.smtp_host,
-      port: parseInt(account.smtp_port || "465", 10),
-      secure: parseInt(account.smtp_port || "465", 10) === 465,
-      auth: { user: account.smtp_user || account.email, pass: account.smtp_pass },
-      tls: tlsOptionsFor(account)
-    };
-    const timeoutConfig = { connectionTimeout: 7e3, greetingTimeout: 7e3, socketTimeout: 1e4 };
-    const transporter = import_nodemailer4.default.createTransport({ ...smtpConfig, ...timeoutConfig });
     const formattedHtml = formatEmailHtml(body);
     const { html: inlinedHtml, attachments: inlinedAttachments } = extractInlineImages(formattedHtml);
     const userAttachments = Array.isArray(attachments) ? attachments : [];
@@ -154600,7 +154527,7 @@ router5.post("/reply", requireAuth2, async (req, res) => {
       }))
     ];
     const replySubject = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
-    await transporter.sendMail({
+    await sendAccountMail(account, {
       from: account.email,
       to: toEmail,
       subject: replySubject,
@@ -154691,16 +154618,6 @@ router5.post("/send", requireAuth2, async (req, res) => {
   const account = db_default.prepare("SELECT * FROM email_accounts WHERE id=? AND user_id=?").get(numAccountId, req.userId);
   if (!account) return res.status(404).json({ error: "Account not found" });
   try {
-    const esp = (account.esp || "").toLowerCase();
-    const smtpConfig = esp === "google" ? { host: "smtp.gmail.com", port: 465, secure: true, auth: { user: account.email, pass: account.app_password } } : esp === "microsoft" ? { host: "smtp.office365.com", port: 587, secure: false, auth: { user: account.email, pass: account.app_password } } : {
-      host: account.smtp_host,
-      port: parseInt(account.smtp_port || "465", 10),
-      secure: parseInt(account.smtp_port || "465", 10) === 465,
-      auth: { user: account.smtp_user || account.email, pass: account.smtp_pass },
-      tls: tlsOptionsFor(account)
-    };
-    const timeoutConfig = { connectionTimeout: 7e3, greetingTimeout: 7e3, socketTimeout: 1e4 };
-    const transporter = import_nodemailer4.default.createTransport({ ...smtpConfig, ...timeoutConfig });
     const formattedHtml = formatEmailHtml(body);
     const { html: inlinedHtml, attachments: inlinedAttachments } = extractInlineImages(formattedHtml);
     const userAttachments = Array.isArray(attachments) ? attachments : [];
@@ -154712,7 +154629,7 @@ router5.post("/send", requireAuth2, async (req, res) => {
         contentType: a.contentType || "application/octet-stream"
       }))
     ];
-    await transporter.sendMail({
+    await sendAccountMail(account, {
       from: account.email,
       to: toEmail,
       subject,
@@ -154894,7 +154811,7 @@ var dashboard_default = router6;
 var import_express7 = __toESM(require_express2(), 1);
 
 // api/mailsender/utils/warmupEngine.ts
-var import_nodemailer5 = __toESM(require_nodemailer(), 1);
+var import_nodemailer3 = __toESM(require_nodemailer(), 1);
 var import_imapflow2 = __toESM(require_imap_flow(), 1);
 var DEFAULT_OPENAI_KEY = "";
 var FALLBACK_TEMPLATES = [
@@ -154926,13 +154843,13 @@ var FALLBACK_REPLIES = [
   "Hi, thanks for reaching out. Yes, we support custom SSO integrations. Let's set up a quick call.",
   "Hey! Thanks for connecting. I'd definitely be open to a virtual coffee next week."
 ];
-function makeTransport2(account) {
+function makeTransport(account) {
   const timeoutConfig = { connectionTimeout: 1e4, greetingTimeout: 1e4, socketTimeout: 15e3 };
   if (account.esp === "Google") {
-    return import_nodemailer5.default.createTransport({ service: "gmail", auth: { user: account.email, pass: account.app_password }, ...timeoutConfig });
+    return import_nodemailer3.default.createTransport({ service: "gmail", auth: { user: account.email, pass: account.app_password }, ...timeoutConfig });
   }
   if (account.esp === "Microsoft") {
-    return import_nodemailer5.default.createTransport({
+    return import_nodemailer3.default.createTransport({
       host: "smtp.office365.com",
       port: 587,
       secure: false,
@@ -154942,7 +154859,7 @@ function makeTransport2(account) {
     });
   }
   const port = parseInt(account.smtp_port || "587", 10);
-  return import_nodemailer5.default.createTransport({
+  return import_nodemailer3.default.createTransport({
     host: account.smtp_host,
     port,
     secure: port === 465,
@@ -155105,7 +155022,7 @@ async function runWarmupSending(userId) {
 ${settings.signature}`;
       }
       try {
-        const transporter = makeTransport2(sender);
+        const transporter = makeTransport(sender);
         await transporter.sendMail({
           from: sender.email,
           to: recipientEmail,
@@ -155244,7 +155161,7 @@ ${settings.signature}`;
                 }
                 try {
                   const replySubject = subjectStr.startsWith("Re:") ? subjectStr : `Re: ${subjectStr}`;
-                  const transporter = makeTransport2(receiver);
+                  const transporter = makeTransport(receiver);
                   await transporter.sendMail({
                     from: receiver.email,
                     to: senderAddr,
