@@ -4,6 +4,8 @@ import { useTelnyxRTC } from "@/hooks/useTelnyxRTC";
 import { useSignalWireRTC } from "@/hooks/useSignalWireRTC";
 import { IncomingCallBanner } from "@/components/IncomingCallBanner";
 import { ActiveCallBar } from "@/components/ActiveCallBar";
+import { useNavigate } from "react-router";
+import { registerForPush, rememberPushToken, watchNativeAnswer, endNativeCallUi, isNativeApp } from "@/lib/nativeApp";
 
 type WebRTCContextValue = (ReturnType<typeof useTelnyxRTC> | ReturnType<typeof useSignalWireRTC>) & {
   activeInboundCallId?: number | null;
@@ -95,6 +97,54 @@ export function WebRTCProvider({ children }: { children: React.ReactNode }) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rtc.callState, rtc.callDirection, signedIn, me?.companyId]);
+
+  // ── Android app ─────────────────────────────────────────────────────────
+  // Register this phone for push once signed in, so calls/SMS to this user's
+  // numbers reach it even when the app is closed.
+  const navigate = useNavigate();
+  const registerPushToken = trpc.user.registerPushToken.useMutation();
+  useEffect(() => {
+    if (!signedIn || !isNativeApp()) return;
+    let cleanup = () => {};
+    void registerForPush({
+      save: (token) => {
+        rememberPushToken(token);
+        registerPushToken.mutate({ token, platform: "android" });
+      },
+      onOpen: (path) => navigate(path),
+    }).then((fn) => { cleanup = fn; });
+    return () => cleanup();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedIn, me?.id]);
+
+  // "Answer" on the native lock-screen ringing screen launches the app; the
+  // SignalWire call then rings this WebRTC client a few seconds later. Arm an
+  // auto-answer window so the agent doesn't have to tap Answer twice.
+  const answerArmedUntilRef = useRef(0);
+  const rtcRef = useRef(rtc);
+  rtcRef.current = rtc;
+  useEffect(() => {
+    if (!signedIn || !isNativeApp()) return;
+    let cleanup = () => {};
+    void watchNativeAnswer(() => {
+      answerArmedUntilRef.current = Date.now() + 45_000;
+      const live = rtcRef.current;
+      if (live.callDirection === "inbound" && live.callState === "ringing") {
+        answerArmedUntilRef.current = 0;
+        void live.answerCall();
+      }
+    }).then((fn) => { cleanup = fn; });
+    return () => cleanup();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedIn]);
+  useEffect(() => {
+    if (rtc.callDirection === "inbound" && rtc.callState === "ringing" && Date.now() < answerArmedUntilRef.current) {
+      answerArmedUntilRef.current = 0;
+      void rtc.answerCall();
+    }
+    if (rtc.callState === "ended" || rtc.callState === "idle") endNativeCallUi();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rtc.callState, rtc.callDirection]);
 
   // Global muted state managed here so the ActiveCallBar can control it.
   const [isMuted, setIsMuted] = useState(false);

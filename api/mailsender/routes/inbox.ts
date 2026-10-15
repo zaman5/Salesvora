@@ -156,7 +156,7 @@ function stripHtml(html: string): string {
 }
 
 /** Extract HTML and clean text from a raw MIME body (handles RFC822 source + multipart + encodings) */
-function extractCleanBody(raw: string): { html: string, text: string } {
+function extractCleanBody(raw: string): { html: string; text: string; attachments?: any[] } {
   if (!raw || !raw.trim()) return { html: '', text: '' };
 
   // Inline images (logos, header banners, etc.) referenced from the HTML as
@@ -818,41 +818,6 @@ router.post('/reply', requireAuth, async (req: AuthRequest, res: Response) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to send reply';
     console.error('[inbox] reply error:', msg);
-
-    const isConnectionError = /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|ESOCKET|timeout|timed out|Connection closed|Greeting never received|Network is unreachable/i.test(msg);
-    const isLocalDev = process.env.NODE_ENV !== 'production' && !process.env.HOSTINGER;
-
-    if (isLocalDev && isConnectionError) {
-      console.warn(`[inbox reply] [Local Dev] Simulating reply send due to local ISP port block: ${msg}`);
-      const now = new Date();
-      const sentUid = Math.floor(now.getTime() / 1000);
-      const sentId = `sent-${req.userId}-${account.id}-${now.getTime()}`;
-      const senderName = [account.first_name, account.last_name].filter(Boolean).join(' ') || account.email;
-      const userAttachments: any[] = Array.isArray(attachments) ? attachments : [];
-      const attachmentsMeta = userAttachments.map(a => ({
-        filename: a.filename || 'attachment',
-        size: a.size || (a.content ? Math.round((a.content.length * 3) / 4) : 0),
-        contentType: a.contentType || 'application/octet-stream',
-        content: a.content || undefined,
-      }));
-      const replySubject = (subject || '').startsWith('Re:') ? subject : `Re: ${subject || ''}`;
-
-      db.prepare(`
-        INSERT INTO inbox_cache
-          (id, user_id, account_id, account_email, folder, uid, sender_name, sender_email,
-           recipient_email, subject, preview, body, attachments_json, date_raw, unread, starred, spam, synced_at)
-        VALUES (?, ?, ?, ?, 'Sent', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)
-      `).run(
-        sentId, req.userId, account.id, account.email, sentUid,
-        senderName, account.email, toEmail,
-        replySubject, stripHtml(body).slice(0, 150),
-        formatEmailHtml(body), JSON.stringify(attachmentsMeta),
-        now.toISOString(), Date.now()
-      );
-
-      return res.json({ success: true, sentId, simulated: true });
-    }
-
     res.status(400).json({ error: friendlySendError(msg) });
   }
 });
@@ -926,49 +891,6 @@ router.post('/send', requireAuth, async (req: AuthRequest, res: Response) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to send email';
     console.error('[inbox] send error:', msg);
-
-    const isConnectionError = /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|ESOCKET|timeout|timed out|Connection closed|Greeting never received|Network is unreachable/i.test(msg);
-    const isLocalDev = process.env.NODE_ENV !== 'production' && !process.env.HOSTINGER;
-
-    if (isLocalDev && isConnectionError) {
-      console.warn(`[inbox send] [Local Dev] Simulating send due to local ISP port block: ${msg}`);
-      const now = new Date();
-      const sentUid = Math.floor(now.getTime() / 1000);
-      const sentId = `sent-${req.userId}-${account.id}-${now.getTime()}`;
-      const senderName = [account.first_name, account.last_name].filter(Boolean).join(' ') || account.email;
-      const userAttachments: any[] = Array.isArray(attachments) ? attachments : [];
-      const attachmentsMeta = userAttachments.map(a => ({
-        filename: a.filename || 'attachment',
-        size: a.size || (a.content ? Math.round((a.content.length * 3) / 4) : 0),
-        contentType: a.contentType || 'application/octet-stream',
-        content: a.content || undefined,
-      }));
-
-      db.prepare(`
-        INSERT INTO inbox_cache
-          (id, user_id, account_id, account_email, folder, uid, sender_name, sender_email,
-           recipient_email, subject, preview, body, attachments_json, date_raw, unread, starred, spam, synced_at)
-        VALUES (?, ?, ?, ?, 'Sent', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)
-      `).run(
-        sentId, req.userId, account.id, account.email, sentUid,
-        senderName, account.email, toEmail,
-        subject, stripHtml(body).slice(0, 150),
-        formatEmailHtml(body), JSON.stringify(attachmentsMeta),
-        now.toISOString(), Date.now()
-      );
-
-      if (draftId) {
-        const cleanDraftId = typeof draftId === 'string' && draftId.startsWith('draft-')
-          ? parseInt(draftId.replace('draft-', ''), 10)
-          : parseInt(String(draftId), 10);
-        if (!isNaN(cleanDraftId)) {
-          db.prepare('DELETE FROM email_drafts WHERE id=? AND user_id=?').run(cleanDraftId, req.userId);
-        }
-      }
-
-      return res.json({ success: true, sentId, simulated: true });
-    }
-
     res.status(400).json({ error: friendlySendError(msg) });
   }
 });
@@ -1016,9 +938,10 @@ router.post('/drafts', requireAuth, (req: AuthRequest, res: Response) => {
 
 // DELETE /api/inbox/drafts/:id
 router.delete('/drafts/:id', requireAuth, (req: AuthRequest, res: Response) => {
-  const cleanId = typeof req.params.id === 'string' && req.params.id.startsWith('draft-')
-    ? parseInt(req.params.id.replace('draft-', ''), 10)
-    : parseInt(req.params.id, 10);
+  const paramId = String(req.params.id || '');
+  const cleanId = paramId.startsWith('draft-')
+    ? parseInt(paramId.replace('draft-', ''), 10)
+    : parseInt(paramId, 10);
   if (!isNaN(cleanId)) {
     db.prepare('DELETE FROM email_drafts WHERE id=? AND user_id=?').run(cleanId, req.userId);
   }

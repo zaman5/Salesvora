@@ -77,7 +77,7 @@ function getOrCreateAudioSink(): HTMLAudioElement | null {
     el = document.createElement("audio");
     el.id = REMOTE_AUDIO_ID;
     el.autoplay = true;
-    el.playsInline = true;
+    (el as any).playsInline = true;
     el.style.position = "fixed";
     el.style.top = "-9999px";
     el.style.left = "-9999px";
@@ -133,7 +133,7 @@ function attachRemoteAudio(call: AnyCall | null) {
 
   // 3. RTCPeerConnection stream & track receivers
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pc = (call.peerConnection || opts?.peerConnection || (call as any).pc) as RTCPeerConnection | undefined;
+  const pc = ((call as any).peerConnection || opts?.peerConnection || (call as any).pc) as any;
   if (pc) {
     // Listen for incoming media tracks in real time
     if (!pc.ontrack) {
@@ -154,8 +154,8 @@ function attachRemoteAudio(call: AnyCall | null) {
     }
     if (typeof pc.getReceivers === "function") {
       const audioTracks = pc.getReceivers()
-        .map((r) => r.track)
-        .filter((t): t is MediaStreamTrack => Boolean(t && t.kind === "audio"));
+        .map((r: any) => r.track)
+        .filter((t: any): t is MediaStreamTrack => Boolean(t && t.kind === "audio"));
       if (audioTracks.length > 0) {
         bindStream(new MediaStream(audioTracks));
       }

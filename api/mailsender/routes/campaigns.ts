@@ -310,13 +310,19 @@ router.post('/:id/leads/:leadId/send', requireAuth, async (req: AuthRequest, res
   }
   const variation = variations[0];
 
-  // Prefer an account assigned to this campaign, else the user's first account
-  const assignedAccounts = db.prepare(`
-    SELECT ea.* FROM campaign_accounts ca
-    JOIN email_accounts ea ON ea.id = ca.account_id
-    WHERE ca.campaign_id = ? AND ea.user_id = ?
-  `).all(c.id, req.userId) as any[];
-  let account: any = assignedAccounts[0];
+  // If an account was explicitly picked, use it; otherwise prefer campaign-assigned account, else first user account
+  let account: any = null;
+  if (req.body?.accountId) {
+    account = db.prepare('SELECT * FROM email_accounts WHERE id=? AND user_id=?').get(req.body.accountId, req.userId);
+  }
+  if (!account) {
+    const assignedAccounts = db.prepare(`
+      SELECT ea.* FROM campaign_accounts ca
+      JOIN email_accounts ea ON ea.id = ca.account_id
+      WHERE ca.campaign_id = ? AND ea.user_id = ?
+    `).all(c.id, req.userId) as any[];
+    account = assignedAccounts[0];
+  }
   if (!account) {
     account = db.prepare('SELECT * FROM email_accounts WHERE user_id=? LIMIT 1').get(req.userId);
   }

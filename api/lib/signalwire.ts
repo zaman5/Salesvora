@@ -660,6 +660,11 @@ export function generateInboundSwml(options: {
   timeout?: number;
   eventUrl?: string;
   voicemailPrompt?: string;
+  /** Ringback played to the caller first, giving a woken Android app time to come online. */
+  holdSeconds?: number;
+  /** Second stage (e.g. the agent's own cell) tried when nobody answers the first. */
+  fallback?: string[];
+  fallbackTimeout?: number;
 }): Record<string, unknown> {
   const sayUrl = (text: string) => `say:${text.replace(/\s+/g, " ").trim()}`;
   const notify = (event: string, extra: Record<string, string> = {}) =>
@@ -686,23 +691,34 @@ export function generateInboundSwml(options: {
     main.push({ play: { url: sayUrl(options.greeting) } });
   }
 
-  const destinations = [...new Set(options.destinations.map((d) => d.trim()).filter(Boolean))];
-  if (destinations.length === 0) {
-    main.push(...notify("no_answer"), ...voicemail);
-  } else {
-    main.push({
-      connect: {
-        parallel: destinations.map((to) => ({ to })),
-        timeout: options.timeout ?? 25,
-        result: {
-          case: {
-            connected: [...notify("completed"), { hangup: {} }],
-            failed: [...notify("no_answer"), ...voicemail],
-          },
-          default: [...notify("no_answer"), ...voicemail],
+  const unique = (list: string[] = []) => [...new Set(list.map((d) => d.trim()).filter(Boolean))];
+  const destinations = unique(options.destinations);
+  const fallback = unique(options.fallback).filter((d) => !destinations.includes(d));
+
+  // Each stage rings its targets in parallel; on no answer it falls through to
+  // the next stage, and the last stage falls through to voicemail.
+  const stage = (targets: string[], timeout: number, onFail: unknown[]): unknown[] => [{
+    connect: {
+      parallel: targets.map((to) => ({ to })),
+      timeout,
+      result: {
+        case: {
+          connected: [...notify("completed"), { hangup: {} }],
+          failed: onFail,
         },
+        default: onFail,
       },
-    });
+    },
+  }];
+  const toVoicemail = [...notify("no_answer"), ...voicemail];
+  const afterFirst = fallback.length ? stage(fallback, options.fallbackTimeout ?? 25, toVoicemail) : toVoicemail;
+
+  if (destinations.length === 0) {
+    main.push(...afterFirst);
+  } else {
+    const hold = Math.min(Math.max(Math.round(options.holdSeconds ?? 0), 0), 15);
+    if (hold > 0) main.push({ play: { url: `ring:${hold}` } });
+    main.push(...stage(destinations, options.timeout ?? 25, afterFirst));
   }
 
   return { version: "1.0.0", sections: { main } };

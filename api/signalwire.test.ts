@@ -246,7 +246,7 @@ describe("SignalWire Webhooks", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.received).toBe(true);
   });
 

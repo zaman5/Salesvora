@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { CallRoutingSettings } from "@/components/CallRoutingSettings";
 import {
   Select,
   SelectContent,
@@ -530,6 +531,8 @@ export default function UsersPage() {
               {/* Phone + Lead List assignment — only for caller role */}
               <PhoneAssignSection role={editUserData.role} selectedIds={editPhoneIds} onChange={setEditPhoneIds} />
               <ListAssignSection  role={editUserData.role} selectedIds={editListIds}  onChange={setEditListIds} />
+
+              {editingUser && <CallRoutingSettings userId={editingUser.id} />}
 
               <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleUpdateUser}
                 disabled={updateUserMutation.isPending}>

@@ -5,6 +5,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { currentPushToken } from "@/lib/nativeApp";
 import {
   LayoutDashboard,
   Users,
@@ -119,11 +120,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { user, isLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const logout = trpc.auth.logout.useMutation({
+  const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
       window.location.reload();
     },
   });
+  // In the Android app, detach this phone from the account first so it stops
+  // ringing for a user who has signed out.
+  const unregisterPush = trpc.user.unregisterPushToken.useMutation();
+  const logout = {
+    mutate: () => {
+      const token = currentPushToken();
+      if (!token) return logoutMutation.mutate();
+      unregisterPush.mutate({ token }, { onSettled: () => logoutMutation.mutate() });
+    },
+  };
 
   // App-wide new-message popup: poll a small unread summary (not the whole
   // inbox) from every page — there's no push channel from the server.

@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery, superAdminQuery, authedQuery, callerQuery } from "./middleware";
 import { isSuperAdmin, requireCompanyScope } from "./lib/authz";
 import { getTelnyxConfig, saveTelnyxConfig } from "./lib/telnyxConfig";
-import { createCredentialConnection, ensureOutboundVoiceProfile } from "./lib/telnyx";
+import { createCredentialConnection, ensureOutboundVoiceProfile, toE164 } from "./lib/telnyx";
 import {
   findAllUsers, findUsersCreatedBy, findUserById,
   createUser, updateUser, deleteUser, findCallersByAdmin, hashPassword,
@@ -230,6 +230,87 @@ export const userRouter = createRouter({
       await updateUser(ctx.user.id, {
         presence: { lastSeenAt: new Date().toISOString(), activity: input.activity },
       });
+      return { success: true };
+    }),
+
+  // ─── Android app devices ───
+  // The Salesvora Android app registers its Firebase token after login so the
+  // server can ring it (full-screen call push) and notify it of SMS/missed calls.
+  registerPushToken: authedQuery
+    .input(z.object({ token: z.string().min(20).max(4096), platform: z.enum(["android"]).default("android") }))
+    .mutation(async ({ ctx, input }) => {
+      // A device token belongs to exactly one account: drop it from anyone else
+      // first, so a shared/handed-over phone stops ringing for the old user.
+      const everyone = (await findAllUsers()) as Array<{ id: number; pushTokens?: Array<{ token: string }> }>;
+      for (const u of everyone) {
+        if (u.id !== ctx.user.id && u.pushTokens?.some((t) => t.token === input.token)) {
+          await updateUser(u.id, { pushTokens: u.pushTokens.filter((t) => t.token !== input.token) });
+        }
+      }
+      const me = (await findUserById(ctx.user.id)) as { pushTokens?: Array<{ token: string; platform?: string; updatedAt?: string }> } | null;
+      const others = (me?.pushTokens ?? []).filter((t) => t.token !== input.token);
+      // Keep the five most recent devices per user.
+      const pushTokens = [{ token: input.token, platform: input.platform, updatedAt: new Date().toISOString() }, ...others].slice(0, 5);
+      await updateUser(ctx.user.id, { pushTokens });
+      return { success: true, devices: pushTokens.length };
+    }),
+
+  unregisterPushToken: authedQuery
+    .input(z.object({ token: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const me = (await findUserById(ctx.user.id)) as { pushTokens?: Array<{ token: string }> } | null;
+      await updateUser(ctx.user.id, { pushTokens: (me?.pushTokens ?? []).filter((t) => t.token !== input.token) });
+      return { success: true };
+    }),
+
+  // ─── Per-user inbound call routing ───
+  getCallSettings: authedQuery
+    .input(z.object({ userId: z.number().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const id = input?.userId ?? ctx.user.id;
+      if (id !== ctx.user.id) {
+        if (ctx.user.role === "caller") throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this user." });
+        await assertUserInScope(ctx, id);
+      }
+      const u = (await findUserById(id)) as {
+        callSettings?: { fallbackNumber?: string; dnd?: boolean; voicemailGreeting?: string };
+        pushTokens?: Array<{ updatedAt?: string }>;
+      } | null;
+      if (!u) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      return {
+        fallbackNumber: u.callSettings?.fallbackNumber ?? "",
+        dnd: Boolean(u.callSettings?.dnd),
+        voicemailGreeting: u.callSettings?.voicemailGreeting ?? "",
+        androidDevices: u.pushTokens?.length ?? 0,
+      };
+    }),
+
+  updateCallSettings: authedQuery
+    .input(z.object({
+      userId: z.number().optional(),
+      fallbackNumber: z.string().max(30).optional(),
+      dnd: z.boolean().optional(),
+      voicemailGreeting: z.string().max(300).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const id = input.userId ?? ctx.user.id;
+      if (id !== ctx.user.id) {
+        if (ctx.user.role === "caller") throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this user." });
+        await assertUserInScope(ctx, id);
+      }
+      const fallback = input.fallbackNumber?.trim();
+      if (fallback && !/^\+?[0-9 ()-]{7,20}$/.test(fallback)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Fallback number must be a phone number, e.g. +15551234567." });
+      }
+      const u = (await findUserById(id)) as { callSettings?: Record<string, unknown> } | null;
+      if (!u) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      const callSettings = {
+        ...(u.callSettings ?? {}),
+        ...(input.fallbackNumber !== undefined ? { fallbackNumber: fallback ? toE164(fallback) : "" } : {}),
+        ...(input.dnd !== undefined ? { dnd: input.dnd } : {}),
+        ...(input.voicemailGreeting !== undefined ? { voicemailGreeting: input.voicemailGreeting.trim() } : {}),
+      };
+      await updateUser(id, { callSettings });
       return { success: true };
     }),
 

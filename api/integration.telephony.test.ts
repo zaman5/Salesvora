@@ -22,7 +22,7 @@ import {
 } from "./lib/signalwire";
 
 // Mock global fetch for external SignalWire & Telnyx HTTP requests
-global.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+global.fetch = vi.fn(async (url: any, init?: any) => {
   const urlStr = url.toString();
 
   // 1. SignalWire IncomingPhoneNumbers API
@@ -445,7 +445,7 @@ describe("Complete End-to-End Telephony Provider Testing", () => {
       }).toString(),
     });
     expect(statusRes.status).toBe(200);
-    const statusBody = await statusRes.json();
+    const statusBody = (await statusRes.json()) as any;
     expect(statusBody.received).toBe(true);
 
     // 4. Inbound SMS Webhook

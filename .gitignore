@@ -47,11 +47,13 @@ db.json.corrupt*
 
 # Local Claude Code settings (machine-specific)
 .claude/settings.local.json
+.claude/launch.json
 
 # TypeScript cache
 *.tsbuildinfo
 # Build outputs
 build/
+frontend/dist/
 # Test coverage
 coverage/
 .nyc_output/

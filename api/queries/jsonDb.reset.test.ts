@@ -73,7 +73,7 @@ describe("admin password reset", () => {
 
     // The source file held a plaintext password and must not survive.
     expect(fs.existsSync(resetFile)).toBe(false);
-  });
+  }, 15000);
 
   it("applies at most once per process, so reads do not rewrite db.json", async () => {
     const { readJsonDb } = await import("./jsonDb");

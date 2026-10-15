@@ -1,4 +1,5 @@
 import { ManualDialTab } from "../components/ManualDialTab";
+import { CallRoutingSettings } from "@/components/CallRoutingSettings";
 
 export default function DialerPage() {
   return (
@@ -7,6 +8,8 @@ export default function DialerPage() {
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Dialer</h1>
       </div>
       <ManualDialTab />
+      {/* Every agent controls where their own unanswered calls go. */}
+      <CallRoutingSettings />
     </div>
   );
 }

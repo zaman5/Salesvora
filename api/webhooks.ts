@@ -157,6 +157,7 @@ webhooksApp.post("/telnyx", async (c) => {
           status: "received",
           twilioSid: telnyxId,
         });
+        void notifyInboundSms(companyId, toNumber, fromNumber, text, lead);
       }
     } catch (err) {
       console.error("[telnyx webhook] Error processing SMS webhook:", err);
@@ -360,6 +361,45 @@ import { findAllCompanies } from "./queries/companies";
 import { listPhoneNumbers } from "./lib/phoneNumbers";
 import { findCallByCallSid } from "./queries/calls";
 import { toE164 } from "./lib/telnyx";
+import { planInboundCall, ownerOfNumber, type RoutableUser } from "./lib/callRouting";
+import { pushToUsers, pushConfigured } from "./lib/push";
+
+/** Make an inbound call belong to its number's owner (their call log, recordings, reports). */
+async function attributeInboundCall(callSid: string, ownerId: number | null) {
+  if (!callSid) return;
+  const existing = await findCallByCallSid(callSid).catch(() => null);
+  if (!existing) return;
+  const customFields = { ...((existing as { customFields?: Record<string, unknown> }).customFields ?? {}), routing: { ownerId } };
+  await updateCall(existing.id, ownerId != null ? { callerId: ownerId, customFields } : { customFields }).catch(() => {});
+}
+
+/**
+ * Push a new inbound SMS to whoever can read it — the same rule smsRouter uses:
+ * an assigned number's owner, or the superadmin(s) for an unassigned number.
+ */
+async function notifyInboundSms(companyId: number, to: string, from: string, text: string, lead: unknown) {
+  try {
+    const ownerId = ownerOfNumber(await listPhoneNumbers(companyId), to);
+    const recipients = ownerId != null
+      ? [ownerId]
+      : ((await findAllUsers(companyId)) as RoutableUser[]).filter((u) => u.role === "superadmin").map((u) => u.id);
+    const name = (lead as { name?: string } | null)?.name;
+    pushToUsers(recipients, {
+      kind: "sms",
+      title: name ? `${name} (${from})` : from,
+      body: text.length > 140 ? `${text.slice(0, 140)}…` : text,
+      data: { from, to, tag: `sms-${from}` },
+    });
+  } catch (err) {
+    console.error("[webhooks] SMS push failed:", err);
+  }
+}
+
+/** The owner recorded by attributeInboundCall, or null for a shared number. */
+function routedOwnerOf(call: unknown): number | null {
+  const id = (call as { customFields?: { routing?: { ownerId?: number | null } } })?.customFields?.routing?.ownerId;
+  return typeof id === "number" ? id : null;
+}
 
 async function parseWebhookParams(c: any): Promise<Record<string, string>> {
   const contentType = c.req.header("content-type") || "";
@@ -523,35 +563,65 @@ webhooksApp.all("/signalwire/voice", async (c) => {
       await logInboundSignalWireCall({ companyId, from, to, callSid, accountSid });
 
       const sw = await getSignalWireConfig(companyId);
-      const users = (await findAllUsers(companyId)) as Array<{ id: number; email?: string | null }>;
-      // Addresses the agents' browser dialers reported themselves (most reliable), then
-      // whatever the REST lookup by email finds for agents that have not reported yet.
-      const reported = Object.entries(sw?.agentAddresses ?? {})
-        .filter(([userId]) => users.some((u) => String(u.id) === userId))
-        .map(([, a]) => a.address);
-      const unreportedEmails = users
+      const users = (await findAllUsers(companyId)) as RoutableUser[];
+      const numbers = await listPhoneNumbers(companyId);
+      const plan = planInboundCall({ dialed: to, numbers, users });
+
+      // Browser/app addresses for the users this call should ring: the address each
+      // dialer reported itself (most reliable), else a REST lookup by email.
+      const ringUsers = users.filter((u) => plan.ringUserIds.includes(u.id));
+      const reported = ringUsers
+        .map((u) => sw?.agentAddresses?.[String(u.id)]?.address)
+        .filter((a): a is string => Boolean(a));
+      const unreportedEmails = ringUsers
         .filter((u) => !sw?.agentAddresses?.[String(u.id)])
         .map((u) => u.email || "")
         .filter(Boolean);
       const looked = sw && unreportedEmails.length
         ? await findSignalWireSubscriberAddresses(sw.space, sw.projectId, sw.apiToken, unreportedEmails).catch(() => [])
         : [];
-
       const destinations = [...new Set([...reported, ...looked])];
-      if (forwardNumber && forwardNumber.trim()) destinations.push(toE164(forwardNumber.trim()));
-      if (forwardSip && forwardSip.trim()) {
-        destinations.push(forwardSip.trim().startsWith("sip:") ? forwardSip.trim() : `sip:${forwardSip.trim()}`);
+
+      // Company-wide forwards only apply to shared numbers; an assigned number
+      // belongs to its owner and uses their own fallback cell instead.
+      const fallback = plan.fallbackNumbers.map((n) => toE164(n));
+      if (plan.ownerId == null) {
+        if (forwardNumber && forwardNumber.trim()) destinations.push(toE164(forwardNumber.trim()));
+        if (forwardSip && forwardSip.trim()) {
+          destinations.push(forwardSip.trim().startsWith("sip:") ? forwardSip.trim() : `sip:${forwardSip.trim()}`);
+        }
       }
+
+      await attributeInboundCall(callSid, plan.ownerId);
+
+      // Offline agents with the Android app get a full-screen ringing push; the
+      // caller hears ringback for a few seconds so the app can come online.
+      const lead = from ? await findLeadByPhone(companyId, from).catch(() => null) : null;
+      const callerLabel = (lead as { name?: string; firstName?: string } | null)?.name || from || "Unknown caller";
+      if (plan.wakeUserIds.length) {
+        pushToUsers(plan.wakeUserIds, {
+          kind: "call",
+          title: "Incoming call",
+          body: callerLabel,
+          data: { from, to, callId: callSid, tag: `call-${callSid}` },
+          ttlSeconds: 30,
+        });
+      }
+      const holdSeconds = plan.wakeUserIds.length && pushConfigured() ? 8 : 0;
+
       noteInboundCall({
         companyId, from, to, mode: "swml",
-        note: destinations.length
-          ? `ringing ${destinations.join(", ")}`
-          : "no browser dialer is online and no forward number is set — sent to voicemail",
+        note: `${plan.reason}; ` + (destinations.length || fallback.length
+          ? `ringing ${[...destinations, ...fallback].join(", ")}${holdSeconds ? " (waking Android app)" : ""}`
+          : "nobody to ring — sent to voicemail"),
       });
 
       return c.json(generateInboundSwml({
         greeting: greeting || "Thanks for calling SalesVora. Connecting you now.",
         destinations,
+        fallback,
+        holdSeconds,
+        voicemailPrompt: plan.voicemailGreeting,
         eventUrl: `${publicOrigin(c)}/api/webhooks/signalwire/swml-event`,
       }));
     } catch (err) {
@@ -621,11 +691,19 @@ webhooksApp.post("/signalwire/swml-event", async (c) => {
       const startedAt = existing.startedAt ? new Date(existing.startedAt) : null;
       const elapsed = startedAt ? Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)) : 0;
 
+      const ownerId = routedOwnerOf(existing);
+      const caller = body.from && !body.from.includes("%{") ? body.from : "Unknown caller";
       if (body.event === "completed") {
         await updateCall(existing.id, { status: "completed", endedAt, duration: existing.duration || elapsed });
       } else if (body.event === "no_answer") {
         await updateCall(existing.id, { status: "no_answer", endedAt });
+        if (ownerId != null) {
+          pushToUsers([ownerId], { kind: "missed_call", title: "Missed call", body: caller, data: { from: caller, tag: `call-${callSid}` } });
+        }
       } else if (body.event === "voicemail") {
+        if (ownerId != null) {
+          pushToUsers([ownerId], { kind: "voicemail", title: "New voicemail", body: caller, data: { from: caller, tag: `call-${callSid}` } });
+        }
         // An unset SWML variable is left as the literal "%{record_url}".
         const recordingUrl = body.record_url && !body.record_url.includes("%{") ? body.record_url : "";
         if (recordingUrl) {
@@ -741,6 +819,7 @@ webhooksApp.all("/signalwire/sms", async (c) => {
         status: "received",
         twilioSid: messageSid || `SW_SMS_${Date.now()}`,
       });
+      void notifyInboundSms(companyId, to, from, body, lead);
     }
   } catch (err) {
     console.error("[signalwire webhook] Error in /sms:", err);

@@ -43,7 +43,7 @@ describe("Telnyx Webhook Route Handling", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.received).toBe(true);
   });
 
@@ -157,7 +157,7 @@ describe("Telnyx Webhook Route Handling", () => {
       body: payload,
     });
     expect(res2.status).toBe(200);
-    const body2 = await res2.json();
+    const body2 = (await res2.json()) as any;
     expect(body2.duplicate).toBe(true);
   });
 });

@@ -15,7 +15,7 @@ function getOrCreateAudioSink(): HTMLAudioElement | null {
     el = document.createElement("audio");
     el.id = REMOTE_AUDIO_ID;
     el.autoplay = true;
-    el.playsInline = true;
+    (el as any).playsInline = true;
     el.style.position = "fixed";
     el.style.top = "-9999px";
     el.style.left = "-9999px";

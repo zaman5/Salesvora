@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Salesvora</string>
+    <string name="title_activity_main">Salesvora</string>
+    <string name="package_name">online.salesvora.app</string>
+    <string name="custom_url_scheme">online.salesvora.app</string>
+</resources>
